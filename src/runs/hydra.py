@@ -43,7 +43,7 @@ def _model_subdir(stage: str, dataset: str, model: str, run_id: str) -> str:
 
 @cache
 def _checkpoint_identity(path: str) -> RunIdentity:
-    from src.model import load_checkpoint
+    from src.models import load_checkpoint
 
     return RunIdentity.from_dict(load_checkpoint(Path(path))['run'])
 

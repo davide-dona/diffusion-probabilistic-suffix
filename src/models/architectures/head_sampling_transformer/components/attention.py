@@ -26,6 +26,7 @@ class MultiHeadAttention(nn.Module):
     """
 
     def __init__(self, *, d_model: int, num_heads: int, dropout: float):
+        """Build the query, key, value, and output projections."""
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = d_model // num_heads
@@ -92,8 +93,10 @@ class MultiHeadAttention(nn.Module):
             is_causal=causal,
         )  # [batch_size, num_heads, query_len, head_dim]
 
-        merged = attended.transpose(dim0=1, dim1=2).reshape(batch_size, query_len, d_model)
-        return self.output_projection(merged)
+        merged = attended.transpose(dim0=1, dim1=2).reshape(
+            batch_size, query_len, d_model
+        )  # [B, H, T, Dh] -> [B, T, D]
+        return self.output_projection(merged)  # [B, T, D]
 
     def _split_heads(self, projected: torch.Tensor) -> torch.Tensor:
         """`[batch_size, length, d_model]` -> `[batch_size, num_heads, length, head_dim]`,
@@ -101,4 +104,4 @@ class MultiHeadAttention(nn.Module):
         batch_size, length, _ = projected.shape
         return projected.view(batch_size, length, self.num_heads, self.head_dim).transpose(
             dim0=1, dim1=2
-        )
+        )  # [B, T, D] -> [B, H, T, Dh]

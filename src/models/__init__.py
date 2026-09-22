@@ -1,18 +1,18 @@
-from src.model.checkpoint import (
+from src.models.checkpoint import (
     CHECKPOINT_KEYS,
     checkpoint_identity,
     load_checkpoint,
     require_keys,
     save_checkpoint,
 )
-from src.model.models import (
+from src.models.contracts import ModelOutput
+from src.models.factory import (
     DiffusionTransformer,
     HeadSamplingTransformer,
-    ModelOutput,
-    SuffixModel,
     build_model,
     model_from_checkpoint,
 )
+from src.models.models import SuffixModel
 
 __all__ = [
     'CHECKPOINT_KEYS',

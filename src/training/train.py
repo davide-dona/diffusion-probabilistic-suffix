@@ -20,7 +20,7 @@ from src.training.records import log_records
 from src.training.validation import ACTIVITY_LOG_NAMESPACE, validate, validate_generation
 
 if TYPE_CHECKING:
-    from src.model import SuffixModel
+    from src.models import SuffixModel
 
 
 def _lr_factor(
@@ -76,7 +76,7 @@ def train(
         training: Epoch budget, validation cadence, gradient clipping and device.
         early_stopping_config: When to give up.
     """
-    from src.model import save_checkpoint
+    from src.models import save_checkpoint
 
     if not len(train_loader) or not len(val_loader) or not len(generation_loader):
         raise ValueError('Training and validation loaders must all contain examples')

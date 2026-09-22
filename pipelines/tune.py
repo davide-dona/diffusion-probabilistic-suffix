@@ -22,7 +22,7 @@ from src.inference.tuning import (
 )
 from src.logs import Split
 from src.logs.declare import ConformanceChecker
-from src.model import (
+from src.models import (
     HeadSamplingTransformer,
     checkpoint_identity,
     load_checkpoint,

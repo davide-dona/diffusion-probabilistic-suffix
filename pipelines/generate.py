@@ -16,7 +16,7 @@ from src.inference.generate import generate_batch, generation_batch_size
 from src.inference.generation_store import GenerationWriter
 from src.inference.tuning import TuningReport
 from src.logs import Split
-from src.model import checkpoint_identity, load_checkpoint, model_from_checkpoint
+from src.models import checkpoint_identity, load_checkpoint, model_from_checkpoint
 from src.runs.artifacts import sha256
 from src.runs.hydra import output_path, save_config, start_stage
 from src.runs.provenance import ArtifactProvenance

@@ -10,7 +10,7 @@ from src.datasets.dataset import TraceCut
 from src.inference.generation import DecodedEvents, Draws, Generation
 
 if TYPE_CHECKING:
-    from src.model import SuffixModel
+    from src.models import SuffixModel
 
 
 def generation_batch_size(

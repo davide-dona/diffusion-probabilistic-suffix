@@ -7,7 +7,9 @@ from omegaconf import DictConfig
 from torch import nn
 
 from src.datasets.dataset import Events
-from src.model.components.embeddings import EventEmbeddings
+from src.models.architectures.head_sampling_transformer.components.embeddings import (
+    EventEmbeddings,
+)
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,7 @@ class TraceEncoder(nn.Module):
     """
 
     def __init__(self, config: DictConfig, embeddings: EventEmbeddings, *, d_model: int):
+        """Build a prefix encoder with a learned summary token."""
         super().__init__()
         self.embeddings = embeddings
         self.dropout = nn.Dropout(p=config.dropout)

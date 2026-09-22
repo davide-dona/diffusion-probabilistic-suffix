@@ -8,17 +8,28 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.model.components.decoder import Decoder, GeneratedSuffix
-from src.model.components.embeddings import EventEmbeddings
-from src.model.components.trace_encoder import TraceEncoder
-from src.model.models import ModelOutput, SuffixModel, _timed_positions
+from src.models.architectures.head_sampling_transformer.components.decoder import Decoder
+from src.models.architectures.head_sampling_transformer.components.embeddings import EventEmbeddings
+from src.models.architectures.head_sampling_transformer.components.trace_encoder import TraceEncoder
+from src.models.contracts import DecoderOutput, GeneratedSuffix
+from src.models.models import SuffixModel
+from src.models.time import remaining_time_from_inter_event_times
 from src.training import Loss
+
+
+def _timed_positions(batch: TraceCut) -> torch.Tensor:
+    """Mark suffix positions containing real events and time targets, `[B, T]`."""
+    positions = torch.arange(
+        end=batch.suffix.activities.size(dim=1), device=batch.suffix.length.device
+    )  # [T]
+    return positions.unsqueeze(dim=0) < (batch.suffix.length - 1).unsqueeze(dim=1)  # [B, T]
 
 
 class HeadSamplingTransformer(SuffixModel):
     """An encoder-decoder transformer that samples every suffix channel from output heads."""
 
     def __init__(self, config: DictConfig, codec: DatasetCodec):
+        """Build the shared embeddings, prefix encoder, and autoregressive decoder."""
         super().__init__(codec=codec)
         self.codec = codec
         self.embeddings = EventEmbeddings(
@@ -40,7 +51,7 @@ class HeadSamplingTransformer(SuffixModel):
             sampling=config.sampling,
         )
 
-    def forward(self, item: TraceCut) -> ModelOutput:
+    def forward(self, item: TraceCut) -> DecoderOutput:
         """
         Args:
             item: A batch from `TraceDataset`, read for its prefix and for the suffix the
@@ -56,7 +67,7 @@ class HeadSamplingTransformer(SuffixModel):
             prefix_encoded=prefix.events,
             prefix_pad_mask=prefix_pad_mask,
         )
-        return ModelOutput(decoder=decoder_output)
+        return decoder_output
 
     @torch.no_grad()
     def generate(self, item: TraceCut, *, num_samples: int) -> GeneratedSuffix:
@@ -75,8 +86,12 @@ class HeadSamplingTransformer(SuffixModel):
 
         # The prefix is encoded once and repeated per sample, so the decoder writes every sample
         # of the batch in one pass.
-        prefix_events = prefix.events.repeat_interleave(repeats=num_samples, dim=0)
-        prefix_pad_mask = prefix_pad_mask.repeat_interleave(repeats=num_samples, dim=0)
+        prefix_events = prefix.events.repeat_interleave(
+            repeats=num_samples, dim=0
+        )  # [B, P, D] -> [B * S, P, D]
+        prefix_pad_mask = prefix_pad_mask.repeat_interleave(
+            repeats=num_samples, dim=0
+        )  # [B, P] -> [B * S, P]
 
         generated = self.decoder.generate(
             prefix_encoded=prefix_events,
@@ -84,37 +99,30 @@ class HeadSamplingTransformer(SuffixModel):
             max_steps=item.prefix.activities.size(dim=1),
         )
         positions = torch.arange(
-            generated.inter_event_times.size(1), device=generated.activities.device
-        )
-        kept = positions.unsqueeze(0) < generated.lengths.unsqueeze(1)
-        scaled = (
-            generated.inter_event_times * self.codec.inter_event_time.std
-            + self.codec.inter_event_time.mean
-        )
-        minutes = scaled.expm1() if self.codec.inter_event_time.log else scaled
-        total = (minutes.clamp_min(0) * kept).sum(dim=1)
-        transformed = torch.log1p(total) if self.codec.remaining_time.log else total
-        remaining = (transformed - self.codec.remaining_time.mean) / self.codec.remaining_time.std
+            generated.inter_event_times.size(dim=1), device=generated.activities.device
+        )  # [T]
+        kept = positions.unsqueeze(dim=0) < generated.lengths.unsqueeze(dim=1)  # [B * S, T]
+        remaining = remaining_time_from_inter_event_times(
+            times=generated.inter_event_times, keep=kept, codec=self.codec
+        )  # [B * S]
         generated = replace(generated, remaining_time=remaining)
         return self._per_sample(generated=generated, batch_size=item.prefix.length.size(dim=0))
 
-    def compute_loss(self, output: ModelOutput, batch: TraceCut) -> tuple[torch.Tensor, Loss]:
+    def compute_loss(self, output: DecoderOutput, batch: TraceCut) -> tuple[torch.Tensor, Loss]:
         """Score a teacher-forced pass by equal-weight trace reconstruction loss."""
-        if output.decoder is None:
-            raise ValueError('Baseline loss requires decoder predictions')
         # Every suffix position has one activity target, including EOT; each real event has one
         # Gaussian inter-event-time target. `suffix.length` includes EOT.
-        target_counts = (2 * batch.suffix.length - 1).to(dtype=output.decoder.activity_logits.dtype)
+        target_counts = (2 * batch.suffix.length - 1).to(dtype=output.activity_logits.dtype)
 
         activity_loss = F.cross_entropy(
-            input=output.decoder.activity_logits.transpose(1, 2),
+            input=output.activity_logits.transpose(1, 2),  # [B, T, V] -> [B, V, T]
             target=batch.suffix.activities,
             ignore_index=self.pad_activity_index,
             reduction='none',
         ).sum(dim=1)
 
         inter_event_time_loss = (
-            (output.decoder.inter_event_times - batch.inter_event_times)
+            (output.inter_event_times - batch.inter_event_times)
             .square()
             .masked_fill(~_timed_positions(batch), 0.0)
             .sum(dim=1)

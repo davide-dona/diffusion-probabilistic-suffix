@@ -28,6 +28,7 @@ NUMPY_SAFE_GLOBALS = (
 def require_keys(
     checkpoint: dict, keys: Iterable[str], *, subject: str = 'checkpoint', purpose: str, remedy: str
 ) -> None:
+    """Raise when a checkpoint lacks fields required by the caller."""
     missing = [key for key in keys if key not in checkpoint]
     if missing:
         raise ValueError(
@@ -45,6 +46,7 @@ def save_checkpoint(
     run: RunIdentity,
     path: Path,
 ) -> Path:
+    """Atomically save model weights and run metadata to `path`."""
     temp = path.with_suffix('.pt.tmp')
     torch.save(
         obj={
@@ -64,6 +66,7 @@ def save_checkpoint(
 
 
 def load_checkpoint(model_path: str | Path) -> dict:
+    """Load and validate a model checkpoint on the CPU."""
     model_path = Path(model_path)
     with torch.serialization.safe_globals(NUMPY_SAFE_GLOBALS):
         checkpoint = torch.load(f=model_path, map_location='cpu', weights_only=True)
@@ -77,4 +80,5 @@ def load_checkpoint(model_path: str | Path) -> dict:
 
 
 def checkpoint_identity(checkpoint: dict) -> RunIdentity:
+    """Read the run identity embedded in a validated checkpoint."""
     return RunIdentity.from_dict(checkpoint['run'])

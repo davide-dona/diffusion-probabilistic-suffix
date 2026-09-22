@@ -7,8 +7,12 @@ from omegaconf import DictConfig
 from torch import nn
 
 from src.datasets.dataset import Events
-from src.model.components.attention import MultiHeadAttention, ProjectedKeysValues
-from src.model.components.embeddings import EventEmbeddings
+from src.models.architectures.head_sampling_transformer.components.attention import (
+    MultiHeadAttention,
+    ProjectedKeysValues,
+)
+from src.models.architectures.head_sampling_transformer.components.embeddings import EventEmbeddings
+from src.models.contracts import DecoderOutput, GeneratedSuffix
 
 
 @dataclass(frozen=True)
@@ -55,40 +59,12 @@ class LayerCache:
     suffix_kv: SuffixCache
 
 
-@dataclass(frozen=True)
-class DecoderOutput:
-    """What the decoder predicts at every suffix position: the activity to write there, the
-    minutes until it, and the minutes until the case ends.
-
-    The inter-event time is a Gaussian mean on the standardized target scale.
-    """
-
-    activity_logits: torch.Tensor  # [batch_size, seq_len, num_activities]
-    inter_event_times: torch.Tensor  # [batch_size, seq_len], standardized Gaussian mean
-
-
-@dataclass(frozen=True)
-class GeneratedSuffix:
-    """A batch of freely generated suffixes, kept as the raw predictions: EOT and everything
-    after it included, with `lengths` saying where each suffix actually ended.
-
-    The leading axes are whatever the caller generated over.
-    """
-
-    activities: torch.Tensor  # [..., steps]
-    lengths: torch.Tensor  # [...], events emitted before EOT, or `steps` if EOT never came
-    inter_event_times: torch.Tensor  # [..., steps], standardized like the targets
-    # Read at position 0 alone, so it measures from the last prefix event, which is how the
-    # reported remaining time is defined.
-    remaining_time: torch.Tensor  # [...], standardized like the targets
-    used_sentinel: torch.Tensor | None = None
-
-
 class DecoderLayer(nn.Module):
     """One layer of the decoder stack, with self-attention over the suffix and cross-attention
     over the prefix."""
 
     def __init__(self, config: DictConfig, *, d_model: int):
+        """Build one layer of causal self-attention and prefix cross-attention."""
         super().__init__()
         self.self_attention = MultiHeadAttention(
             d_model=d_model, num_heads=config.num_heads, dropout=config.dropout
@@ -316,7 +292,9 @@ class Decoder(nn.Module):
         features = self.shared_layer(hidden)  # [batch_size, seq_len, head_hidden_dim]
         return DecoderOutput(
             activity_logits=self.activity_head(features),
-            inter_event_times=self.inter_event_time_head(features).squeeze(-1),
+            inter_event_times=self.inter_event_time_head(features).squeeze(
+                -1
+            ),  # [B, T, 1] -> [B, T]
         )
 
     def read_with(self, sampling: DictConfig) -> None:
@@ -349,21 +327,11 @@ class Decoder(nn.Module):
         logits = logits.index_fill(dim=-1, index=self.unemittable_activities, value=-torch.inf)
         probabilities = (logits / self.sampling.temperature).softmax(dim=-1)
         probabilities = _nucleus(probabilities, top_p=self.sampling.top_p)
-        return torch.multinomial(input=probabilities, num_samples=1).squeeze(dim=1)
+        return torch.multinomial(input=probabilities, num_samples=1).squeeze(dim=1)  # [B, 1] -> [B]
 
     @staticmethod
     def _next_time(mean: torch.Tensor) -> torch.Tensor:
-        """Read one time head for one decode step.
-
-        No temperature and no nucleus shape this the way `DictConfig` shapes an activity's
-        draw: the head's own scale says how wide this position is, where a softmax says only how
-        mass is spread over a vocabulary.
-
-        Args:
-            distribution: The head's output at this position, `[batch_size]` per field.
-        Returns:
-            The standardized time written at this position, `[batch_size]`.
-        """
+        """Draw a standardized time from a unit-variance Gaussian around `mean`."""
         return mean + torch.randn_like(mean)
 
     def _teacher_forced_input(self, suffix_activities: torch.Tensor) -> torch.Tensor:
@@ -384,7 +352,9 @@ class Decoder(nn.Module):
             dtype=torch.long,
             device=suffix_activities.device,
         )
-        return torch.cat(tensors=(start, suffix_activities[:, :-1]), dim=1)
+        return torch.cat(
+            tensors=(start, suffix_activities[:, :-1]), dim=1
+        )  # [B, 1] + [B, T - 1] -> [B, T]
 
     def _drop_activities(self, activities: torch.Tensor) -> torch.Tensor:
         """Blank a random `activity_dropout` fraction of the teacher-forced activities to PAD.
@@ -549,7 +519,7 @@ class Decoder(nn.Module):
             activities = self._next_activity(self.activity_head(features))  # [batch_size]
             generated_activities[:, position] = activities
             generated_inter_event_times[:, position] = self._next_time(
-                self.inter_event_time_head(features).squeeze(-1)
+                self.inter_event_time_head(features).squeeze(-1)  # [B, 1] -> [B]
             )
             next_input = activities.unsqueeze(dim=1)  # [batch_size, 1]
 

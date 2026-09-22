@@ -15,7 +15,7 @@ from src.logs.declare import ConformanceChecker
 from src.training.loss import Loss
 
 if TYPE_CHECKING:
-    from src.model import SuffixModel
+    from src.models import SuffixModel
 
 ACTIVITY_LOG_NAMESPACE = 'generation/activity'
 
