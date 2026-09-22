@@ -59,11 +59,11 @@ def time_loss(
         batch: The batch the scored positions are read off.
     Returns:
         What the head is charged, and the scale contribution inside that charge, each summed over
-        the scored positions of the whole batch.
+        the scored positions of each trace, `[batch_size]`.
     """
     timed = _timed_positions(batch)  # [batch_size, seq_len]
-    charged = prediction.beta_nll(target).masked_fill(mask=~timed, value=0.0).sum()
-    scale = prediction.scale_penalty().masked_fill(mask=~timed, value=0.0).sum()
+    charged = prediction.beta_nll(target).masked_fill(mask=~timed, value=0.0).sum(dim=1)
+    scale = prediction.scale_penalty().masked_fill(mask=~timed, value=0.0).sum(dim=1)
     return charged, scale
 
 
@@ -108,7 +108,7 @@ class SuffixModel(nn.Module, ABC):
             output: This model's prediction for `batch`, from `self(batch)`.
             batch: A batch from `TraceDataset`, already on the right device.
         Returns:
-            The per-trace loss to backpropagate and the terms it is made of, summed over the batch.
+            The mean normalized trace loss to backpropagate and its terms, summed over the batch.
         """
 
     def _per_sample(self, generated: GeneratedSuffix, *, batch_size: int) -> GeneratedSuffix:

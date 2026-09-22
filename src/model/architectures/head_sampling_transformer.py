@@ -87,15 +87,19 @@ class HeadSamplingTransformer(SuffixModel):
     def compute_loss(
         self, output: ModelOutput, batch: TraceCut
     ) -> tuple[torch.Tensor, Loss]:
-        """Score a teacher-forced pass by reconstruction loss."""
-        batch_size = batch.suffix.activities.size(0)
+        """Score a teacher-forced pass by equal-weight trace reconstruction loss."""
+        # Every suffix position has one activity target, including EOT; every real event has two
+        # time targets. `suffix.length` includes EOT.
+        target_counts = (3 * batch.suffix.length - 2).to(
+            dtype=output.decoder.activity_logits.dtype
+        )
 
         activity_loss = F.cross_entropy(
             input=output.decoder.activity_logits.transpose(1, 2),
             target=batch.suffix.activities,
             ignore_index=self.pad_activity_index,
-            reduction='sum',
-        )
+            reduction='none',
+        ).sum(dim=1)
 
         inter_event_time_loss, inter_event_time_scale = time_loss(
             prediction=output.decoder.inter_event_times,
@@ -109,14 +113,18 @@ class HeadSamplingTransformer(SuffixModel):
         )
 
         reconstruction_loss = activity_loss + inter_event_time_loss + remaining_time_loss
+        normalized_activity_loss = activity_loss / target_counts
+        normalized_inter_event_time_loss = inter_event_time_loss / target_counts
+        normalized_remaining_time_loss = remaining_time_loss / target_counts
+        normalized_reconstruction_loss = reconstruction_loss / target_counts
 
         metrics = Loss(
-            loss=reconstruction_loss.item(),
-            reconstruction_loss=reconstruction_loss.item(),
-            activity_loss=activity_loss.item(),
-            inter_event_time_loss=inter_event_time_loss.item(),
-            remaining_time_loss=remaining_time_loss.item(),
-            inter_event_time_scale_loss=inter_event_time_scale.item(),
-            remaining_time_scale_loss=remaining_time_scale.item(),
+            loss=normalized_reconstruction_loss.sum().item(),
+            reconstruction_loss=normalized_reconstruction_loss.sum().item(),
+            activity_loss=normalized_activity_loss.sum().item(),
+            inter_event_time_loss=normalized_inter_event_time_loss.sum().item(),
+            remaining_time_loss=normalized_remaining_time_loss.sum().item(),
+            inter_event_time_scale_loss=(inter_event_time_scale / target_counts).sum().item(),
+            remaining_time_scale_loss=(remaining_time_scale / target_counts).sum().item(),
         )
-        return reconstruction_loss / batch_size, metrics
+        return normalized_reconstruction_loss.mean(), metrics
