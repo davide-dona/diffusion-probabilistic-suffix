@@ -20,7 +20,7 @@ training:
       val_every_n_epochs: 2
       validation_pairs: 10000
       generation_pairs: 2000
-    bpic13:
+    bpic12:
       lr: 0.0003
       warmup_epochs: 5
       max_epochs: 300

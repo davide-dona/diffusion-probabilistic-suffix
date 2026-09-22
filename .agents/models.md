@@ -2,7 +2,7 @@
 
 Develop a diffusion model for probabilistic suffix prediction in predictive process monitoring:
 given an observed process prefix, predict a distribution of future activities and inter-event times.
-Compare against SuTraN-PH and U-ED-LSTM on Sepsis, BPIC13, BPIC17, and BPIC19.
+Compare against SuTraN-PH and U-ED-LSTM on Sepsis, BPIC12, BPIC17, and BPIC19.
 
 ## Joint Diffusion Transformer (Implemented)
 

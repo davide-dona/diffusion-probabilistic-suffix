@@ -1,8 +1,8 @@
 # @package _global_
 data:
-  name: bpic13
+  name: bpic12
   case_key: CaseID
-  activity_key: concept:name
+  activity_key: Activity
   resource_key: org:resource
   timestamp_key: CompleteTimestamp
   separator: ','
@@ -13,14 +13,7 @@ data:
   max_case_duration_percentile: 99.9
   string_features: []
   event_features:
-  - impact
-  - organization country
-  - product
-  - lifecycle:transition
-  - org:group
-  - org:role
-  - organization involved
-  - resource country
+  - (case) AMOUNT_REQ
   - ts_start
   - day_sin
   - day_cos

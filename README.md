@@ -40,10 +40,10 @@ Hydra multirun executes the Cartesian product of comma-separated values, one job
 Use it to process a batch at any pipeline stage:
 
 ```bash
-uv run python -m pipelines.preprocess --multirun dataset=sepsis,bpic13,bpic17,bpic19
+uv run python -m pipelines.preprocess --multirun dataset=sepsis,bpic12,bpic17,bpic19
 
 uv run python -m pipelines.train --multirun \
-  dataset=sepsis,bpic13,bpic17,bpic19 \
+  dataset=sepsis,bpic12,bpic17,bpic19 \
   model=head_sampling_transformer
 ```
 
