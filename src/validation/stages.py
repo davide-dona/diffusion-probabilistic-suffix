@@ -33,7 +33,7 @@ def validate_training(config: DictConfig) -> None:
 
     validate_number(config.seed, 'seed', inclusive=True, integer=True)
 
-    for key in ('max_epochs', 'val_every_n_epochs', 'validation_pairs', 'generation_pairs'):
+    for key in ('max_steps', 'val_every_n_steps', 'validation_pairs', 'generation_pairs'):
         validate_number(training[key], f'training.{key}', integer=True)
     if training.grad_clip_norm is not None:
         validate_number(training.grad_clip_norm, 'training.grad_clip_norm')
@@ -53,14 +53,14 @@ def validate_training(config: DictConfig) -> None:
     validate_number(optimizer.beta2, 'optimizer.beta2', minimum=0, inclusive=True)
     if optimizer.beta1 >= 1 or optimizer.beta2 >= 1:
         raise ValueError('optimizer betas must be below 1')
-    validate_number(
-        optimizer.warmup_epochs, 'optimizer.warmup_epochs', inclusive=True, integer=True
-    )
+    validate_number(optimizer.warmup_steps, 'optimizer.warmup_steps', inclusive=True, integer=True)
     validate_number(optimizer.min_lr_factor, 'optimizer.min_lr_factor', inclusive=True)
     if optimizer.min_lr_factor > 1:
         raise ValueError('optimizer.min_lr_factor must be at most 1')
 
-    validate_number(early_stopping.patience_epochs, 'early_stopping.patience_epochs', integer=True)
+    validate_number(
+        early_stopping.patience_validations, 'early_stopping.patience_validations', integer=True
+    )
     validate_number(early_stopping.min_delta_perc, 'early_stopping.min_delta_perc', inclusive=True)
 
     for key in ('validation_samples', 'evaluation_samples'):

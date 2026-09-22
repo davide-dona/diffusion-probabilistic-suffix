@@ -164,8 +164,9 @@ uv run python -m scripts.fetch
 ## Configuration
 
 Datasets, models, training defaults, and runtime profiles live in the corresponding groups under
-`config/`. Training duration, warmup, validation cadence, and early stopping are expressed in
-epochs. The CUDA profile selects a batch size and training regime for each dataset automatically.
+`config/`. Training duration, warmup, and validation cadence are expressed in optimizer steps;
+early stopping is expressed in validation checks. The CUDA profile selects a batch size and training
+regime for each dataset automatically.
 Override individual settings with dotted keys:
 
 ```bash

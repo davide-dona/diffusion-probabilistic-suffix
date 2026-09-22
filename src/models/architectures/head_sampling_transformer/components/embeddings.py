@@ -6,7 +6,7 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import Events
 from src.models.architectures.shared_components.embeddings import (
     EventContentEmbedding,
-    _sinusoidal_encoding,
+    sinusoidal_encoding,
 )
 
 
@@ -19,7 +19,7 @@ class EventEmbeddings(nn.Module):
         self.content = EventContentEmbedding(config=config, codec=codec, d_model=d_model)
         self.register_buffer(
             name='positional_encoding',
-            tensor=_sinusoidal_encoding(length=codec.max_trace_length, d_model=d_model),
+            tensor=sinusoidal_encoding(length=codec.max_trace_length, d_model=d_model),
             persistent=False,
         )
 

@@ -67,7 +67,7 @@ class EventContentEmbedding(nn.Module):
         return self.projection(event)  # [B, T, projection.in_features] -> [B, T, D]
 
 
-def _sinusoidal_encoding(length: int, d_model: int) -> torch.Tensor:
+def sinusoidal_encoding(length: int, d_model: int) -> torch.Tensor:
     """Build the fixed position table, `[length, d_model]`.
     Args:
         length: How many positions to build, i.e. the longest sequence the model will see.

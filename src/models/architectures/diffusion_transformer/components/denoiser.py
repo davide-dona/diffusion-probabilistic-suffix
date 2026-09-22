@@ -8,7 +8,7 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import Events
 from src.models.architectures.shared_components.embeddings import (
     EventContentEmbedding,
-    _sinusoidal_encoding,
+    sinusoidal_encoding,
 )
 
 
@@ -28,7 +28,7 @@ class DiffusionDenoiser(nn.Module):
         self.segment_embedding = nn.Embedding(num_embeddings=2, embedding_dim=d_model)
         self.register_buffer(
             name='position_encoding',
-            tensor=_sinusoidal_encoding(length=codec.max_trace_length, d_model=d_model),
+            tensor=sinusoidal_encoding(length=codec.max_trace_length, d_model=d_model),
             persistent=False,
         )
         self.timestep_projection = nn.Sequential(

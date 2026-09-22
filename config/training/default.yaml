@@ -4,45 +4,45 @@ optimizer:
   weight_decay: 0.01
   beta1: 0.9
   beta2: 0.95
-  warmup_epochs: ${oc.select:training.regimes.${data.name}.warmup_epochs}
+  warmup_steps: ${oc.select:training.regimes.${data.name}.warmup_steps}
   min_lr_factor: 0.1
 training:
-  max_epochs: ${oc.select:training.regimes.${data.name}.max_epochs}
-  val_every_n_epochs: ${oc.select:training.regimes.${data.name}.val_every_n_epochs}
+  max_steps: ${oc.select:training.regimes.${data.name}.max_steps}
+  val_every_n_steps: ${oc.select:training.regimes.${data.name}.val_every_n_steps}
   grad_clip_norm: 1.0
   validation_pairs: ${oc.select:training.regimes.${data.name}.validation_pairs}
   generation_pairs: ${oc.select:training.regimes.${data.name}.generation_pairs}
   regimes:
     sepsis:
       lr: 0.0003
-      warmup_epochs: 5
-      max_epochs: 200
-      val_every_n_epochs: 2
+      warmup_steps: 150
+      max_steps: 6000
+      val_every_n_steps: 60
       validation_pairs: 10000
       generation_pairs: 2000
     bpic12:
       lr: 0.0003
-      warmup_epochs: 5
-      max_epochs: 300
-      val_every_n_epochs: 2
+      warmup_steps: 1500
+      max_steps: 30000
+      val_every_n_steps: 300
       validation_pairs: 10000
       generation_pairs: 1000
     bpic17:
       lr: 0.0006
-      warmup_epochs: 5
-      max_epochs: 100
-      val_every_n_epochs: 1
+      warmup_steps: 1500
+      max_steps: 30000
+      val_every_n_steps: 300
       validation_pairs: 50000
       generation_pairs: 4096
     bpic19:
       lr: 0.0006
-      warmup_epochs: 5
-      max_epochs: 100
-      val_every_n_epochs: 1
+      warmup_steps: 1500
+      max_steps: 30000
+      val_every_n_steps: 300
       validation_pairs: 50000
       generation_pairs: 4096
 early_stopping:
-  patience_epochs: 30
+  patience_validations: 20
   min_delta_perc: 0.005
 inference:
   validation_samples: 32
