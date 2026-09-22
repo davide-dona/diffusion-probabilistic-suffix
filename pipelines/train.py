@@ -40,12 +40,12 @@ def run(config: DictConfig, run: RunIdentity) -> None:
             'dataset': config.data.name,
             'model': config.model.name,
             'device': config.training.device,
-            'steps': f'at most {config.training.max_steps:,}, validating every '
-            f'{config.training.val_every_n_steps:,}',
+            'epochs': f'at most {config.training.max_epochs:,}, validating every '
+            f'{config.training.val_every_n_epochs:,}',
             'batch': f'{config.dataloader.batch_size} pairs, '
             f'{config.dataloader.num_workers} loader workers',
-            'optimizer': f'Adam, lr {config.optimizer.lr} after '
-            f'{config.optimizer.warmup_steps} warmup steps, '
+            'optimizer': f'AdamW, lr {config.optimizer.lr} after '
+            f'{config.optimizer.warmup_epochs} warmup epochs, cosine decay, '
             f'weight decay {config.optimizer.weight_decay}',
             'checkpoints': output_path('best.pt'),
         },
