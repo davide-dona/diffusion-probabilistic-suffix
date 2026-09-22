@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
@@ -9,7 +11,7 @@ from src.datasets.dataset import TraceCut
 from src.model.components.decoder import Decoder, GeneratedSuffix
 from src.model.components.embeddings import EventEmbeddings
 from src.model.components.trace_encoder import TraceEncoder
-from src.model.models import ModelOutput, SuffixModel, time_loss
+from src.model.models import ModelOutput, SuffixModel, _timed_positions
 from src.training import Loss
 
 
@@ -18,6 +20,7 @@ class HeadSamplingTransformer(SuffixModel):
 
     def __init__(self, config: DictConfig, codec: DatasetCodec):
         super().__init__(codec=codec)
+        self.codec = codec
         self.embeddings = EventEmbeddings(
             config=config.embeddings, codec=codec, d_model=config.d_model
         )
@@ -56,9 +59,7 @@ class HeadSamplingTransformer(SuffixModel):
         return ModelOutput(decoder=decoder_output)
 
     @torch.no_grad()
-    def generate(
-        self, item: TraceCut, *, num_samples: int
-    ) -> GeneratedSuffix:
+    def generate(self, item: TraceCut, *, num_samples: int) -> GeneratedSuffix:
         """Generate `num_samples` suffixes for every prefix in `item`.
 
         Args:
@@ -82,17 +83,28 @@ class HeadSamplingTransformer(SuffixModel):
             prefix_pad_mask=prefix_pad_mask,
             max_steps=item.prefix.activities.size(dim=1),
         )
+        positions = torch.arange(
+            generated.inter_event_times.size(1), device=generated.activities.device
+        )
+        kept = positions.unsqueeze(0) < generated.lengths.unsqueeze(1)
+        scaled = (
+            generated.inter_event_times * self.codec.inter_event_time.std
+            + self.codec.inter_event_time.mean
+        )
+        minutes = scaled.expm1() if self.codec.inter_event_time.log else scaled
+        total = (minutes.clamp_min(0) * kept).sum(dim=1)
+        transformed = torch.log1p(total) if self.codec.remaining_time.log else total
+        remaining = (transformed - self.codec.remaining_time.mean) / self.codec.remaining_time.std
+        generated = replace(generated, remaining_time=remaining)
         return self._per_sample(generated=generated, batch_size=item.prefix.length.size(dim=0))
 
-    def compute_loss(
-        self, output: ModelOutput, batch: TraceCut
-    ) -> tuple[torch.Tensor, Loss]:
+    def compute_loss(self, output: ModelOutput, batch: TraceCut) -> tuple[torch.Tensor, Loss]:
         """Score a teacher-forced pass by equal-weight trace reconstruction loss."""
-        # Every suffix position has one activity target, including EOT; every real event has two
-        # time targets. `suffix.length` includes EOT.
-        target_counts = (3 * batch.suffix.length - 2).to(
-            dtype=output.decoder.activity_logits.dtype
-        )
+        if output.decoder is None:
+            raise ValueError('Baseline loss requires decoder predictions')
+        # Every suffix position has one activity target, including EOT; each real event has one
+        # Gaussian inter-event-time target. `suffix.length` includes EOT.
+        target_counts = (2 * batch.suffix.length - 1).to(dtype=output.decoder.activity_logits.dtype)
 
         activity_loss = F.cross_entropy(
             input=output.decoder.activity_logits.transpose(1, 2),
@@ -101,21 +113,16 @@ class HeadSamplingTransformer(SuffixModel):
             reduction='none',
         ).sum(dim=1)
 
-        inter_event_time_loss, inter_event_time_scale = time_loss(
-            prediction=output.decoder.inter_event_times,
-            target=batch.inter_event_times,
-            batch=batch,
-        )
-        remaining_time_loss, remaining_time_scale = time_loss(
-            prediction=output.decoder.remaining_times,
-            target=batch.remaining_times,
-            batch=batch,
+        inter_event_time_loss = (
+            (output.decoder.inter_event_times - batch.inter_event_times)
+            .square()
+            .masked_fill(~_timed_positions(batch), 0.0)
+            .sum(dim=1)
         )
 
-        reconstruction_loss = activity_loss + inter_event_time_loss + remaining_time_loss
+        reconstruction_loss = activity_loss + inter_event_time_loss
         normalized_activity_loss = activity_loss / target_counts
         normalized_inter_event_time_loss = inter_event_time_loss / target_counts
-        normalized_remaining_time_loss = remaining_time_loss / target_counts
         normalized_reconstruction_loss = reconstruction_loss / target_counts
 
         metrics = Loss(
@@ -123,8 +130,5 @@ class HeadSamplingTransformer(SuffixModel):
             reconstruction_loss=normalized_reconstruction_loss.sum().item(),
             activity_loss=normalized_activity_loss.sum().item(),
             inter_event_time_loss=normalized_inter_event_time_loss.sum().item(),
-            remaining_time_loss=normalized_remaining_time_loss.sum().item(),
-            inter_event_time_scale_loss=(inter_event_time_scale / target_counts).sum().item(),
-            remaining_time_scale_loss=(remaining_time_scale / target_counts).sum().item(),
         )
         return normalized_reconstruction_loss.mean(), metrics

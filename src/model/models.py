@@ -9,7 +9,6 @@ from torch import nn
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.distributions import Laplace
 from src.model.checkpoint import MODEL_KEYS, require_keys
 from src.model.components.decoder import DecoderOutput, GeneratedSuffix
 from src.training import Loss
@@ -23,7 +22,15 @@ class ModelOutput:
     predictions.
     """
 
-    decoder: DecoderOutput
+    decoder: DecoderOutput | None = None
+    activity_logits: torch.Tensor | None = None
+    predicted_noise: torch.Tensor | None = None
+    clean_activity: torch.Tensor | None = None
+    noise: torch.Tensor | None = None
+    noisy_activity: torch.Tensor | None = None
+    timestep: torch.Tensor | None = None
+    activity_mask: torch.Tensor | None = None
+    time_mask: torch.Tensor | None = None
 
 
 def _timed_positions(batch: TraceCut) -> torch.Tensor:
@@ -38,33 +45,6 @@ def _timed_positions(batch: TraceCut) -> torch.Tensor:
         end=batch.suffix.activities.size(dim=1), device=batch.suffix.length.device
     )  # [seq_len]
     return positions.unsqueeze(dim=0) < (batch.suffix.length - 1).unsqueeze(dim=1)
-
-
-def time_loss(
-    prediction: Laplace, target: torch.Tensor, batch: TraceCut
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Score one time head over the positions its target is defined at.
-
-    Shared by every architecture, so time targets are scored consistently regardless of the model
-    that produced the decoder output.
-
-    The scale term is handed back beside the charge rather than instead of it, so a run's logged
-    time loss stays decomposable: subtracting it leaves the absolute error every architecture pays,
-    which is the number a curve is read on whichever arm produced it. It is inside the charge
-    already, so a caller adds one of the two to a loss and never both.
-
-    Args:
-        prediction: The head's distribution, `[batch_size, seq_len]` per field, standardized.
-        target: What it is scored against, shaped and scaled like `prediction.mean`.
-        batch: The batch the scored positions are read off.
-    Returns:
-        What the head is charged, and the scale contribution inside that charge, each summed over
-        the scored positions of each trace, `[batch_size]`.
-    """
-    timed = _timed_positions(batch)  # [batch_size, seq_len]
-    charged = prediction.beta_nll(target).masked_fill(mask=~timed, value=0.0).sum(dim=1)
-    scale = prediction.scale_penalty().masked_fill(mask=~timed, value=0.0).sum(dim=1)
-    return charged, scale
 
 
 class SuffixModel(nn.Module, ABC):
@@ -86,9 +66,7 @@ class SuffixModel(nn.Module, ABC):
         """Score one batch teacher-forced, for the loss to charge."""
 
     @abstractmethod
-    def generate(
-        self, item: TraceCut, *, num_samples: int
-    ) -> GeneratedSuffix:
+    def generate(self, item: TraceCut, *, num_samples: int) -> GeneratedSuffix:
         """Write `num_samples` suffixes for every prefix of a batch.
 
         Args:
@@ -99,9 +77,7 @@ class SuffixModel(nn.Module, ABC):
         """
 
     @abstractmethod
-    def compute_loss(
-        self, output: ModelOutput, batch: TraceCut
-    ) -> tuple[torch.Tensor, Loss]:
+    def compute_loss(self, output: ModelOutput, batch: TraceCut) -> tuple[torch.Tensor, Loss]:
         """Score a forward pass against the batch it was run on, ready to backpropagate.
 
         Args:
@@ -128,11 +104,17 @@ class SuffixModel(nn.Module, ABC):
                 batch_size, -1, generated.inter_event_times.size(dim=1)
             ),
             remaining_time=generated.remaining_time.view(batch_size, -1),
+            used_sentinel=(
+                generated.used_sentinel.view(batch_size, -1)
+                if generated.used_sentinel is not None
+                else None
+            ),
         )
 
 
 # Imported after `SuffixModel` is defined: the architecture imports it back, so the base class has
 # to already be bound in this module's namespace by the time it runs.
+from src.model.architectures.diffusion_transformer import DiffusionTransformer  # noqa: E402
 from src.model.architectures.head_sampling_transformer import (  # noqa: E402
     HeadSamplingTransformer,
 )
@@ -149,6 +131,8 @@ def build_model(config: DictConfig, codec: DatasetCodec) -> SuffixModel:
     """
     if config.kind == 'head_sampling_transformer':
         return HeadSamplingTransformer(config=config, codec=codec)
+    if config.kind == 'diffusion_transformer':
+        return DiffusionTransformer(config=config, codec=codec)
     raise ValueError(f'Unknown model kind: {config.kind}')
 
 

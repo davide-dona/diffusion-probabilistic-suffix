@@ -88,8 +88,9 @@ def validate_generation_request(
         raise ValueError('Choose either tuning or sampling overrides')
 
     if sampling is not None:
+        if config.model.kind != 'head_sampling_transformer':
+            raise ValueError(f'{config.model.kind} does not support sampler overrides')
         validate_sampling(sampling)
-
 
 
 def validate_generation(config: DictConfig) -> None:
@@ -102,6 +103,8 @@ def validate_tuning(
 ) -> None:
     """Validate effective tuning configuration and the Cartesian sampler grid."""
     validate_training(config)
+    if config.model.kind != 'head_sampling_transformer':
+        raise ValueError(f'{config.model.kind} does not support sampler tuning')
 
     if not temperatures or not top_ps:
         raise ValueError('Sampler grid cannot be empty')

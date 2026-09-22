@@ -17,8 +17,9 @@ class DecodedEvents:
     # The minutes of inter-event time before each activity, in the same order, so a run's
     # timestamps are these accumulated from the last prefix event on.
     inter_event_time_minutes: list[float]
-    # Minutes until the case ends. Predicted on its own rather than summed from the times above.
+    # Minutes until the case ends, derived from the generated inter-event times above.
     remaining_time_minutes: float
+    used_eot_sentinel: bool = False
 
     def __len__(self) -> int:
         return len(self.activities)

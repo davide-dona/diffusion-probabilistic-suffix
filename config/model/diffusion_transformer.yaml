@@ -1,0 +1,20 @@
+defaults:
+- _self_
+kind: diffusion_transformer
+name: diffusion_transformer
+d_model: 32
+embeddings:
+  activity_dim: 16
+  resource_dim: 32
+  feature_dim: 8
+transformer:
+  num_layers: 8
+  num_heads: 8
+  feedforward_dim: 168
+  dropout: 0.1
+diffusion:
+  steps: 1000
+  activity_schedule:
+    cosine_offset: 0.008
+  time_schedule:
+    cosine_offset: 0.008

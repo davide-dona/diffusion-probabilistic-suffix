@@ -176,7 +176,7 @@ def run(
         model = model_from_checkpoint(checkpoint, codec, device=config.training.device)
         model.eval()
     if not isinstance(model, HeadSamplingTransformer):
-        raise ValueError(f'{config.model.kind} does not support output-head sampler tuning.')
+        raise ValueError(f'{config.model.kind} does not support sampler tuning.')
 
     with step(f'Reading and encoding the {Split.VAL} split'):
         validation_dataset = TraceDataset(codec=codec, split=Split.VAL)

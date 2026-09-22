@@ -126,6 +126,8 @@ def run(
     with step(f'Building the model and moving it onto {device}'):
         model = model_from_checkpoint(checkpoint, codec, device=config.training.device)
         if drawn_with is not None:
+            if not hasattr(model, 'decoder'):
+                raise ValueError(f'{config.model.kind} does not support sampler overrides.')
             model.decoder.read_with(drawn_with)
         model.eval()
 
@@ -151,6 +153,8 @@ def run(
     )
 
     # Write the generation while it is being produced, avoiding a huge in-memory DataFrame.
+    sentinel_required = 0
+    generated_samples = 0
     with GenerationWriter(
         path, provenance, vocabulary=codec.activity_codes.vocabulary, sampling=drawn_with
     ) as writer:
@@ -161,10 +165,20 @@ def run(
                 num_samples=config.inference.evaluation_samples,
                 codec=codec,
             )
+            sentinel_required += sum(
+                event.used_eot_sentinel
+                for generation in generations
+                for event in generation.samples.events
+            )
+            generated_samples += sum(len(generation.samples) for generation in generations)
             # Write the generations to the Parquet file in a single block, one row per prefix.
             writer.write(generations)
 
     print(f'Wrote generated suffixes to {path}')
+    print(
+        f'EOT sentinel required for {sentinel_required / generated_samples:.2%} of '
+        f'{generated_samples:,} generated suffixes'
+    )
 
 
 @hydra.main(version_base='1.3', config_path='../config', config_name='generate')

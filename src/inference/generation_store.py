@@ -56,6 +56,10 @@ _SCHEMA = pa.schema(
             'generated_remaining_time_minutes',
             pa.list_(pa.field(name='element', type=pa.float32())),
         ),
+        (
+            'generated_used_eot_sentinel',
+            pa.list_(pa.field(name='element', type=pa.bool_())),
+        ),
         ('true_activities', _SUFFIX),
         ('true_inter_event_time_minutes', _INTER_EVENT_TIMES),
         ('true_remaining_time_minutes', pa.float32()),
@@ -164,6 +168,9 @@ class GenerationWriter:
                 ],
                 'generated_remaining_time_minutes': [
                     events.remaining_time_minutes for events in generation.samples.events
+                ],
+                'generated_used_eot_sentinel': [
+                    events.used_eot_sentinel for events in generation.samples.events
                 ],
                 'true_activities': generation.truth.activities,
                 'true_inter_event_time_minutes': generation.truth.inter_event_time_minutes,
@@ -304,11 +311,18 @@ class Generations:
                                 activities=suffixes[index],
                                 inter_event_time_minutes=inter_event_time_minutes,
                                 remaining_time_minutes=remaining_time_minutes,
+                                used_eot_sentinel=used_eot_sentinel,
                             )
-                            for index, inter_event_time_minutes, remaining_time_minutes in zip(
+                            for (
+                                index,
+                                inter_event_time_minutes,
+                                remaining_time_minutes,
+                                used_eot_sentinel,
+                            ) in zip(
                                 taken,
                                 columns['generated_inter_event_time_minutes'][position],
                                 columns['generated_remaining_time_minutes'][position],
+                                columns['generated_used_eot_sentinel'][position],
                                 strict=True,
                             )
                         ],

@@ -32,13 +32,20 @@ def validate_model(model: DictConfig) -> None:
         r'[a-z0-9][a-z0-9_]*',
         'lowercase letters, digits, and underscores',
     )
-    if model.kind != 'head_sampling_transformer':
+    if model.kind not in {'head_sampling_transformer', 'diffusion_transformer'}:
         raise ValueError(f'Unknown model kind: {model.kind}')
 
     validate_number(model.d_model, 'model.d_model', integer=True)
     for key, value in model.embeddings.items():
         validate_number(value, f'model.embeddings.{key}', integer=True)
 
+    if model.kind == 'head_sampling_transformer':
+        _validate_head_sampling_transformer(model)
+    else:
+        _validate_diffusion_transformer(model)
+
+
+def _validate_head_sampling_transformer(model: DictConfig) -> None:
     for name in ('encoder', 'decoder'):
         section = model[name]
 
@@ -56,3 +63,20 @@ def validate_model(model: DictConfig) -> None:
     validate_number(model.decoder.head_hidden_dim, 'model.decoder.head_hidden_dim', integer=True)
 
     validate_sampling(model.sampling)
+
+
+def _validate_diffusion_transformer(model: DictConfig) -> None:
+    for key in ('num_layers', 'num_heads', 'feedforward_dim'):
+        validate_number(model.transformer[key], f'model.transformer.{key}', integer=True)
+    if model.d_model % model.transformer.num_heads:
+        raise ValueError('model.transformer.num_heads must divide model.d_model')
+    validate_number(model.transformer.dropout, 'model.transformer.dropout', inclusive=True)
+    if model.transformer.dropout >= 1:
+        raise ValueError('model.transformer.dropout must be below 1')
+    validate_number(model.diffusion.steps, 'model.diffusion.steps', integer=True)
+    for channel in ('activity_schedule', 'time_schedule'):
+        validate_number(
+            model.diffusion[channel].cosine_offset,
+            f'model.diffusion.{channel}.cosine_offset',
+            inclusive=True,
+        )

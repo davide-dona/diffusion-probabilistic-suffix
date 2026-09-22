@@ -6,6 +6,7 @@ from src.model.checkpoint import (
     save_checkpoint,
 )
 from src.model.models import (
+    DiffusionTransformer,
     HeadSamplingTransformer,
     ModelOutput,
     SuffixModel,
@@ -18,6 +19,7 @@ __all__ = [
     'ModelOutput',
     'SuffixModel',
     'HeadSamplingTransformer',
+    'DiffusionTransformer',
     'build_model',
     'checkpoint_identity',
     'load_checkpoint',

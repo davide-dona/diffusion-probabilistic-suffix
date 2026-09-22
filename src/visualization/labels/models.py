@@ -26,6 +26,9 @@ MODELS = Registry[ModelStyle](
         'head_sampling_transformer': ModelStyle(
             label='SuTraN-PH', color='#A05A4B', marker='D', linestyle=':'
         ),
+        'diffusion_transformer': ModelStyle(
+            label='Joint Diffusion Transformer', color='#2A7F9E', marker='^', linestyle='-'
+        ),
         'u_ed_lstm': ModelStyle(label='U-ED-LSTM', color='#7A4E97', marker='s', linestyle='--'),
     },
 )

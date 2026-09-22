@@ -85,7 +85,7 @@ Choose the dataset and architecture independently:
 uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
-The available baseline is `head_sampling_transformer`. Training
+Available architectures are `head_sampling_transformer` and `diffusion_transformer`. Training
 writes the best validation checkpoint to
 `outputs/train/<dataset>/<model>/<run-id>/best.pt`. Runs cannot be resumed, but an interrupted run
 retains its last successfully saved best checkpoint.

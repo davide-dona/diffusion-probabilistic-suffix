@@ -7,7 +7,6 @@ from omegaconf import DictConfig
 from torch import nn
 
 from src.datasets.dataset import Events
-from src.distributions import Laplace
 from src.model.components.attention import MultiHeadAttention, ProjectedKeysValues
 from src.model.components.embeddings import EventEmbeddings
 
@@ -61,14 +60,11 @@ class DecoderOutput:
     """What the decoder predicts at every suffix position: the activity to write there, the
     minutes until it, and the minutes until the case ends.
 
-    Both times are Laplace distributions on the standardized target scale and are scored by
-    `time_loss`. The two time targets overlap: remaining time is the sum of inter-event times from
-    the position onward, and the decoder estimates them independently.
+    The inter-event time is a Gaussian mean on the standardized target scale.
     """
 
     activity_logits: torch.Tensor  # [batch_size, seq_len, num_activities]
-    inter_event_times: Laplace  # [batch_size, seq_len] per field, standardized
-    remaining_times: Laplace  # [batch_size, seq_len] per field, standardized
+    inter_event_times: torch.Tensor  # [batch_size, seq_len], standardized Gaussian mean
 
 
 @dataclass(frozen=True)
@@ -85,6 +81,7 @@ class GeneratedSuffix:
     # Read at position 0 alone, so it measures from the last prefix event, which is how the
     # reported remaining time is defined.
     remaining_time: torch.Tensor  # [...], standardized like the targets
+    used_sentinel: torch.Tensor | None = None
 
 
 class DecoderLayer(nn.Module):
@@ -156,9 +153,7 @@ class DecoderLayer(nn.Module):
             )
         )
 
-        hidden = hidden + self.dropout(
-            self.feedforward(self.feedforward_norm(hidden))
-        )
+        hidden = hidden + self.dropout(self.feedforward(self.feedforward_norm(hidden)))
         return hidden, LayerCache(prefix_kv=prefix_kv, suffix_kv=suffix_cache)
 
     def init_cache(self, prefix_encoded: torch.Tensor, *, max_steps: int) -> LayerCache:
@@ -289,12 +284,7 @@ class Decoder(nn.Module):
         self.activity_head = nn.Linear(
             in_features=config.head_hidden_dim, out_features=num_activities
         )
-        self.inter_event_time_head = nn.Linear(
-            in_features=config.head_hidden_dim, out_features=2
-        )
-        self.remaining_time_head = nn.Linear(
-            in_features=config.head_hidden_dim, out_features=2
-        )
+        self.inter_event_time_head = nn.Linear(in_features=config.head_hidden_dim, out_features=1)
 
     def forward(
         self,
@@ -326,22 +316,8 @@ class Decoder(nn.Module):
         features = self.shared_layer(hidden)  # [batch_size, seq_len, head_hidden_dim]
         return DecoderOutput(
             activity_logits=self.activity_head(features),
-            inter_event_times=self._time(self.inter_event_time_head, features),
-            remaining_times=self._time(self.remaining_time_head, features),
+            inter_event_times=self.inter_event_time_head(features).squeeze(-1),
         )
-
-    def _time(self, head: nn.Linear, features: torch.Tensor) -> Laplace:
-        """Read one probabilistic time head.
-
-        Args:
-            head: The head to read.
-            features: The shared trunk's output, `[..., head_hidden_dim]`.
-        Returns:
-            The distribution at every position read, `[...]` per field.
-        """
-        parameters = head(features)
-        mean, logscale = parameters.unbind(dim=-1)  # [..., 2] -> two of [...]
-        return Laplace.create(mean=mean, logscale=logscale)
 
     def read_with(self, sampling: DictConfig) -> None:
         """Replace the sampler the activity head is drawn through.
@@ -376,7 +352,7 @@ class Decoder(nn.Module):
         return torch.multinomial(input=probabilities, num_samples=1).squeeze(dim=1)
 
     @staticmethod
-    def _next_time(distribution: Laplace) -> torch.Tensor:
+    def _next_time(mean: torch.Tensor) -> torch.Tensor:
         """Read one time head for one decode step.
 
         No temperature and no nucleus shape this the way `DictConfig` shapes an activity's
@@ -388,7 +364,7 @@ class Decoder(nn.Module):
         Returns:
             The standardized time written at this position, `[batch_size]`.
         """
-        return distribution.sample()
+        return mean + torch.randn_like(mean)
 
     def _teacher_forced_input(self, suffix_activities: torch.Tensor) -> torch.Tensor:
         """What the decoder reads at each position: the suffix moved one step later, behind SOS.
@@ -571,13 +547,9 @@ class Decoder(nn.Module):
             )
             features = self.shared_layer(hidden[:, 0])  # [batch_size, head_hidden_dim]
             activities = self._next_activity(self.activity_head(features))  # [batch_size]
-            # Only position 0, the state after SOS, answers for the whole suffix.
-            if position == 0:
-                remaining_time = self._next_time(self._time(self.remaining_time_head, features))
-
             generated_activities[:, position] = activities
             generated_inter_event_times[:, position] = self._next_time(
-                self._time(self.inter_event_time_head, features)
+                self.inter_event_time_head(features).squeeze(-1)
             )
             next_input = activities.unsqueeze(dim=1)  # [batch_size, 1]
 
@@ -595,5 +567,5 @@ class Decoder(nn.Module):
             activities=generated_activities[:, :steps_taken],  # [batch_size, steps]
             lengths=lengths,
             inter_event_times=generated_inter_event_times[:, :steps_taken],  # [batch_size, steps]
-            remaining_time=remaining_time,
+            remaining_time=generated_inter_event_times.new_zeros(size=(batch_size,)),
         )
