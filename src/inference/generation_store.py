@@ -19,10 +19,8 @@ from src.runs.provenance import ArtifactProvenance
 # a case and a length, and the pair is unique within a file.
 type PrefixKey = tuple[str, int]
 
-# How the activity head was read, for a file whose model drew from it, and absent for one whose
-# model read it at its mode. The checkpoint hash does not settle this: the sampler is chosen after
-# training and can be changed without the weights moving, so two files of one checkpoint are
-# distinguished by the recorded sampler.
+# How the activity head was sampled. The checkpoint hash does not settle this because the sampler
+# is chosen after training and can be changed without the weights moving.
 _SAMPLING = b'sampling'
 
 # One sequence of activities, one character each. A suffix is a string rather than a list of
@@ -44,13 +42,12 @@ _SCHEMA = pa.schema(
         # The events before the cut, which a constraint over the whole trace is checked against.
         ('prefix_activities', _SUFFIX),
         # The distinct suffixes drawn for this prefix, each written once however many draws landed
-        # on it, and which of them each draw took, in the order they were drawn. The decoder is
-        # deterministic given `z`, so a repeated suffix is one answer the model gave twice. A mean
-        # over the draws is the weighted mean over the distinct suffixes.
+        # on it, and which of them each draw took, in the order they were drawn. A mean over the
+        # draws is the weighted mean over the distinct suffixes.
         ('generated_suffixes', pa.list_(pa.field(name='element', type=_SUFFIX))),
         ('generated_draws', pa.list_(pa.field(name='element', type=pa.int16()))),
-        # Still one entry per draw, in draw order. Two draws of one suffix came from different `z`
-        # and the decoder wrote each its own times, so these do not fold the way the activities do.
+        # Still one entry per draw, in draw order. Times do not fold with activities because two
+        # draws of one activity suffix can still produce different time values.
         (
             'generated_inter_event_time_minutes',
             pa.list_(pa.field(name='element', type=_INTER_EVENT_TIMES)),
@@ -59,11 +56,6 @@ _SCHEMA = pa.schema(
             'generated_remaining_time_minutes',
             pa.list_(pa.field(name='element', type=pa.float32())),
         ),
-        # The suffix written from the mean of `p(z | prefix)`: the model's single answer, drawn once
-        # per prefix and the only column comparable against a model that does not sample.
-        ('point_activities', _SUFFIX),
-        ('point_inter_event_time_minutes', _INTER_EVENT_TIMES),
-        ('point_remaining_time_minutes', pa.float32()),
         ('true_activities', _SUFFIX),
         ('true_inter_event_time_minutes', _INTER_EVENT_TIMES),
         ('true_remaining_time_minutes', pa.float32()),
@@ -86,8 +78,6 @@ _COMPRESSION_LEVEL = 9
 _FLOAT_LEAVES = [
     'generated_inter_event_time_minutes.list.element.list.element',
     'generated_remaining_time_minutes.list.element',
-    'point_inter_event_time_minutes.list.element',
-    'point_remaining_time_minutes',
     'true_inter_event_time_minutes.list.element',
     'true_remaining_time_minutes',
 ]
@@ -115,10 +105,8 @@ class GenerationWriter:
             vocabulary: The activity names the suffixes are spelled on, in code order, from
                 `ActivityCodec.vocabulary`. Written into the file so it says what its own
                 characters mean.
-            sampling: How the activity head was read, for a model that draws from it, or None for
-                one that reads it at its mode. Written in for the same reason the vocabulary is:
-                the sampler is chosen after training, so the checkpoint hash alone does not say
-                which one produced this file.
+            sampling: How the activity head was sampled. Written so the checkpoint hash alone does
+                not need to identify the inference setting.
         """
         schema = with_vocabulary(_SCHEMA, vocabulary)
         if sampling is not None:
@@ -177,9 +165,6 @@ class GenerationWriter:
                 'generated_remaining_time_minutes': [
                     events.remaining_time_minutes for events in generation.samples.events
                 ],
-                'point_activities': generation.point.activities,
-                'point_inter_event_time_minutes': generation.point.inter_event_time_minutes,
-                'point_remaining_time_minutes': generation.point.remaining_time_minutes,
                 'true_activities': generation.truth.activities,
                 'true_inter_event_time_minutes': generation.truth.inter_event_time_minutes,
                 'true_remaining_time_minutes': generation.truth.remaining_time_minutes,
@@ -327,13 +312,6 @@ class Generations:
                                 strict=True,
                             )
                         ],
-                    ),
-                    point=DecodedEvents(
-                        activities=columns['point_activities'][position],
-                        inter_event_time_minutes=columns['point_inter_event_time_minutes'][
-                            position
-                        ],
-                        remaining_time_minutes=columns['point_remaining_time_minutes'][position],
                     ),
                     truth=DecodedEvents(
                         activities=columns['true_activities'][position],

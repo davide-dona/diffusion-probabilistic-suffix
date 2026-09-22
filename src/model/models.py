@@ -9,30 +9,21 @@ from torch import nn
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.distributions import Gaussian, Laplace
+from src.distributions import Laplace
 from src.model.checkpoint import MODEL_KEYS, require_keys
 from src.model.components.decoder import DecoderOutput, GeneratedSuffix
-from src.training import LatentMetrics, Loss
-
-
-@dataclass(frozen=True)
-class Latents:
-    """The two distributions the KL term compares, produced only by a model that has a latent."""
-
-    prior: Gaussian  # p(z | prefix)
-    posterior: Gaussian  # q(z | prefix, suffix)
+from src.training import Loss
 
 
 @dataclass(frozen=True)
 class ModelOutput:
     """What one training pass produced, whichever architecture ran it.
 
-    `latents` is the whole of the difference the loss sees: with them the pass is scored by the
-    ELBO, without them by its reconstruction alone.
+    Architectures may keep internal state, but the shared training path needs only decoder
+    predictions.
     """
 
     decoder: DecoderOutput
-    latents: Latents | None  # None for a model with no latent
 
 
 def _timed_positions(batch: TraceCut) -> torch.Tensor:
@@ -54,9 +45,8 @@ def time_loss(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Score one time head over the positions its target is defined at.
 
-    Shared by every architecture, and the same call for both: neither has an opinion about where a
-    time target is scored or how, only about whether the head there carries a scale of its own, and
-    `Laplace.point` is what answers that without this having to ask.
+    Shared by every architecture, so time targets are scored consistently regardless of the model
+    that produced the decoder output.
 
     The scale term is handed back beside the charge rather than instead of it, so a run's logged
     time loss stays decomposable: subtracting it leaves the absolute error every architecture pays,
@@ -68,9 +58,8 @@ def time_loss(
         target: What it is scored against, shaped and scaled like `prediction.mean`.
         batch: The batch the scored positions are read off.
     Returns:
-        What the head is charged, and the part of it its median does not answer for, each a scalar
-        summed over the scored positions of the whole batch. The second is exactly 0.0 for a head
-        read at its median.
+        What the head is charged, and the scale contribution inside that charge, each summed over
+        the scored positions of the whole batch.
     """
     timed = _timed_positions(batch)  # [batch_size, seq_len]
     charged = prediction.beta_nll(target).masked_fill(mask=~timed, value=0.0).sum()
@@ -82,9 +71,7 @@ class SuffixModel(nn.Module, ABC):
     """What the training loop, the validation pass and the generation pipeline ask of a model.
 
     Deliberately narrow: one pass, one generation, one loss, and the padding index the loss
-    ignores. Everything that separates the architectures - where the variability lives, how the
-    heads are read, what the loss charges - is answered behind this rather than branched on in
-    front of it.
+    ignores. Architecture-specific behavior stays behind this interface.
     """
 
     def __init__(self, codec: DatasetCodec):
@@ -100,34 +87,28 @@ class SuffixModel(nn.Module, ABC):
 
     @abstractmethod
     def generate(
-        self, item: TraceCut, *, num_samples: int, sample: bool = True
+        self, item: TraceCut, *, num_samples: int
     ) -> GeneratedSuffix:
         """Write `num_samples` suffixes for every prefix of a batch.
 
         Args:
             item: A batch from `TraceDataset`, read for its prefix only.
             num_samples: How many suffixes to draw per prefix.
-            sample: Whether this is a draw rather than the model's single point prediction. What
-                is drawn from is the architecture's business.
         Returns:
             The suffixes, `[batch_size, num_samples, ...]`.
         """
 
     @abstractmethod
     def compute_loss(
-        self, output: ModelOutput, batch: TraceCut, *, step: int
-    ) -> tuple[torch.Tensor, Loss, LatentMetrics | None]:
+        self, output: ModelOutput, batch: TraceCut
+    ) -> tuple[torch.Tensor, Loss]:
         """Score a forward pass against the batch it was run on, ready to backpropagate.
 
         Args:
             output: This model's prediction for `batch`, from `self(batch)`.
             batch: A batch from `TraceDataset`, already on the right device.
-            step: The optimizer step this pass belongs to, for a model whose loss anneals a term
-                over the run. A model with nothing to anneal ignores it.
         Returns:
-            The per-trace loss to backpropagate, the terms it is made of, and what the latent
-            carried, both summed over the batch. The last is `None` where the model has no latent
-            for the watchdogs to read.
+            The per-trace loss to backpropagate and the terms it is made of, summed over the batch.
         """
 
     def _per_sample(self, generated: GeneratedSuffix, *, batch_size: int) -> GeneratedSuffix:
@@ -150,9 +131,8 @@ class SuffixModel(nn.Module, ABC):
         )
 
 
-# Imported after `SuffixModel` is defined: both modules import it back, so the base class has to
-# already be bound in this module's namespace by the time they run.
-from src.model.architectures.cvae import TransformerCVAE  # noqa: E402
+# Imported after `SuffixModel` is defined: the architecture imports it back, so the base class has
+# to already be bound in this module's namespace by the time it runs.
 from src.model.architectures.head_sampling_transformer import (  # noqa: E402
     HeadSamplingTransformer,
 )
@@ -167,8 +147,6 @@ def build_model(config: DictConfig, codec: DatasetCodec) -> SuffixModel:
     Returns:
         The model, on the CPU and in training mode.
     """
-    if config.kind == 'transformer_cvae':
-        return TransformerCVAE(config=config, codec=codec)
     if config.kind == 'head_sampling_transformer':
         return HeadSamplingTransformer(config=config, codec=codec)
     raise ValueError(f'Unknown model kind: {config.kind}')

@@ -1,7 +1,7 @@
 defaults:
 - output/default
 - dataset: ???
-- model: transformer_cvae
+- model: head_sampling_transformer
 - training: default
 - runtime: cuda
 - _self_

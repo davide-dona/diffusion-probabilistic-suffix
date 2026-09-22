@@ -32,7 +32,7 @@ def validate_model(model: DictConfig) -> None:
         r'[a-z0-9][a-z0-9_]*',
         'lowercase letters, digits, and underscores',
     )
-    if model.kind not in ('transformer_cvae', 'head_sampling_transformer'):
+    if model.kind != 'head_sampling_transformer':
         raise ValueError(f'Unknown model kind: {model.kind}')
 
     validate_number(model.d_model, 'model.d_model', integer=True)
@@ -55,30 +55,4 @@ def validate_model(model: DictConfig) -> None:
 
     validate_number(model.decoder.head_hidden_dim, 'model.decoder.head_hidden_dim', integer=True)
 
-    if model.kind == 'head_sampling_transformer':
-        if any(key in model for key in ('prior', 'latent', 'loss')):
-            raise ValueError(
-                'head_sampling_transformer does not accept prior, latent, or loss settings'
-            )
-        validate_sampling(model.sampling)
-        return
-
-    if 'sampling' in model:
-        raise ValueError('transformer_cvae does not accept sampling settings')
-
-    validate_number(model.latent.latent_dim, 'model.latent.latent_dim', integer=True)
-    for width in model.prior.hidden_dims:
-        validate_number(width, 'model.prior.hidden_dims', integer=True)
-
-    validate_number(model.prior.dropout, 'model.prior.dropout', inclusive=True)
-    if model.prior.dropout >= 1:
-        raise ValueError('model.prior.dropout must be below 1')
-
-    validate_number(
-        model.loss.kl_annealing_ramp_steps,
-        'model.loss.kl_annealing_ramp_steps',
-        integer=True,
-    )
-
-    for key in ('kl_annealing_start_weight', 'kl_annealing_full_weight', 'free_bits'):
-        validate_number(model.loss[key], f'model.loss.{key}', inclusive=True)
+    validate_sampling(model.sampling)

@@ -42,8 +42,7 @@ def generate_batch(
     num_samples: int,
     codec: DatasetCodec,
 ) -> list[Generation]:
-    """Generate `num_samples` suffixes per prefix of one batch, and the point prediction beside
-    them.
+    """Generate `num_samples` suffixes per prefix of one batch.
 
     Args:
         model: The model to generate with, already in eval mode.
@@ -56,8 +55,6 @@ def generate_batch(
     """
     # Generate the suffixes
     generated = model.generate(item=batch, num_samples=num_samples)
-    # Generate the point prediction
-    point = model.generate(item=batch, num_samples=1, sample=False)
     activity_codec = codec.activity_codes
 
     # Every suffix closes on an EOT, so true lengths are one less tha batch.suffix.length.
@@ -68,11 +65,6 @@ def generate_batch(
     # [batch_size, num_samples, steps]
     inter_event_times = generated.inter_event_times.cpu().numpy()
     remaining_time = generated.remaining_time.cpu().numpy()  # [batch_size, num_samples]
-    point_activities = point.activities.squeeze(dim=1).cpu().numpy()  # [batch_size, steps]
-    point_lengths = point.lengths.squeeze(dim=1).cpu().numpy()  # [batch_size]
-    # [batch_size, steps]
-    point_inter_event_times = point.inter_event_times.squeeze(dim=1).cpu().numpy()
-    point_remaining_time = point.remaining_time.squeeze(dim=1).cpu().numpy()  # [batch_size]
     true_activities = batch.suffix.activities.cpu().numpy()  # [batch_size, seq_len]
     true_inter_event_times = batch.inter_event_times.cpu().numpy()  # [batch_size, seq_len]
     # Position 0 answers for the last prefix event, which is what a remaining time is measured
@@ -100,15 +92,6 @@ def generate_batch(
                     )
                     for sample in range(num_samples)
                 ]
-            ),
-            point=_decode(
-                codec,
-                activity_codec,
-                activities=point_activities[position],
-                inter_event_times=point_inter_event_times[position],
-                length=point_lengths[position],
-                remaining_time=point_remaining_time[position],
-                clamp=True,
             ),
             truth=_decode(
                 codec,

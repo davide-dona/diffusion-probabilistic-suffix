@@ -9,13 +9,6 @@ from torch import nn
 from src.datasets.dataset import Events
 from src.distributions import Laplace
 from src.model.components.attention import MultiHeadAttention, ProjectedKeysValues
-from src.model.components.conditioning import (
-    UNCONDITIONED,
-    AdaLNConditioning,
-    LayerModulation,
-    gate,
-    modulate,
-)
 from src.model.components.embeddings import EventEmbeddings
 
 
@@ -68,13 +61,9 @@ class DecoderOutput:
     """What the decoder predicts at every suffix position: the activity to write there, the
     minutes until it, and the minutes until the case ends.
 
-    Both times are a Laplace on the standardized scale their targets are encoded at, scored by
-    `time_loss`. Whether either carries a spread of its own is `sampling`'s to say: a decoder whose
-    variability lives in `z` reads its heads at their median and `Laplace.point` pins their scale
-    to 1, leaving the loss the plain absolute error; one whose variability lives in its heads emits
-    a log-scale beside each median, because a model that draws from a head has to say how wide it
-    is. The two times overlap - a remaining time is the sum of the inter-event times from that
-    position on - and are read as two independent estimates rather than tied together.
+    Both times are Laplace distributions on the standardized target scale and are scored by
+    `time_loss`. The two time targets overlap: remaining time is the sum of inter-event times from
+    the position onward, and the decoder estimates them independently.
     """
 
     activity_logits: torch.Tensor  # [batch_size, seq_len, num_activities]
@@ -87,8 +76,7 @@ class GeneratedSuffix:
     """A batch of freely generated suffixes, kept as the raw predictions: EOT and everything
     after it included, with `lengths` saying where each suffix actually ended.
 
-    The leading axes are whatever the caller generated over: `[batch_size, ...]` from
-    `Decoder.generate`, `[batch_size, num_samples, ...]` from `TransformerCVAE.generate`.
+    The leading axes are whatever the caller generated over.
     """
 
     activities: torch.Tensor  # [..., steps]
@@ -117,10 +105,9 @@ class DecoderLayer(nn.Module):
             nn.Dropout(p=config.dropout),
             nn.Linear(in_features=config.feedforward_dim, out_features=d_model),
         )
-        # AdaLN conditioning supplies its own scale and shift, so the pre-norms only standardize.
-        self.self_attention_norm = nn.LayerNorm(normalized_shape=d_model, elementwise_affine=False)
-        self.cross_attention_norm = nn.LayerNorm(normalized_shape=d_model, elementwise_affine=False)
-        self.feedforward_norm = nn.LayerNorm(normalized_shape=d_model, elementwise_affine=False)
+        self.self_attention_norm = nn.LayerNorm(normalized_shape=d_model)
+        self.cross_attention_norm = nn.LayerNorm(normalized_shape=d_model)
+        self.feedforward_norm = nn.LayerNorm(normalized_shape=d_model)
         self.dropout = nn.Dropout(p=config.dropout)
 
     def forward(
@@ -130,7 +117,6 @@ class DecoderLayer(nn.Module):
         prefix_encoded: torch.Tensor,
         prefix_pad_mask: torch.Tensor,
         cache: LayerCache | None,
-        modulation: LayerModulation,
     ) -> tuple[torch.Tensor, LayerCache]:
         """Run one layer over the suffix positions in `hidden`.
 
@@ -140,11 +126,10 @@ class DecoderLayer(nn.Module):
             prefix_encoded: The encoded prefix events, `[batch_size, prefix_seq_len, d_model]`.
             prefix_pad_mask: True where a prefix position holds padding.
             cache: What a previous call projected, or None to project everything.
-            modulation: What the latent does to this layer, from `AdaLNConditioning.layers`.
         Returns:
             The layer's output for the positions read, and the cache to hand the next call.
         """
-        hidden_norm = modulate(self.self_attention_norm(hidden), modulation.self_attention)
+        hidden_norm = self.self_attention_norm(hidden)
         step_kv = self.self_attention.project(hidden_norm)
         # With a cache, the new projection is written into the suffix positions already read.
         if cache is not None:
@@ -155,33 +140,24 @@ class DecoderLayer(nn.Module):
                 keys=step_kv.keys, values=step_kv.values, length=step_kv.keys.size(dim=2)
             )
             suffix_kv = step_kv
-        hidden = hidden + gate(
-            self.dropout(
-                self.self_attention(query=hidden_norm, keys_values=suffix_kv, causal=cache is None)
-            ),
-            modulation.self_attention,
+        hidden = hidden + self.dropout(
+            self.self_attention(query=hidden_norm, keys_values=suffix_kv, causal=cache is None)
         )
 
         # The prefix is projected once, by `init_cache`, and read back here on every call after.
         prefix_kv = (
             cache.prefix_kv if cache is not None else self.cross_attention.project(prefix_encoded)
         )
-        hidden = hidden + gate(
-            self.dropout(
-                self.cross_attention(
-                    query=modulate(self.cross_attention_norm(hidden), modulation.cross_attention),
-                    keys_values=prefix_kv,
-                    key_padding_mask=prefix_pad_mask,
-                )
-            ),
-            modulation.cross_attention,
+        hidden = hidden + self.dropout(
+            self.cross_attention(
+                query=self.cross_attention_norm(hidden),
+                keys_values=prefix_kv,
+                key_padding_mask=prefix_pad_mask,
+            )
         )
 
-        hidden = hidden + gate(
-            self.dropout(
-                self.feedforward(modulate(self.feedforward_norm(hidden), modulation.feedforward))
-            ),
-            modulation.feedforward,
+        hidden = hidden + self.dropout(
+            self.feedforward(self.feedforward_norm(hidden))
         )
         return hidden, LayerCache(prefix_kv=prefix_kv, suffix_kv=suffix_cache)
 
@@ -244,38 +220,11 @@ def _nucleus(probabilities: torch.Tensor, *, top_p: float) -> torch.Tensor:
 
 
 class Decoder(nn.Module):
-    """Transformer decoder that predicts a suffix of events, given the prefix and, where the model
-    has one, a latent z.
-
-    Applies self-attention over the suffix positions read so far, cross-attention over the
-    encoded prefix. The latent z enters through `AdaLNConditioning`, which the decoder asks
-    once per pass for what each layer is modulated by; with no latent every layer is handed
-    `UNCONDITIONED` instead and the stack is the plain pre-norm decoder underneath.
-
-    Where a model's variability lives decides how its activity head is read, which is what
-    `sampling` says. A conditioned decoder declares none and is read greedily, one suffix per z: a
-    whole suffix drawn from one latent is a coherent alternative continuation, where a per-step
-    draw walks off the process's language while still looking locally plausible. A decoder with no
-    latent has nowhere else to put its variability, so it declares a sampler and draws the activity
-    from its logits at every step.
-
-    `sampling` decides the time heads with it, and for the same reason. Where the variability is
-    the latent's, an inter-event time's spread is the latent's too, so the heads emit a median
-    alone and `Laplace.point` scores it by the plain absolute error. Where the variability is the
-    heads', a time is drawn like an activity is, so each head emits a log-scale beside its median: a
-    remaining time read at position 0, before any activity has been written, has no drawn activity
-    path to inherit a spread from, and without a scale of its own it would be the same number in
-    every draw of a prefix - a quantity the arm could say nothing about rather than a result about
-    the arm. What that costs is a gradient, and `Laplace.beta_nll` is where it is paid: charging
-    the likelihood directly would let a shrinking scale multiply what this trunk sees from the
-    times against what it sees from the activities, and the detached weight there is what leaves
-    the median the same gradient it has on an arm with no scale at all.
-    """
+    """Transformer decoder that predicts sampled suffixes from encoded prefixes."""
 
     def __init__(
         self,
         config: DictConfig,
-        latent_config: DictConfig | None,
         embeddings: EventEmbeddings,
         *,
         d_model: int,
@@ -284,13 +233,11 @@ class Decoder(nn.Module):
         pad_activity_index: int,
         pad_resource_index: int,
         eot_activity_index: int,
-        sampling: DictConfig | None,
+        sampling: DictConfig,
     ):
         """
         Args:
             config: The decoder's own hyperparameters.
-            latent_config: The latent's width, or None for a decoder that reads no latent, whose
-                layers go unmodulated.
             embeddings: The event embeddings, shared with the encoder.
             d_model: The width the stack runs at.
             num_activities: Rows of the activity head, the whole vocabulary.
@@ -300,11 +247,7 @@ class Decoder(nn.Module):
             pad_resource_index: The resource row every decoder input carries, the channel being
                 one the decoder never feeds itself.
             eot_activity_index: What ends a generated suffix.
-            sampling: How the activity logits are shaped before a draw reads them, or None for a
-                decoder that reads every head at its mode. Declaring one is what makes this
-                decoder's heads the source of its variability - so it is also what gives the time
-                heads a scale to be drawn from - and it is the whole of what tells the two arms
-                apart here.
+            sampling: How activity logits are shaped before sampling.
         """
         super().__init__()
         self.embeddings = embeddings
@@ -320,13 +263,6 @@ class Decoder(nn.Module):
         self.pad_resource_index = pad_resource_index
         self.eot_activity_index = eot_activity_index
 
-        self.conditioning = (
-            AdaLNConditioning(
-                latent_dim=latent_config.latent_dim, d_model=d_model, num_layers=config.num_layers
-            )
-            if latent_config is not None
-            else None
-        )
         self.layers = nn.ModuleList(
             DecoderLayer(config, d_model=d_model) for _ in range(config.num_layers)
         )
@@ -353,23 +289,16 @@ class Decoder(nn.Module):
         self.activity_head = nn.Linear(
             in_features=config.head_hidden_dim, out_features=num_activities
         )
-        # The standardized time itself, and beside it a log-scale where this decoder draws from
-        # its heads. Nothing is squashed: the targets are standardized rather than bounded, and
-        # `Laplace.create` is what keeps the scale in a range `exp` survives. Emitting one number
-        # where there is no scale is what leaves an unconditioned decoder's parameters, and so its
-        # checkpoints, exactly as they were before either head could carry one.
-        time_outputs = 2 if sampling is not None else 1
         self.inter_event_time_head = nn.Linear(
-            in_features=config.head_hidden_dim, out_features=time_outputs
+            in_features=config.head_hidden_dim, out_features=2
         )
         self.remaining_time_head = nn.Linear(
-            in_features=config.head_hidden_dim, out_features=time_outputs
+            in_features=config.head_hidden_dim, out_features=2
         )
 
     def forward(
         self,
         suffix_activities: torch.Tensor,
-        z: torch.Tensor | None,
         prefix_encoded: torch.Tensor,
         prefix_pad_mask: torch.Tensor,
     ) -> DecoderOutput:
@@ -379,8 +308,6 @@ class Decoder(nn.Module):
             suffix_activities: The ground-truth suffix activities, `[batch_size, seq_len]`. Read
                 one step behind, so the decoder sees the truth up to each position rather than
                 its own predictions.
-            z: The sampled latent, `[batch_size, latent_dim]`, or None for a decoder built
-                without one.
             prefix_encoded: The encoded prefix events, `[batch_size, prefix_seq_len, d_model]`.
             prefix_pad_mask: True where a prefix position holds padding.
         Returns:
@@ -395,7 +322,6 @@ class Decoder(nn.Module):
             prefix_pad_mask=prefix_pad_mask,
             start_position=0,
             caches=None,
-            modulations=self._modulations(z),
         )  # [batch_size, seq_len, d_model]
         features = self.shared_layer(hidden)  # [batch_size, seq_len, head_hidden_dim]
         return DecoderOutput(
@@ -405,39 +331,17 @@ class Decoder(nn.Module):
         )
 
     def _time(self, head: nn.Linear, features: torch.Tensor) -> Laplace:
-        """Read one time head, as the distribution it stands for either way.
-
-        The convention `Gaussian.from_head` follows, for a head that emits both halves side by
-        side: what is read off the last dimension is the median, then the raw log-scale. A head
-        with no scale to emit is one column wide and stands for the unit-scale Laplace around what
-        it did emit, so both architectures leave here holding the same type.
+        """Read one probabilistic time head.
 
         Args:
-            head: The head to read, one column wide or two.
+            head: The head to read.
             features: The shared trunk's output, `[..., head_hidden_dim]`.
         Returns:
             The distribution at every position read, `[...]` per field.
         """
-        parameters = head(features)  # [..., 1] or [..., 2]
-        if self.sampling is None:
-            return Laplace.point(parameters.squeeze(dim=-1))  # [..., 1] -> [...]
+        parameters = head(features)
         mean, logscale = parameters.unbind(dim=-1)  # [..., 2] -> two of [...]
         return Laplace.create(mean=mean, logscale=logscale)
-
-    def _modulations(self, z: torch.Tensor | None) -> tuple[LayerModulation, ...]:
-        """What the latent does to each layer of the stack.
-
-        Read once per pass rather than once per decode step, and answered without a latent at
-        all where the model has none, so the stack below runs one code path either way.
-
-        Args:
-            z: The sampled latent, `[batch_size, latent_dim]`, or None.
-        Returns:
-            One modulation per layer, in stack order.
-        """
-        if self.conditioning is None:
-            return (UNCONDITIONED,) * len(self.layers)
-        return self.conditioning.layers(z)
 
     def read_with(self, sampling: DictConfig) -> None:
         """Replace the sampler the activity head is drawn through.
@@ -448,26 +352,14 @@ class Decoder(nn.Module):
 
         Args:
             sampling: The sampler to draw with from here on.
-        Raises:
-            ValueError: If this decoder reads its activity head at its mode, there being nothing
-                for a sampler to shape.
         """
-        if self.sampling is None:
-            raise ValueError(
-                'this decoder reads its activity head at its mode, so there is no sampler to '
-                'replace: its draws vary in z alone'
-            )
         self.sampling = sampling
 
-    def _next_activity(self, logits: torch.Tensor, *, drawing: bool) -> torch.Tensor:
+    def _next_activity(self, logits: torch.Tensor) -> torch.Tensor:
         """Read the activity head for one decode step.
 
-        The tokens no suffix can hold are masked out before either read. Greedily that changes
-        nothing a trained model would have done, since it never ranks them first; drawing, it is
-        the difference between a suffix and a decoding fault, because the head only ever learns to
-        make PAD unlikely, never impossible, and a draw from the full softmax emits it at exactly
-        whatever rate that leaves. Masking both reads rather than only the draw keeps the two
-        architectures decoding under one constraint, which is what makes them comparable.
+        The tokens no suffix can hold are masked out before sampling. The head learns to make PAD
+        unlikely rather than impossible, so masking prevents invalid emitted tokens.
 
         A draw is then shaped by `self.sampling`: the temperature scales every step alike, the
         nucleus reads how peaked each one is. The masked tokens leave the softmax at zero, so
@@ -475,36 +367,28 @@ class Decoder(nn.Module):
 
         Args:
             logits: The head's output, `[batch_size, num_activities]`.
-            drawing: Whether this step is a draw rather than the point prediction.
         Returns:
             The activity written at this position, `[batch_size]`.
         """
         logits = logits.index_fill(dim=-1, index=self.unemittable_activities, value=-torch.inf)
-        if not drawing:
-            return logits.argmax(dim=-1)
-        # `self.sampling` is not None here: `drawing` is read off it in the first place.
-        assert self.sampling is not None
         probabilities = (logits / self.sampling.temperature).softmax(dim=-1)
         probabilities = _nucleus(probabilities, top_p=self.sampling.top_p)
         return torch.multinomial(input=probabilities, num_samples=1).squeeze(dim=1)
 
     @staticmethod
-    def _next_time(distribution: Laplace, *, drawing: bool) -> torch.Tensor:
+    def _next_time(distribution: Laplace) -> torch.Tensor:
         """Read one time head for one decode step.
 
         No temperature and no nucleus shape this the way `DictConfig` shapes an activity's
-        draw: the head's own scale already says how wide this position is, where a softmax says
-        only how the mass is spread over a vocabulary. A head with no scale is the unit-scale
-        `Laplace.point`, and `drawing` is False on every decoder that holds one, so this reads its
-        median and adds nothing.
+        draw: the head's own scale says how wide this position is, where a softmax says only how
+        mass is spread over a vocabulary.
 
         Args:
             distribution: The head's output at this position, `[batch_size]` per field.
-            drawing: Whether this step is a draw rather than the point prediction.
         Returns:
             The standardized time written at this position, `[batch_size]`.
         """
-        return distribution.sample() if drawing else distribution.mean
+        return distribution.sample()
 
     def _teacher_forced_input(self, suffix_activities: torch.Tensor) -> torch.Tensor:
         """What the decoder reads at each position: the suffix moved one step later, behind SOS.
@@ -530,10 +414,8 @@ class Decoder(nn.Module):
         """Blank a random `activity_dropout` fraction of the teacher-forced activities to PAD.
 
         A decoder that cannot count on the previous ground-truth token has to read what comes
-        next off something else: z where there is one, which is what keeps information flowing
-        through the latent, and the cross-attended prefix and the position being written where
-        there is not. Either way it is what stops the previous token from being the whole answer,
-        which is the state a free-running argmax read gets stuck in.
+        next off the cross-attended prefix and the position being written. This stops the previous
+        token from being the whole answer.
         """
         dropped = (torch.rand_like(activities, dtype=torch.float32) < self.activity_dropout) & (
             activities != self.sos_activity_index
@@ -548,7 +430,6 @@ class Decoder(nn.Module):
         prefix_pad_mask: torch.Tensor,
         start_position: int,
         caches: list[LayerCache] | None,
-        modulations: tuple[LayerModulation, ...],
     ) -> tuple[torch.Tensor, list[LayerCache]]:
         """Embed a run of decoder inputs and push it through the stack.
 
@@ -562,7 +443,6 @@ class Decoder(nn.Module):
             prefix_pad_mask: True where a prefix position holds padding.
             start_position: Where in the suffix `activities` starts, for the positional encoding.
             caches: One per layer, from a previous call, or None to read from the beginning.
-            modulations: What the latent does to each layer, from `AdaLNConditioning.layers`.
         Returns:
             The stack's output for the positions read, and the caches carrying them.
         """
@@ -577,13 +457,12 @@ class Decoder(nn.Module):
         # leave a row with nothing to attend to, whose softmax is a NaN.
         layer_caches = caches if caches is not None else [None] * len(self.layers)
         new_caches: list[LayerCache] = []
-        for layer, cache, modulation in zip(self.layers, layer_caches, modulations, strict=True):
+        for layer, cache in zip(self.layers, layer_caches, strict=True):
             hidden, layer_cache = layer(
                 hidden,
                 prefix_encoded=prefix_encoded,
                 prefix_pad_mask=prefix_pad_mask,
                 cache=cache,
-                modulation=modulation,
             )
             new_caches.append(layer_cache)
 
@@ -634,48 +513,25 @@ class Decoder(nn.Module):
 
     def generate(
         self,
-        z: torch.Tensor | None,
         prefix_encoded: torch.Tensor,
         prefix_pad_mask: torch.Tensor,
         max_steps: int,
-        *,
-        sample: bool,
     ) -> GeneratedSuffix:
         """Run the decoder free, feeding each step the event the previous one predicted.
 
         Every step is one cached call to `_run_layers`, the same pass teacher forcing runs, so
         writing n events costs n passes over one position.
 
-        The heads are drawn from only where `self.sampling` says so, and then all three are: a
-        conditioned decoder declares none, so every step reads its activity at its mode and its
-        times at their median, and two generations of one prefix differ in the z each was given. A
-        decoder with no latent draws its activity from its logits and each time from its head's
-        Laplace, so a remaining time - read at position 0, where no activity has been drawn yet to
-        carry a spread of its own - varies across the draws of one prefix like everything else it
-        emits. Either way `sample=False` reads all three at their mode, which is the model's single
-        point prediction.
-
         Args:
-            z: The sampled latent, `[batch_size, latent_dim]`, or None for a decoder built
-                without one.
             prefix_encoded: The encoded prefix events, `[batch_size, prefix_seq_len, d_model]`.
             prefix_pad_mask: True where a prefix position holds padding.
             max_steps: Hard cap on the suffix length, for generations that never emit EOT.
-            sample: Whether this call is a draw rather than the point prediction. Nothing on a
-                decoder whose heads are not the source of its variability.
         Returns:
             The generated suffixes, the length of each, the minutes until each of their events,
             and the remaining time each was opened with.
         """
         batch_size = prefix_encoded.size(dim=0)
         device = prefix_encoded.device
-        # The heads are drawn from only where they are what the variability lives in; everywhere
-        # else they are read at their mode, whatever the caller asked for.
-        drawing = self.sampling is not None and sample
-        # z does not change while a suffix is being written, so what it does to each layer is
-        # read once here rather than at every step of the loop below.
-        modulations = self._modulations(z)
-
         # What the decoder reads at each step: SOS first, exactly how `_teacher_forced_input`
         # opens, then the activity the previous step predicted.
         next_input = torch.full(
@@ -712,23 +568,16 @@ class Decoder(nn.Module):
                 prefix_pad_mask=prefix_pad_mask,
                 start_position=position,
                 caches=caches,
-                modulations=modulations,
             )
             features = self.shared_layer(hidden[:, 0])  # [batch_size, head_hidden_dim]
-            activities = self._next_activity(
-                self.activity_head(features), drawing=drawing
-            )  # [batch_size]
-            # Only position 0, the state after SOS, answers for the whole suffix. No activity has
-            # been drawn there yet, so a spread across the samples of one prefix is the head's own
-            # or there is none.
+            activities = self._next_activity(self.activity_head(features))  # [batch_size]
+            # Only position 0, the state after SOS, answers for the whole suffix.
             if position == 0:
-                remaining_time = self._next_time(
-                    self._time(self.remaining_time_head, features), drawing=drawing
-                )  # [batch_size]
+                remaining_time = self._next_time(self._time(self.remaining_time_head, features))
 
             generated_activities[:, position] = activities
             generated_inter_event_times[:, position] = self._next_time(
-                self._time(self.inter_event_time_head, features), drawing=drawing
+                self._time(self.inter_event_time_head, features)
             )
             next_input = activities.unsqueeze(dim=1)  # [batch_size, 1]
 

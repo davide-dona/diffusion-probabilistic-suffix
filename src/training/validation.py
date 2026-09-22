@@ -12,7 +12,6 @@ from src.evaluation.metrics import METRICS
 from src.evaluation.results import PrefixSummary, ScoreGroups
 from src.inference.generate import generate_batch
 from src.logs.declare import ConformanceChecker
-from src.training.kl import LatentMetrics
 from src.training.loss import Loss
 
 if TYPE_CHECKING:
@@ -50,35 +49,27 @@ class GenerationMetrics:
 
 
 @torch.no_grad()
-def validate(
-    model: SuffixModel, loader: DataLoader, *, step: int, device: torch.device
-) -> tuple[Loss, LatentMetrics | None]:
+def validate(model: SuffixModel, loader: DataLoader, *, device: torch.device) -> Loss:
     """
     Run one pass over `loader` without learning from it.
     Args:
         model: The model to evaluate. Put in evaluation mode here, and left in it.
         loader: The dataloader to iterate over. Its batches are `TraceCut`s.
-        step: The training step this pass scores, for a model whose loss anneals a term over
-            the run.
         device: The device to run the computations on.
     Returns:
-        The loss terms of the pass and what the latent carried, both averaged over the traces
-        of the split. The latter is None where the model has no latent.
+        The loss terms of the pass, averaged over the traces of the split.
     """
     model.eval()
 
     totals = Loss()
-    latent_totals: LatentMetrics | None = None
     for batch in loader:
         batch = batch.to(device)
         output = model(batch)
-        _, metrics, latent = model.compute_loss(output, batch, step=step)
+        _, metrics = model.compute_loss(output, batch)
         totals += metrics
-        if latent is not None:
-            latent_totals = latent if latent_totals is None else latent_totals + latent
 
     traces = len(loader.dataset)
-    return totals / traces, None if latent_totals is None else latent_totals / traces
+    return totals / traces
 
 
 @torch.no_grad()

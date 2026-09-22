@@ -65,16 +65,3 @@ def energy_score_bigram(context: PreparedPrefix) -> float:
     return energy_score(
         samples.suffixes, truth.activities, weights=samples.counts, metric=SuffixMetric.BIGRAM
     )
-
-
-@METRICS.register(
-    'dls_point',
-    label='DLS point prediction',
-    group=MetricGroup.ACTIVITY,
-    unit=Unit.SHARE,
-    direction=Direction.HIGHER,
-)
-def dls_point(context: PreparedPrefix) -> float:
-    """Return the DLS similarity of the point activity prediction."""
-    generation = context.generation
-    return sequence_similarity(generation.point.activities, generation.truth.activities)

@@ -115,9 +115,6 @@ def run(
             `training.generation_pairs`. The same subset at every grid point.
         samples: Suffixes drawn per prefix at each point, or `None` for the run's own
             `inference.validation_samples`.
-    Raises:
-        ValueError: If the checkpoint is of an architecture that reads its heads at their mode,
-            which has no sampler to search.
     """
     with step(f'Reading the checkpoint at {checkpoint_path}'):
         checkpoint = load_checkpoint(checkpoint_path)
@@ -179,10 +176,7 @@ def run(
         model = model_from_checkpoint(checkpoint, codec, device=config.training.device)
         model.eval()
     if not isinstance(model, HeadSamplingTransformer):
-        raise ValueError(
-            f'{config.model.kind} has no output-head sampler to tune. Transformer CVAE draws '
-            'its variability from z instead.'
-        )
+        raise ValueError(f'{config.model.kind} does not support output-head sampler tuning.')
 
     with step(f'Reading and encoding the {Split.VAL} split'):
         validation_dataset = TraceDataset(codec=codec, split=Split.VAL)

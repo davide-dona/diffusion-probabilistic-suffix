@@ -28,12 +28,9 @@ class DecodedEvents:
 class Draws:
     """One prefix's drawn suffixes, held as the distinct ones and which draw took each.
 
-    The decoder is deterministic given `z`, so two draws that landed on the same activities are one
-    sequence the model produced twice: it is written once and `taken` says how often. The
-    inter-event times do not collapse with it, since those two draws came from different `z` and
-    the decoder
-    wrote each its own times, so `events` stays one entry per draw and pairs with
-    `suffixes[taken[draw]]`.
+    Activity suffixes are written once and `taken` records which suffix each draw produced.
+    Inter-event times do not collapse with activities, so `events` stays one entry per draw and
+    pairs with `suffixes[taken[draw]]`.
 
     Keeping the draws folded is what lets conformance and the transport cost be solved over the
     distinct suffixes rather than over every draw, which on a collapsed run is most of the work.
@@ -52,7 +49,7 @@ class Draws:
         """Fold one prefix's draws, in the order they were drawn.
 
         Args:
-            drawn: One entry per draw of `z`, already decoded.
+            drawn: One entry per generated draw, already decoded.
         Returns:
             The draws with their distinct suffixes pulled out.
         """
@@ -76,16 +73,14 @@ class Draws:
 
 @dataclass(frozen=True)
 class Generation:
-    """One prefix's generated suffixes, the point prediction beside them, and the truth they were
-    generated for.
+    """One prefix's generated suffixes and the truth they were generated for.
     - case_id is used to identify the case in the log the prefix was cut from;
     - prefix_activities are added for convenience in the conformance report.
     """
 
     case_id: str  # which case of the log the prefix was cut from
     prefix_activities: str  # the events before the cut, in order, one character each
-    samples: Draws  # every draw of z, folded onto the distinct suffixes they took
-    point: DecodedEvents  # the suffix written from the mean of `p(z | prefix)`
+    samples: Draws
     truth: DecodedEvents
 
     @property

@@ -10,7 +10,7 @@ LOGSCALE_MIN, LOGSCALE_MAX = -10.0, 10.0
 class Laplace:
     """A Laplace distribution, [...] per field, parameterized by median and log-scale.
 
-    It handles occasional long durations better than a Gaussian.
+    It handles occasional long durations robustly.
     """
 
     mean: torch.Tensor

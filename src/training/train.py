@@ -127,9 +127,7 @@ def train(
                 # Run a forward pass
                 output = model(batch)
 
-                # Compute the loss and propagate gradients. Whatever the architecture anneals or
-                # charges a KL term for is its own business, read off `step`.
-                loss, metrics, latent = model.compute_loss(output, batch, step=step)
+                loss, metrics = model.compute_loss(output, batch)
                 optimizer.zero_grad()
                 loss.backward()
                 if training.grad_clip_norm is not None:
@@ -148,20 +146,14 @@ def train(
                 log_records({'train': metrics / batch_size}, step=step)
                 # So a loss curve can be read against where in the warmup it sits.
                 wandb.log({'train/lr': learning_rate}, step=step)
-                # Only a model with a latent has one to watch, and only it is charged a KL term.
-                if latent is not None:
-                    log_records({'train': latent / batch_size}, step=step)
-
                 if step % training.val_every_n_steps == 0 or step >= training.max_steps:
                     train_metrics = interval_totals / seen
                     interval_totals, seen = Loss(), 0
 
                     # Score the model on the validation set and the generation set, and log
                     # the results.
-                    val_metrics, val_latent = validate(model, val_loader, step=step, device=device)
+                    val_metrics = validate(model, val_loader, device=device)
                     log_records({'val': val_metrics}, step=step)
-                    if val_latent is not None:
-                        log_records({'val': val_latent}, step=step)
 
                     gen_metrics = validate_generation(
                         model,
@@ -173,17 +165,13 @@ def train(
                     )
                     gen_metrics.log(step)
 
-                    # `val_latent.log` above already wrote `kl_weight` beside the rest of the
-                    # latent metrics; only a model with a latent has one to show here.
-                    kl_info = f'kl {val_latent.kl_weight:.2f}  ' if val_latent is not None else ''
 
                     # The one line of live feedback: enough to see a run is alive and heading down
                     print(
                         f'Step {step:>{len(str(training.max_steps))}}/{training.max_steps}  '
-                        f'{kl_info}train {train_metrics.loss:.4f}  '
+                        f'train {train_metrics.loss:.4f}  '
                         f'val {val_metrics.loss:.4f}  '
                         f'gen_dls {gen_metrics.scores.activity["dls_sample_mean"]:.4f} mean / '
-                        f'{gen_metrics.scores.activity["dls_point"]:.4f} point  '
                         f'energy {gen_metrics.scores.activity["energy_score_dls"]:.4f}',
                         flush=True,
                     )

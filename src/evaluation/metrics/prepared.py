@@ -24,7 +24,6 @@ class PreparedPrefix:
     true_remaining_time: np.ndarray
     true_inter_event_times: np.ndarray
     sample_conformance: tuple[Conformance, ...]
-    point_conformance: Conformance
     observed_conformance: Conformance
 
     @classmethod
@@ -56,7 +55,6 @@ class PreparedPrefix:
             true_remaining_time=np.array([truth.remaining_time_minutes], dtype=np.float64),
             true_inter_event_times=np.array(truth.inter_event_time_minutes, dtype=np.float64),
             sample_conformance=tuple(checker.check(prefix + suffix) for suffix in samples.suffixes),
-            point_conformance=checker.check(prefix + generation.point.activities),
             observed_conformance=checker.check(prefix + truth.activities),
         )
 

@@ -24,7 +24,7 @@ class TraceEncoder(nn.Module):
 
     A learned CLS token is prepended to the sequence, and the row it comes back as is the
     sequence's summary: the pooling is learned rather than fixed, so what a summary holds is
-    whatever the latent networks reading it turn out to need. The token is internal; callers
+    whatever downstream model components reading it turn out to need. The token is internal; callers
     see only the `EncodedTrace` it comes back as.
     """
 

@@ -1,10 +1,11 @@
 # Suffix Generation
 
-Conditional suffix generation for predictive process monitoring.
+Probabilistic suffix generation for predictive process monitoring, with a framework prepared for
+diffusion models.
 
-This repository provides two Transformer architectures, a conditional variational autoencoder
-and a Head-sampling Transformer, together with preprocessing, training, inference, evaluation,
-and visualization pipelines.
+This repository provides a Head-sampling Transformer baseline together with preprocessing,
+training, inference, evaluation, and visualization pipelines. Additional architectures can be
+added through the shared model interface and configuration group.
 
 ## Install
 
@@ -43,7 +44,7 @@ uv run python -m pipelines.preprocess --multirun dataset=sepsis,bpic13,bpic17,bp
 
 uv run python -m pipelines.train --multirun \
   dataset=sepsis,bpic13,bpic17,bpic19 \
-  model=transformer_cvae,head_sampling_transformer
+  model=head_sampling_transformer
 ```
 
 Generation and evaluation can be queued in the same way by listing their input artifacts:
@@ -81,15 +82,15 @@ records are written under `outputs/preprocess/sepsis/<timestamp>/`.
 Choose the dataset and architecture independently:
 
 ```bash
-uv run python -m pipelines.train dataset=sepsis model=transformer_cvae
+uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
-The available architectures are `transformer_cvae` and `head_sampling_transformer`. Training
+The available baseline is `head_sampling_transformer`. Training
 writes the best validation checkpoint to
 `outputs/train/<dataset>/<model>/<run-id>/best.pt`. Runs cannot be resumed, but an interrupted run
 retains its last successfully saved best checkpoint.
 
-Training curves are logged to the `suffix-generation` W&B project. On normal completion, the
+Training curves are logged to the `diffusion-probabilistic-suffix` W&B project. On normal completion, the
 selected checkpoint is also uploaded to W&B.
 
 ### 3. Sampler tuning
@@ -101,8 +102,7 @@ uv run python -m pipelines.tune checkpoint=/path/to/best.pt device=cpu
 ```
 
 The selected sampler is written to
-`outputs/tune/<dataset>/<model>/<run-id>/tuning.json`. This stage does not apply to the
-Transformer CVAE.
+`outputs/tune/<dataset>/<model>/<run-id>/tuning.json`.
 
 ### 4. Inference
 
@@ -174,7 +174,7 @@ uv run python -m pipelines.train dataset=bpic17 model=head_sampling_transformer 
 Inspect the fully resolved configuration without starting a run:
 
 ```bash
-uv run python -m pipelines.train dataset=sepsis model=transformer_cvae --cfg job --resolve
+uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer --cfg job --resolve
 ```
 
 ## Maintainer operations

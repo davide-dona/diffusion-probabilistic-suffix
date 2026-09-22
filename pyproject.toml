@@ -1,7 +1,7 @@
 [project]
-name = "suffix-generation"
+name = "diffusion-probabilistic-suffix"
 version = "0.1.0"
-description = "Add your description here"
+description = "Probabilistic suffix prediction with diffusion models"
 requires-python = ">=3.13"
 dependencies = [
     "declare4py>=2.2.0",

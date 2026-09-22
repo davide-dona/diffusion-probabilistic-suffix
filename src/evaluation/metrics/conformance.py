@@ -24,17 +24,6 @@ def conformance_sample_mean(context: PreparedPrefix) -> float:
     return _sample_mean(context, 'share')
 
 
-@METRICS.register(
-    'conformance_point',
-    label='Conformance point prediction',
-    group=MetricGroup.CONFORMANCE,
-    unit=Unit.SHARE,
-    direction=Direction.HIGHER,
-)
-def conformance_point(context: PreparedPrefix) -> float:
-    """Return the satisfied-constraint share of the point prediction."""
-    return context.point_conformance.share
-
 
 @METRICS.register(
     'conformance_observed',

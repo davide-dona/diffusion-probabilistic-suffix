@@ -62,16 +62,3 @@ def suffix_length_coverage_gap_75(context: PreparedPrefix) -> float:
 def suffix_length_coverage_gap_95(context: PreparedPrefix) -> float:
     """Return the 95% suffix-length central-interval coverage gap."""
     return coverage_gap(context.suffix_lengths, context.true_suffix_length, level=0.95)
-
-
-@METRICS.register(
-    'suffix_length_ae_point',
-    label='Suffix length point absolute error',
-    group=MetricGroup.SUFFIX_LENGTH,
-    unit=Unit.EVENTS,
-    direction=Direction.LOWER,
-)
-def suffix_length_ae_point(context: PreparedPrefix) -> float:
-    """Return the point suffix-length absolute error."""
-    generation = context.generation
-    return float(abs(len(generation.point) - len(generation.truth)))

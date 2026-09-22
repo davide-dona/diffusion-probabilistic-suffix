@@ -26,7 +26,7 @@ shift $((OPTIND - 1))
 
 [[ $# -ge 1 ]] || usage
 host="$1"
-remote_path="${2:-suffix-generation}"
+remote_path="${2:-diffusion-probabilistic-suffix}"
 
 rsync -avz --progress "${dry_run[@]+"${dry_run[@]}"}" \
   "$host:$remote_path/outputs/generate/" outputs/generate/

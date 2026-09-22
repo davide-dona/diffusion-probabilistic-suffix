@@ -2152,7 +2152,7 @@ wheels = [
 ]
 
 [[package]]
-name = "suffix-generation"
+name = "diffusion-probabilistic-suffix"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

@@ -6,5 +6,5 @@ dataloader:
 training:
   device: cuda:0
 wandb:
-  project: suffix-generation
+  project: diffusion-probabilistic-suffix
   mode: online

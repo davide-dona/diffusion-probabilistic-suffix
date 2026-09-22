@@ -90,9 +90,6 @@ def validate_generation_request(
     if sampling is not None:
         validate_sampling(sampling)
 
-    has_sampling_override = tuning is not None or sampling is not None
-    if has_sampling_override and config.model.kind != 'head_sampling_transformer':
-        raise ValueError('Only head_sampling_transformer supports sampling overrides')
 
 
 def validate_generation(config: DictConfig) -> None:
@@ -105,12 +102,6 @@ def validate_tuning(
 ) -> None:
     """Validate effective tuning configuration and the Cartesian sampler grid."""
     validate_training(config)
-
-    if config.model.kind != 'head_sampling_transformer':
-        raise ValueError(
-            f'{config.model.kind} has no output-head sampler to tune. Transformer CVAE draws '
-            'its variability from z instead.'
-        )
 
     if not temperatures or not top_ps:
         raise ValueError('Sampler grid cannot be empty')

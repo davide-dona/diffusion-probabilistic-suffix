@@ -99,7 +99,6 @@ def run(
     )
     # A checkpoint that has been trimmed for publishing still carries both of these.
     trained_step, score = checkpoint.get('step'), checkpoint.get('selection_score')
-    # None for an architecture that reads its heads at their mode, which is what the file records.
     drawn_with = config.model.get('sampling')
 
     banner(
@@ -115,7 +114,7 @@ def run(
             'samples': f'{config.inference.evaluation_samples} suffixes per prefix',
             'sampling': f'temperature {drawn_with.temperature}, top_p {drawn_with.top_p}'
             if drawn_with is not None
-            else 'greedy heads; the draws vary in z alone',
+            else 'not configured',
             'batch': f'{batch_size} prefixes, {config.dataloader.num_workers} loader workers',
             'generations': path,
         },
