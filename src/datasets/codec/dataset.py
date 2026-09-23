@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -78,7 +76,7 @@ class DatasetCodec(BaseModel):
     @classmethod
     def fit(
         cls, train: pd.DataFrame, *, data_config: DictConfig, max_trace_length: int
-    ) -> DatasetCodec:
+    ) -> 'DatasetCodec':
         """Fit the codec on the train split.
         Args:
             train: The train split, as `pipelines/preprocess.py` holds it before writing.
@@ -114,7 +112,7 @@ class DatasetCodec(BaseModel):
         )
 
     @classmethod
-    def load(cls, data_config: DictConfig) -> DatasetCodec:
+    def load(cls, data_config: DictConfig) -> 'DatasetCodec':
         """Load the codec previously fit for a dataset.
 
         The one place a config becomes a codec: what comes back names the dataset, so everything

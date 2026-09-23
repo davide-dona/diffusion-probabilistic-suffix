@@ -101,18 +101,20 @@ def _bigram_distances(
         each other, up to 1.0 for two sharing none.
     """
     counted = [bigrams(sequence) for sequence in (*queries, *choices)]
-    vocabulary = {pair: column for column, pair in enumerate({pair for c in counted for pair in c})}
+    vocabulary = {
+        pair: column for column, pair in enumerate({pair for counts in counted for pair in counts})
+    }
     # Dense over the pairs these two sets happen to hold, which keeps the representation compact.
     matrix = np.zeros((len(counted), len(vocabulary)), dtype=np.float64)
-    for row, held in enumerate(counted):
-        for pair, count in held.items():
+    for row, counts in enumerate(counted):
+        for pair, count in counts.items():
             matrix[row, vocabulary[pair]] = count
 
     left, right = matrix[: len(queries)], matrix[len(queries) :]
-    l1 = cdist(left, right, metric='cityblock')
+    absolute_differences = cdist(left, right, metric='cityblock')
     sizes = left.sum(axis=1)[:, None] + right.sum(axis=1)[None, :]
     # The padding puts at least one pair in every sequence, so the union is never 0.
-    return (2.0 * l1 / (sizes + l1)).astype(dtype)
+    return (2.0 * absolute_differences / (sizes + absolute_differences)).astype(dtype)
 
 
 def distances(

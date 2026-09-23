@@ -1,14 +1,14 @@
+from collections.abc import Sequence
+
 from src.evaluation.metrics.definitions import Direction, MetricGroup, Owner, Unit
 from src.evaluation.metrics.prepared import PreparedPrefix
 from src.evaluation.metrics.registry import METRICS
 
 
-def _sample_mean(context: PreparedPrefix, attribute: str) -> float:
+def _sample_mean(context: PreparedPrefix, values: Sequence[float]) -> float:
     """Return one conformance property averaged across all sampled draws."""
-    checks = context.sample_conformance
     samples = context.generation.samples
     draws = len(samples)
-    values = [getattr(check, attribute) for check in checks]
     return float(samples.counts @ values) / draws if values and draws else 0.0
 
 
@@ -21,7 +21,7 @@ def _sample_mean(context: PreparedPrefix, attribute: str) -> float:
 )
 def conformance_sample_mean(context: PreparedPrefix) -> float:
     """Return the draw-weighted mean share of satisfied constraints."""
-    return _sample_mean(context, 'share')
+    return _sample_mean(context, [check.share for check in context.sample_conformance])
 
 
 @METRICS.register(
@@ -45,7 +45,7 @@ def conformance_observed(context: PreparedPrefix) -> float:
 )
 def full_conformance_sample_rate(context: PreparedPrefix) -> float:
     """Return the draw-weighted rate of fully conformant sampled suffixes."""
-    return _sample_mean(context, 'full')
+    return _sample_mean(context, [check.full for check in context.sample_conformance])
 
 
 @METRICS.register(

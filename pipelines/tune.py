@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import itertools
 from pathlib import Path
 
@@ -13,7 +11,7 @@ from pipelines.console import banner, step
 from src import artifacts
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset, fixed_subset
-from src.evaluation.results import PrefixSummary
+from src.evaluation import PrefixSummary
 from src.inference.generate import generate_batch, generation_batch_size
 from src.inference.tuning import (
     SearchPass,

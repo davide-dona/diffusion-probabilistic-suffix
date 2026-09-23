@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 import torch
@@ -22,7 +20,7 @@ class SuffixCache:
     values: torch.Tensor  # [batch_size, num_heads, max_steps, head_dim]
     length: int = 0
 
-    def write(self, step: ProjectedKeysValues) -> SuffixCache:
+    def write(self, step: ProjectedKeysValues) -> 'SuffixCache':
         """Write one step's projection into the next free position, in place.
 
         Args:

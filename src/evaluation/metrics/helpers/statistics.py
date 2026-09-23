@@ -11,7 +11,9 @@ def energy_score(*, truth_sum: float, pair_sum: float, draws: float) -> float:
     if draws <= 0:
         raise ValueError('energy score requires a positive draw count.')
     accuracy = truth_sum / draws
-    return accuracy - pair_sum / (2.0 * draws * (draws - 1.0)) if draws > 1 else accuracy
+    if draws > 1:
+        return accuracy - pair_sum / (2.0 * draws * (draws - 1.0))
+    return accuracy
 
 
 def crps(draws: np.ndarray, truth: np.ndarray) -> float:
@@ -29,7 +31,9 @@ def crps(draws: np.ndarray, truth: np.ndarray) -> float:
 def mae(draws: np.ndarray, truth: np.ndarray) -> float:
     """Return mean absolute error over draws and predicted quantities."""
     count, columns = draws.shape
-    return float(np.abs(draws - truth).mean()) if count and columns else 0.0
+    if count == 0 or columns == 0:
+        return 0.0
+    return float(np.abs(draws - truth).mean())
 
 
 def coverage_gap(draws: np.ndarray, truth: np.ndarray, *, level: float) -> float:

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -29,7 +27,7 @@ class Events(NamedTuple):
         """Return the per-event fields, excluding the scalar event count."""
         return {name: getattr(self, name) for name in self._fields if name != 'length'}
 
-    def cut(self, index: slice | torch.Tensor) -> Events:
+    def cut(self, index: slice | torch.Tensor) -> 'Events':
         """Slice every per-event field by index, updating `length`."""
         channels = {name: channel[index] for name, channel in self._channels().items()}
         return self._replace(
@@ -37,7 +35,7 @@ class Events(NamedTuple):
             length=torch.tensor(data=len(channels['activities']), dtype=torch.long),
         )
 
-    def padded(self, to: int) -> Events:
+    def padded(self, to: int) -> 'Events':
         """Pad every per-event field to `to` positions, leaving `length` unchanged.
 
         Args:
@@ -67,7 +65,7 @@ class Events(NamedTuple):
         positions = torch.arange(end=self.activities.size(dim=-1), device=self.length.device)
         return positions.unsqueeze(dim=0) >= self.length.unsqueeze(dim=1)
 
-    def to(self, device: torch.device) -> Events:
+    def to(self, device: torch.device) -> 'Events':
         """Move every field to `device`."""
         return Events(*(field.to(device) for field in self))
 
@@ -88,7 +86,7 @@ class TraceCut(NamedTuple):
     inter_event_times: torch.Tensor  # float32, [max_trace_length], batched [batch_size, ...]
     remaining_times: torch.Tensor  # float32, shaped like `inter_event_times`
 
-    def to(self, device: torch.device) -> TraceCut:
+    def to(self, device: torch.device) -> 'TraceCut':
         """Move every tensor field to `device`."""
         return TraceCut(
             case_id=self.case_id,

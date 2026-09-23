@@ -33,29 +33,38 @@ class PreparedPrefix:
         truth = generation.truth
         draws = len(samples)
         prefix = generation.prefix_activities
+        truth_length = len(truth)
+
+        similarities = tuple(
+            sequence_similarity(suffix, truth.activities) for suffix in samples.suffixes
+        )
+        suffix_lengths = np.array(
+            [float(len(events)) for events in samples.events], dtype=np.float64
+        ).reshape(draws, 1)
+        remaining_times = np.array(
+            [events.remaining_time_minutes for events in samples.events], dtype=np.float64
+        ).reshape(draws, 1)
+        inter_event_times = np.array(
+            [
+                aligned_inter_event_times(events.inter_event_time_minutes, length=truth_length)
+                for events in samples.events
+            ],
+            dtype=np.float64,
+        ).reshape(draws, truth_length)
+        sample_conformance = tuple(checker.check(prefix + suffix) for suffix in samples.suffixes)
+        observed_conformance = checker.check(prefix + truth.activities)
+
         return cls(
             generation=generation,
-            similarities=tuple(
-                sequence_similarity(suffix, truth.activities) for suffix in samples.suffixes
-            ),
-            suffix_lengths=np.array(
-                [[float(len(events))] for events in samples.events], dtype=np.float64
-            ).reshape(draws, 1),
-            remaining_times=np.array(
-                [[events.remaining_time_minutes] for events in samples.events], dtype=np.float64
-            ).reshape(draws, 1),
-            inter_event_times=np.array(
-                [
-                    aligned_inter_event_times(events.inter_event_time_minutes, length=len(truth))
-                    for events in samples.events
-                ],
-                dtype=np.float64,
-            ).reshape(draws, len(truth)),
-            true_suffix_length=np.array([float(len(truth))], dtype=np.float64),
+            similarities=similarities,
+            suffix_lengths=suffix_lengths,
+            remaining_times=remaining_times,
+            inter_event_times=inter_event_times,
+            true_suffix_length=np.array([float(truth_length)], dtype=np.float64),
             true_remaining_time=np.array([truth.remaining_time_minutes], dtype=np.float64),
             true_inter_event_times=np.array(truth.inter_event_time_minutes, dtype=np.float64),
-            sample_conformance=tuple(checker.check(prefix + suffix) for suffix in samples.suffixes),
-            observed_conformance=checker.check(prefix + truth.activities),
+            sample_conformance=sample_conformance,
+            observed_conformance=observed_conformance,
         )
 
 

@@ -1,6 +1,13 @@
 from collections.abc import Callable
 
-from src.evaluation.metrics.definitions import Direction, Metric, MetricGroup, Owner, Unit
+from src.evaluation.metrics.definitions import (
+    Direction,
+    Metric,
+    MetricCompute,
+    MetricGroup,
+    Owner,
+    Unit,
+)
 
 
 class MetricRegistry:
@@ -19,10 +26,10 @@ class MetricRegistry:
         direction: Direction = Direction.NONE,
         owner: Owner = Owner.MODEL,
         diagnostic: bool = False,
-    ) -> Callable[[Callable[..., float]], Callable[..., float]]:
+    ) -> Callable[[MetricCompute], MetricCompute]:
         """Register a prefix-scoring function under a stable metric key."""
 
-        def decorator(compute: Callable[..., float]) -> Callable[..., float]:
+        def decorator(compute: MetricCompute) -> MetricCompute:
             if key in self.entries:
                 raise ValueError(f'metric {key!r} is registered more than once.')
             self.entries[key] = Metric(

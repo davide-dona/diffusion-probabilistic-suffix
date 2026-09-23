@@ -3,6 +3,16 @@
 Evaluation treats each generated prefix as one probabilistic forecast represented by sampled
 suffixes. Metrics operate per prefix first, then reports average prefixes with equal weight.
 
+## Package Layout
+
+- `scoring.py` owns immutable score records, prefix scoring, and aggregation.
+- `reports.py` owns JSON reports and the dataframe view used by visualization.
+- `score_store.py` owns streaming Parquet writes, score readers, and adjacent-file discovery.
+- `metrics/` owns preparation, ordered metric declarations, and numerical helpers.
+
+Import shared operations from `src.evaluation`; metric declarations remain under
+`src.evaluation.metrics`.
+
 ## Input and Preparation
 
 `GenerationWriter` stores one Parquet row per `(case_id, prefix_len)`. Repeated activity suffixes
@@ -40,7 +50,10 @@ and compatibility consideration for old score files.
 
 `PrefixSummary` stores prefix length, true suffix length, and every report metric.
 `EvaluationSummary` reports the unweighted mean over all prefixes and separate means bucketed by
-prefix length and true suffix length. `evaluation.json` contains this summary and provenance.
+prefix length and true suffix length. Aggregation consumes summaries once, retaining only metric
+totals and counts overall and per length bucket. Each prefix is flattened once for aggregation;
+summation follows input order and length buckets are emitted in ascending order. Empty aggregates
+contain zero scores. `evaluation.json` contains this summary and provenance.
 `prefix_scores.parquet` stores the prefix key, lengths, and all report metric values for paired analysis.
 
 Keep the two files adjacent. Visualization rejects duplicate model reports within one dataset and

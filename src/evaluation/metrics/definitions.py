@@ -2,6 +2,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from src.evaluation.metrics.prepared import PreparedPrefix
+
+type MetricCompute = Callable[[PreparedPrefix], float]
+
 
 class Unit(StrEnum):
     """The physical unit and ordinary display range of a scalar value."""
@@ -61,6 +65,6 @@ class Metric:
     group: MetricGroup
     unit: Unit
     direction: Direction
-    compute: Callable[..., float]
+    compute: MetricCompute
     owner: Owner = Owner.MODEL
     diagnostic: bool = False
