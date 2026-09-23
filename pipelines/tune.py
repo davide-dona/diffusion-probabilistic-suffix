@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import itertools
 from pathlib import Path
 
@@ -9,11 +7,11 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src import paths
-from src.cli import banner, step
+from pipelines.console import banner, step
+from src import artifacts
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset, fixed_subset
-from src.evaluation.results import PrefixSummary
+from src.evaluation import PrefixSummary
 from src.inference.generate import generate_batch, generation_batch_size
 from src.inference.tuning import (
     SearchPass,
@@ -22,13 +20,13 @@ from src.inference.tuning import (
 )
 from src.logs import Split
 from src.logs.declare import ConformanceChecker
-from src.model import (
+from src.models import (
     HeadSamplingTransformer,
     checkpoint_identity,
     load_checkpoint,
     model_from_checkpoint,
+    save_tuned_checkpoint,
 )
-from src.runs.artifacts import sha256
 from src.runs.hydra import output_path, save_config, start_stage
 from src.selection import selection_score
 from src.validation import validate_tuning
@@ -118,8 +116,11 @@ def run(
     """
     with step(f'Reading the checkpoint at {checkpoint_path}'):
         checkpoint = load_checkpoint(checkpoint_path)
+    if checkpoint.get('tuning') is not None:
+        raise ValueError('Checkpoint has already been tuned')
     run = checkpoint_identity(checkpoint)
-    checkpoint_hash = sha256(checkpoint_path)
+    checkpoint_hash = artifacts.sha256(checkpoint_path)
+    dataset_fingerprint = checkpoint['dataset_fingerprint']
     config = OmegaConf.create(checkpoint['config'])
     if device is not None:
         config.training.device = device
@@ -135,6 +136,7 @@ def run(
             {
                 'checkpoint': str(checkpoint_path.resolve()),
                 'checkpoint_sha256': checkpoint_hash,
+                'dataset_fingerprint': dataset_fingerprint,
                 'run': run.as_dict(),
                 'effective': OmegaConf.to_container(config, resolve=True),
                 'temperatures': temperatures,
@@ -143,11 +145,12 @@ def run(
         )
     )
 
-    paths.require_preprocessed(config.data.name)
+    artifacts.require_dataset_bundle(config.data.name, expected_fingerprint=dataset_fingerprint)
     pairs = config.training.generation_pairs if pairs is None else pairs
     samples = config.inference.validation_samples if samples is None else samples
 
     report_path = output_path('tuning.json')
+    tuned_checkpoint_path = output_path('tuned.pt')
     torch_device = torch.device(config.training.device)
     grid = [
         OmegaConf.create({'temperature': temperature, 'top_p': top_p})
@@ -166,6 +169,7 @@ def run(
             'grid': f'{len(grid)} points over temperature {temperatures} and top_p {top_ps}',
             'chosen on': 'minimum activity-sequence DLS energy score',
             'report': report_path,
+            'tuned checkpoint': tuned_checkpoint_path,
         },
     )
 
@@ -176,7 +180,7 @@ def run(
         model = model_from_checkpoint(checkpoint, codec, device=config.training.device)
         model.eval()
     if not isinstance(model, HeadSamplingTransformer):
-        raise ValueError(f'{config.model.kind} does not support output-head sampler tuning.')
+        raise ValueError(f'{config.model.kind} does not support sampler tuning.')
 
     with step(f'Reading and encoding the {Split.VAL} split'):
         validation_dataset = TraceDataset(codec=codec, split=Split.VAL)
@@ -220,14 +224,16 @@ def run(
 
     report = TuningReport.of(
         run,
+        dataset_fingerprint,
         checkpoint_hash,
         search=SearchPass(pairs=len(subset), samples=samples, seed=config.seed),
         grid=points,
     )
     report.write(report_path)
+    save_tuned_checkpoint(checkpoint, report, tuned_checkpoint_path)
     print(
         f'Chose temperature {report.chosen["temperature"]}, top_p {report.chosen["top_p"]}. '
-        f'Wrote the search to {report_path}'
+        f'Wrote the search to {report_path} and tuned checkpoint to {tuned_checkpoint_path}'
     )
 
 

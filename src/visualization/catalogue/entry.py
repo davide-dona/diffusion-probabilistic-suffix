@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from src.evaluation.metrics.definitions import Direction, Metric
+from src.evaluation.metrics.metadata import Direction, Metric
 
 
 @dataclass(frozen=True)
@@ -9,6 +9,10 @@ class MetricEntry:
 
     metric: Metric
     label: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.metric.diagnostic:
+            raise ValueError(f'diagnostic metric {self.metric.key!r} cannot appear in reports.')
 
     @property
     def display_label(self) -> str:

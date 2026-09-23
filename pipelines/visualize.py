@@ -7,7 +7,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 from omegaconf import DictConfig
 
-from src.cli import banner, step
+from pipelines.console import banner, step
 from src.evaluation import read_reports
 from src.runs.hydra import output_path, start_stage
 from src.uncertainty import test_significance

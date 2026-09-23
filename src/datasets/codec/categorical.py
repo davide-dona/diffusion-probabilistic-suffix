@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from functools import cached_property
 
 import numpy as np
@@ -33,7 +31,7 @@ class CategoricalColumn(BaseModel):
         column: str,
         special_tokens: tuple[str, ...],
         offset: int = 0,
-    ) -> CategoricalColumn:
+    ) -> 'CategoricalColumn':
         """Fit one channel's vocabulary on the train split.
 
         Args:

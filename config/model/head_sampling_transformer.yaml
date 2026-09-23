@@ -1,8 +1,24 @@
 defaults:
-- backbone
 - _self_
 kind: head_sampling_transformer
 name: head_sampling_transformer
+d_model: 32
+embeddings:
+  activity_dim: 32
+  resource_dim: 16
+  feature_dim: 8
+encoder:
+  num_layers: 4
+  num_heads: 8
+  feedforward_dim: 128
+  dropout: 0.1
+decoder:
+  num_layers: 4
+  num_heads: 8
+  feedforward_dim: 128
+  dropout: 0.1
+  activity_dropout: 0.3
+  head_hidden_dim: 128
 sampling:
   temperature: 1.0
   top_p: 1.0

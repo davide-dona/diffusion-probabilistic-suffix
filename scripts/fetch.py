@@ -3,7 +3,7 @@ import argparse
 from huggingface_hub import snapshot_download
 
 from scripts.hub import HF_REPO_ID
-from src import paths
+from src import artifacts
 
 
 def run() -> None:
@@ -13,7 +13,7 @@ def run() -> None:
     These are the checkpoints `scripts/publish.py` proposed and a maintainer merged. A run's own
     checkpoints live under `outputs/train/` instead.
     """
-    snapshot_download(repo_id=HF_REPO_ID, repo_type='model', local_dir=paths.PRETRAINED_DIR)
+    snapshot_download(repo_id=HF_REPO_ID, repo_type='model', local_dir=artifacts.PRETRAINED_DIR)
 
 
 def main() -> None:
@@ -22,7 +22,7 @@ def main() -> None:
     ).parse_args()
 
     run()
-    print(f'Fetched every published model into {paths.PRETRAINED_DIR}')
+    print(f'Fetched every published model into {artifacts.PRETRAINED_DIR}')
 
 
 if __name__ == '__main__':

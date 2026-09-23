@@ -8,14 +8,16 @@ import wandb
 from torch.utils.data import DataLoader
 
 from src.datasets.codec import DatasetCodec
+from src.evaluation import PrefixSummary, ScoreGroups
 from src.evaluation.metrics import METRICS
-from src.evaluation.results import PrefixSummary, ScoreGroups
+from src.evaluation.metrics.metadata import Owner
 from src.inference.generate import generate_batch
 from src.logs.declare import ConformanceChecker
 from src.training.loss import Loss
+from src.training.randomness import validation_randomness
 
 if TYPE_CHECKING:
-    from src.model import SuffixModel
+    from src.models import SuffixModel
 
 ACTIVITY_LOG_NAMESPACE = 'generation/activity'
 
@@ -25,9 +27,12 @@ class GenerationMetrics:
     """Validation metrics, with energy score averaged over every generated example."""
 
     scores: ScoreGroups
+    diagnostics: dict[str, float]
 
     def log(self, step: int) -> None:
-        """Log every registered value under its declared evaluation group.
+        """Log model-owned report and diagnostic metrics under their evaluation groups.
+
+        Log-owned values remain in scores but are excluded from the W&B payload.
 
         Args:
             step: The training step this pass scores.
@@ -42,34 +47,44 @@ class GenerationMetrics:
         wandb.log(
             {
                 f'{namespaces[metric.group]}/{key}': values[key]
-                for key, metric in METRICS.entries.items()
+                for key, metric in METRICS.report.items()
+                if metric.owner is Owner.MODEL
+            }
+            | {
+                f'diagnostic/{metric.group.value.replace("_", "-")}/{key}': self.diagnostics[key]
+                for key, metric in METRICS.diagnostics.items()
+                if metric.owner is Owner.MODEL
             },
             step=step,
         )
 
 
 @torch.no_grad()
-def validate(model: SuffixModel, loader: DataLoader, *, device: torch.device) -> Loss:
+def validate(
+    model: SuffixModel, loader: DataLoader, *, device: torch.device, seed: int | None = None
+) -> Loss:
     """
     Run one pass over `loader` without learning from it.
     Args:
         model: The model to evaluate. Put in evaluation mode here, and left in it.
         loader: The dataloader to iterate over. Its batches are `TraceCut`s.
         device: The device to run the computations on.
+        seed: Optional isolated seed for reproducible validation draws.
     Returns:
         The loss terms of the pass, averaged over the traces of the split.
     """
-    model.eval()
+    with validation_randomness(seed=seed, device=device):
+        model.eval()
 
-    totals = Loss()
-    for batch in loader:
-        batch = batch.to(device)
-        output = model(batch)
-        _, metrics = model.compute_loss(output, batch)
-        totals += metrics
+        totals = Loss()
+        for batch in loader:
+            batch = batch.to(device)
+            output = model(batch)
+            _, metrics = model.compute_loss(output, batch)
+            totals += metrics
 
-    traces = len(loader.dataset)
-    return totals / traces
+        traces = len(loader.dataset)
+        return totals / traces
 
 
 @torch.no_grad()
@@ -81,6 +96,7 @@ def validate_generation(
     codec: DatasetCodec,
     checker: ConformanceChecker,
     device: torch.device,
+    seed: int | None = None,
 ) -> GenerationMetrics:
     """
     Generate suffixes from the prefixes in `loader` and compare them to the ground truth and the
@@ -103,22 +119,32 @@ def validate_generation(
             validated on.
         checker: The declarative model to check generated suffixes against.
         device: The device to run the computations on.
+        seed: Optional isolated seed for reproducible validation draws.
     Returns:
         The metrics of the pass, averaged over prefixes.
     """
-    model.eval()
+    with validation_randomness(seed=seed, device=device):
+        model.eval()
 
-    generations = [
-        generation
-        for batch in loader
-        for generation in generate_batch(
-            model=model,
-            batch=batch.to(device),
-            num_samples=num_samples,
-            codec=codec,
+        generations = [
+            generation
+            for batch in loader
+            for generation in generate_batch(
+                model=model,
+                batch=batch.to(device),
+                num_samples=num_samples,
+                codec=codec,
+            )
+        ]
+        if not generations:
+            raise ValueError('Validation generation subset is empty')
+        summaries = [
+            PrefixSummary.of(one, checker=checker, include_diagnostics=True) for one in generations
+        ]
+        return GenerationMetrics(
+            scores=ScoreGroups.mean([summary.scores for summary in summaries]),
+            diagnostics={
+                key: sum(summary.diagnostics[key] for summary in summaries) / len(summaries)
+                for key in METRICS.diagnostics
+            },
         )
-    ]
-    if not generations:
-        raise ValueError('Validation generation subset is empty')
-    summaries = [PrefixSummary.of(one, checker=checker) for one in generations]
-    return GenerationMetrics(scores=ScoreGroups.mean([summary.scores for summary in summaries]))

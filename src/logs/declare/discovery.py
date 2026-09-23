@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 
 import pandas as pd
@@ -8,7 +6,7 @@ from Declare4Py.D4PyEventLog import D4PyEventLog
 from Declare4Py.ProcessMiningTasks.Discovery.DeclareMiner import DeclareMiner
 from omegaconf import DictConfig, OmegaConf
 
-from src import paths
+from src import artifacts
 from src.logs.declare.constraints import COMMENT, SETTINGS_LINE
 from src.logs.keys import ACTIVITY_KEY, CASE_KEY, TIMESTAMP_KEY
 
@@ -77,7 +75,7 @@ def discover_declare_model(
         # added back here.
         lines.append(f'{serialized} |' if constraint['template'].is_binary else serialized)
 
-    path = paths.DECLARE_MODEL.prepare(dataset)
+    path = artifacts.DECLARE_MODEL.prepare(dataset)
     path.write_text('\n'.join(lines) + '\n')
 
     return len(model.constraints)

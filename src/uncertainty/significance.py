@@ -6,7 +6,7 @@ import pandas as pd
 
 from src.evaluation import score_files
 from src.evaluation.metrics import METRICS
-from src.evaluation.metrics.definitions import Direction
+from src.evaluation.metrics.metadata import Direction
 from src.uncertainty.resampling import resample_means
 from src.uncertainty.units import by_case
 
@@ -15,7 +15,7 @@ RESAMPLES = 10_000
 SEED = 42
 SIGNIFICANCE_COLUMNS = ('dataset', 'model', 'metric', 'p_value', 'best')
 RANKED = tuple(
-    key for key, metric in METRICS.entries.items() if metric.direction is not Direction.NONE
+    key for key, metric in METRICS.report.items() if metric.direction is not Direction.NONE
 )
 
 

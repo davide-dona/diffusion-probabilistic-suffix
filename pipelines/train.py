@@ -1,24 +1,21 @@
-from __future__ import annotations
-
 import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from src import paths
-from src.cli import banner, step
+from pipelines.console import banner, step
+from src import artifacts
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset, fixed_subset
 from src.inference.generate import generation_batch_size
 from src.logs import Split
-from src.model import build_model
+from src.models import build_model
 from src.runs.hydra import output_path, start_stage
-from src.runs.identity import RunIdentity
 from src.training import train
 from src.validation import validate_training
 
 
-def run(config: DictConfig, run: RunIdentity) -> None:
+def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
     """
     Train the model an experiment config describes, on the dataset it names.
     The dataset must have been preprocessed already.
@@ -26,7 +23,7 @@ def run(config: DictConfig, run: RunIdentity) -> None:
         config: The validated experiment config.
         run: The stable identity assigned to this training invocation.
     """
-    paths.require_preprocessed(config.data.name)
+    dataset_manifest = artifacts.require_dataset_bundle(config.data.name)
 
     # Seeded before anything is built, so weight initialization and shuffling are both reproducible.
     torch.manual_seed(config.seed)
@@ -44,8 +41,8 @@ def run(config: DictConfig, run: RunIdentity) -> None:
             f'{config.training.val_every_n_steps:,}',
             'batch': f'{config.dataloader.batch_size} pairs, '
             f'{config.dataloader.num_workers} loader workers',
-            'optimizer': f'Adam, lr {config.optimizer.lr} after '
-            f'{config.optimizer.warmup_steps} warmup steps, '
+            'optimizer': f'AdamW, lr {config.optimizer.lr} after '
+            f'{config.optimizer.warmup_steps:,} warmup steps, cosine decay, '
             f'weight decay {config.optimizer.weight_decay}',
             'checkpoints': output_path('best.pt'),
         },
@@ -124,6 +121,7 @@ def run(config: DictConfig, run: RunIdentity) -> None:
         generation_samples=config.inference.validation_samples,
         codec=codec,
         run=run,
+        dataset_fingerprint=dataset_manifest.fingerprint,
         optimizer_config=config.optimizer,
         training=config.training,
         early_stopping_config=config.early_stopping,
@@ -136,7 +134,7 @@ def main(cfg: DictConfig) -> None:
     validate_training(cfg)
     run(
         cfg,
-        RunIdentity(dataset=cfg.data.name, model=cfg.model.name, run_id=cfg.run_id),
+        artifacts.RunIdentity(dataset=cfg.data.name, model=cfg.model.name, run_id=cfg.run_id),
     )
 
 

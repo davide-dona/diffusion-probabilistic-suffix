@@ -10,7 +10,7 @@ from src.datasets.dataset import TraceCut
 from src.inference.generation import DecodedEvents, Draws, Generation
 
 if TYPE_CHECKING:
-    from src.model import SuffixModel
+    from src.models import SuffixModel
 
 
 def generation_batch_size(
@@ -51,7 +51,7 @@ def generate_batch(
         codec: The codec the split was encoded through.
     Returns:
         num_samples generation per prefix of the batch, in the batch's own order, each naming t
-        he case it was cut from. 
+        he case it was cut from.
     """
     # Generate the suffixes
     generated = model.generate(item=batch, num_samples=num_samples)
@@ -65,6 +65,11 @@ def generate_batch(
     # [batch_size, num_samples, steps]
     inter_event_times = generated.inter_event_times.cpu().numpy()
     remaining_time = generated.remaining_time.cpu().numpy()  # [batch_size, num_samples]
+    used_sentinel = (
+        generated.used_sentinel.cpu().numpy()
+        if generated.used_sentinel is not None
+        else np.zeros_like(lengths, dtype=bool)
+    )
     true_activities = batch.suffix.activities.cpu().numpy()  # [batch_size, seq_len]
     true_inter_event_times = batch.inter_event_times.cpu().numpy()  # [batch_size, seq_len]
     # Position 0 answers for the last prefix event, which is what a remaining time is measured
@@ -88,6 +93,7 @@ def generate_batch(
                         inter_event_times=inter_event_times[position, sample],
                         length=lengths[position, sample],
                         remaining_time=remaining_time[position, sample],
+                        used_eot_sentinel=used_sentinel[position, sample],
                         clamp=True,
                     )
                     for sample in range(num_samples)
@@ -114,6 +120,7 @@ def _decode(
     inter_event_times: np.ndarray,
     length: int,
     remaining_time: float,
+    used_eot_sentinel: bool = False,
     clamp: bool = False,
 ) -> DecodedEvents:
     """One run of events, back in the log's own units.
@@ -140,4 +147,5 @@ def _decode(
         activities=activity_codec.encode(codec.activity.decode(activities, length=length)),
         inter_event_time_minutes=inter_event_time_minutes.tolist(),
         remaining_time_minutes=remaining_time_minutes,
+        used_eot_sentinel=used_eot_sentinel,
     )

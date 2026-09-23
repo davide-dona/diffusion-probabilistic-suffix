@@ -1,4 +1,4 @@
-from __future__ import annotations
+import subprocess
 
 import hydra
 import numpy as np
@@ -6,8 +6,8 @@ import pandas as pd
 from omegaconf import DictConfig
 from pandas.api.types import is_numeric_dtype
 
-from src import paths
-from src.cli import banner, step
+from pipelines.console import banner, step
+from src import artifacts
 from src.datasets.codec import DatasetCodec
 from src.logs import (
     CASE_ELAPSED_KEY,
@@ -146,7 +146,7 @@ def preprocess(log: pd.DataFrame, *, feature_columns: list[str]) -> pd.DataFrame
     return log
 
 
-def run(data_config: DictConfig, declare_config: DictConfig) -> None:
+def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> None:
     """
     Preprocess and split a dataset, writing outputs next to the input.
 
@@ -164,18 +164,19 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
     Args:
         data_config: The `data` section of this dataset's experiment config.
         declare_config: The `declare` section, driving the discovery of the declarative model.
+        run_id: The preprocessing invocation identifier recorded in the dataset manifest.
     """
     dataset = data_config.name
 
     banner(
         f'Preprocessing "{dataset}"',
         {
-            'original log': paths.ORIGINAL_LOG.path(dataset),
+            'original log': artifacts.ORIGINAL_LOG.path(dataset),
             'split': f'{data_config.train_split:.0%} train, {data_config.val_split:.0%} val, '
             f'{data_config.test_split:.0%} test, out of time',
-            'splits': paths.PROCESSED_SPLIT.directory(dataset),
-            'codec': paths.CODEC.path(dataset),
-            'declarative model': paths.DECLARE_MODEL.path(dataset),
+            'splits': artifacts.PROCESSED_SPLIT.directory(dataset),
+            'codec': artifacts.CODEC.path(dataset),
+            'declarative model': artifacts.DECLARE_MODEL.path(dataset),
         },
     )
 
@@ -222,7 +223,7 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
 
     with step('Writing the splits'):
         for split, rows in ((Split.TRAIN, train), (Split.VAL, val), (Split.TEST, test)):
-            write_log(rows, paths.PROCESSED_SPLIT.path(dataset=dataset, split=split))
+            write_log(rows, artifacts.PROCESSED_SPLIT.path(dataset=dataset, split=split))
 
     # Fit the vocabularies and normalization statistics on the train split, writng them out to
     # `dataset.json`. The generated values can be decoded back using the same codec.
@@ -237,6 +238,23 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
             declare_config=declare_config,
         )
     declare_summary = f'{constraints} declarative constraints'
+
+    with step('Writing the dataset manifest'):
+        revision = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=False
+        ).stdout.strip()
+        dirty = bool(
+            subprocess.run(
+                ['git', 'status', '--porcelain'], capture_output=True, text=True, check=False
+            ).stdout.strip()
+        )
+        manifest = artifacts.DatasetManifest.create(
+            dataset=dataset,
+            data_config=data_config,
+            declare_config=declare_config,
+            producer=artifacts.DatasetProducer(run_id=run_id, revision=revision, dirty=dirty),
+        )
+        manifest.write()
 
     print(
         f'Preprocessed "{dataset}": {len(train):,} train, {len(val):,} val, {len(test):,} test '
@@ -253,7 +271,7 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
 def main(cfg: DictConfig) -> None:
     start_stage(cfg)
     validate_preprocess(cfg)
-    run(data_config=cfg.data, declare_config=cfg.declare)
+    run(data_config=cfg.data, declare_config=cfg.declare, run_id=cfg.run_id)
 
 
 if __name__ == '__main__':

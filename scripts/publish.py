@@ -5,8 +5,8 @@ from huggingface_hub import CommitOperationAdd, create_commit, file_exists, whoa
 from huggingface_hub.errors import HfHubHTTPError, LocalTokenNotFoundError
 
 from scripts.hub import HF_REPO_ID
-from src import paths
-from src.model import load_checkpoint
+from src import artifacts
+from src.models import load_checkpoint, require_generation_ready
 
 
 def _mebibytes(path: Path) -> str:
@@ -39,15 +39,16 @@ def run(model_paths: list[Path]) -> None:
     there is nothing to trim off one before it is published.
 
     Args:
-        model_paths: The checkpoints to publish, from `outputs/train/`. Named rather
-            than searched for: every run of one config is a candidate and choosing between them
-            is the whole point of this step.
+        model_paths: The checkpoints to publish, from `outputs/train/` for finalized models or
+            `outputs/tune/` for the head-sampling Transformer. Named rather than searched for:
+            every run of one config is a candidate and choosing between them is the whole point
+            of this step.
     Raises:
         SystemExit: If there are no Hugging Face credentials, or if the confirmation is declined.
         FileNotFoundError: If there is no checkpoint at one of `model_paths`.
         ValueError: If a checkpoint is missing a key rebuilding the model reads.
     """
-    missing = [path for path in model_paths if not path.exists()]
+    missing = [path for path in model_paths if not path.is_file()]
     if missing:
         raise FileNotFoundError(f'no checkpoint at {", ".join(str(path) for path in missing)}.')
 
@@ -57,14 +58,15 @@ def run(model_paths: list[Path]) -> None:
     descriptions = []
     for model_path in model_paths:
         checkpoint = load_checkpoint(model_path)
+        require_generation_ready(checkpoint)
         # The destination comes from the run's identity, not the checkpoint's filename, making it
         # invariant to local naming.
         dataset = checkpoint['config']['data']['name']
         model = checkpoint['config']['model']['name']
         label = f'{dataset}/{model}'
 
-        fetched_to = paths.PRETRAINED.path(dataset=dataset, model=model)
-        path_in_repo = fetched_to.relative_to(paths.PRETRAINED_DIR).as_posix()
+        fetched_to = artifacts.PRETRAINED.path(dataset=dataset, model=model)
+        path_in_repo = fetched_to.relative_to(artifacts.PRETRAINED_DIR).as_posix()
         replaces = file_exists(HF_REPO_ID, path_in_repo, repo_type='model')
 
         print(
@@ -114,11 +116,11 @@ def main() -> None:
     parser.add_argument(
         '-m',
         '--checkpoint',
-        type=paths.existing_file,
+        type=Path,
         metavar='CHECKPOINT',
         nargs='+',
         required=True,
-        help='Path(s) to the checkpoint(s) to publish, from `outputs/train/`.',
+        help='Path(s) to generation-ready checkpoint(s) to publish.',
     )
     args = parser.parse_args()
 

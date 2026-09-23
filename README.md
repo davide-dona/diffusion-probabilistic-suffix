@@ -40,10 +40,10 @@ Hydra multirun executes the Cartesian product of comma-separated values, one job
 Use it to process a batch at any pipeline stage:
 
 ```bash
-uv run python -m pipelines.preprocess --multirun dataset=sepsis,bpic13,bpic17,bpic19
+uv run python -m pipelines.preprocess --multirun dataset=sepsis,bpic12,bpic17,bpic19
 
 uv run python -m pipelines.train --multirun \
-  dataset=sepsis,bpic13,bpic17,bpic19 \
+  dataset=sepsis,bpic12,bpic17,bpic19 \
   model=head_sampling_transformer
 ```
 
@@ -70,12 +70,13 @@ uv run python -m pipelines.preprocess dataset=sepsis
 ```
 
 The original log is read from `data/sepsis/original.csv`. The out-of-time splits, fitted codec,
-and declarative model are written under `data/sepsis/` and reused by later stages. Invocation
-records are written under `outputs/preprocess/sepsis/<timestamp>/`.
+declarative model, and content-hashed dataset manifest are written under `data/sepsis/` and reused
+by later stages. Invocation records are written under `outputs/preprocess/sepsis/<timestamp>/`.
 
 > [!WARNING]
-> Training, generation, and evaluation stop if their required preprocessing artifacts are
-> missing.
+> Training, tuning, generation, and evaluation stop if the preprocessing manifest is missing or
+> any dataset artifact differs from its recorded hash. Existing datasets must be preprocessed
+> again, and checkpoints created before this contract must be retrained.
 
 ### 2. Training
 
@@ -85,7 +86,13 @@ Choose the dataset and architecture independently:
 uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
-The available baseline is `head_sampling_transformer`. Training
+Available architectures are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
+(U-ED-SuTraN), and `diffusion_transformer`. U-ED-SuTraN shares SuTraN-PH's encoder and causal
+decoder, adding MC dropout and learned activity-logit and time variances. Its defaults use 20
+categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
+`model.uncertainty`. Both SuTraN models train on complete suffixes with activity-only decoder inputs.
+Validation uses isolated seeded draws and selects checkpoints by the existing generation metric.
+Training
 writes the best validation checkpoint to
 `outputs/train/<dataset>/<model>/<run-id>/best.pt`. Runs cannot be resumed, but an interrupted run
 retains its last successfully saved best checkpoint.
@@ -101,22 +108,25 @@ Tune a Head-sampling Transformer on the validation split before test generation:
 uv run python -m pipelines.tune checkpoint=/path/to/best.pt device=cpu
 ```
 
-The selected sampler is written to
-`outputs/tune/<dataset>/<model>/<run-id>/tuning.json`.
+The selected sampler and full search are written to
+`outputs/tune/<dataset>/<model>/<run-id>/tuning.json`. The same directory contains `tuned.pt`, a
+self-contained checkpoint required for Head-sampling Transformer generation.
+
+U-ED-SuTraN samples its learned distribution directly. It does not support temperature or top-p
+tuning, and its `best.pt` can be used for generation without this stage.
 
 ### 4. Inference
 
 Generate suffixes for every prefix of the test split:
 
 ```bash
-uv run python -m pipelines.generate checkpoint=/path/to/best.pt device=cpu num_samples=100
+uv run python -m pipelines.generate checkpoint=/path/to/checkpoint.pt device=cpu num_samples=100
 ```
 
-For a tuned Head-sampling Transformer, pass the tuning report explicitly:
+For a Head-sampling Transformer, pass the checkpoint produced by sampler tuning:
 
 ```bash
-uv run python -m pipelines.generate checkpoint=/path/to/best.pt \
-  tuning=/path/to/tuning.json device=cpu num_samples=100
+uv run python -m pipelines.generate checkpoint=/path/to/tuned.pt device=cpu num_samples=100
 ```
 
 The generations are written to
@@ -133,6 +143,10 @@ uv run python -m pipelines.evaluate generations=/path/to/generations.parquet wor
 The report and its per-prefix scores are written under
 `outputs/evaluate/<dataset>/<model>/<run-id>/` as `evaluation.json` and
 `prefix_scores.parquet`.
+
+DLS sample mean and suffix-length MAE are validation diagnostics, logged to W&B under
+`diagnostic/activity/dls_sample_mean` and `diagnostic/suffix-length/suffix_length_mae`.
+They are excluded from final reports, score files, and publication comparisons.
 
 ### 6. Visualization
 
@@ -164,7 +178,12 @@ uv run python -m scripts.fetch
 ## Configuration
 
 Datasets, models, training defaults, and runtime profiles live in the corresponding groups under
-`config/`. Override individual settings with dotted keys:
+`config/`. Training duration, warmup, and validation cadence are expressed in optimizer steps;
+early stopping is expressed in validation checks. The CUDA profile selects a batch size and training
+regime for each dataset automatically.
+All three models use activity/resource/attribute embedding widths of 32/16/8, projected to
+model width 32. Checkpoints retain their own embedding configuration.
+Override individual settings with dotted keys:
 
 ```bash
 uv run python -m pipelines.train dataset=bpic17 model=head_sampling_transformer \
@@ -181,10 +200,11 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer 
 
 ### Publish a checkpoint
 
-Once a run has been evaluated, propose its checkpoint as a published model:
+Once a run has been evaluated, propose its generation-ready checkpoint as a published model. Use
+`tuned.pt` for a Head-sampling Transformer and `best.pt` for a diffusion model:
 
 ```bash
-uv run python -m scripts.publish -m /path/to/best.pt
+uv run python -m scripts.publish -m /path/to/checkpoint.pt
 ```
 
 This opens a pull request against the Hugging Face model repository.

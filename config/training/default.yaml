@@ -1,18 +1,50 @@
 # @package _global_
 optimizer:
-  lr: 0.0012
-  weight_decay: 0.0
-  warmup_steps: 300
+  lr: ${oc.select:training.regimes.${data.name}.lr}
+  weight_decay: 0.01
+  beta1: 0.9
+  beta2: 0.95
+  warmup_steps: ${oc.select:training.regimes.${data.name}.warmup_steps}
+  min_lr_factor: 0.1
 training:
-  max_steps: 10000
-  val_every_n_steps: 100
-  grad_clip_norm: 5.0
-  validation_pairs: 20000
-  generation_pairs: 1024
+  max_steps: ${oc.select:training.regimes.${data.name}.max_steps}
+  val_every_n_steps: ${oc.select:training.regimes.${data.name}.val_every_n_steps}
+  grad_clip_norm: 1.0
+  validation_pairs: ${oc.select:training.regimes.${data.name}.validation_pairs}
+  generation_pairs: ${oc.select:training.regimes.${data.name}.generation_pairs}
+  regimes:
+    sepsis:
+      lr: 0.0003
+      warmup_steps: 150
+      max_steps: 6000
+      val_every_n_steps: 60
+      validation_pairs: 10000
+      generation_pairs: 2000
+    bpic12:
+      lr: 0.0003
+      warmup_steps: 1500
+      max_steps: 30000
+      val_every_n_steps: 300
+      validation_pairs: 10000
+      generation_pairs: 1000
+    bpic17:
+      lr: 0.0006
+      warmup_steps: 1500
+      max_steps: 30000
+      val_every_n_steps: 300
+      validation_pairs: 50000
+      generation_pairs: 4096
+    bpic19:
+      lr: 0.0006
+      warmup_steps: 1500
+      max_steps: 30000
+      val_every_n_steps: 300
+      validation_pairs: 50000
+      generation_pairs: 4096
 early_stopping:
-  patience: 15
+  patience_validations: 20
   min_delta_perc: 0.005
 inference:
-  validation_samples: 100
+  validation_samples: 32
   evaluation_samples: 100
-  generation_rows_upper_bound: 10240
+  generation_rows_upper_bound: 8192

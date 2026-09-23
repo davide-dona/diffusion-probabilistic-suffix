@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 import torch
@@ -21,7 +19,7 @@ class NumericColumn(BaseModel):
     std: float
 
     @classmethod
-    def fit(cls, train: pd.DataFrame, *, column: str, log: bool) -> NumericColumn:
+    def fit(cls, train: pd.DataFrame, *, column: str, log: bool) -> 'NumericColumn':
         """Fit one channel's standardization on the train split.
 
         Missing values take no part in the fit, so a channel with gaps is standardized on the
