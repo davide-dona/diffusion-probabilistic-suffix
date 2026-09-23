@@ -10,13 +10,16 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pydantic import TypeAdapter, ValidationError
 
+from src.artifacts import (
+    ArtifactProvenance,
+    read_provenance_metadata,
+    with_provenance_metadata,
+)
 from src.evaluation.metrics import METRICS, PreparedPrefix
 from src.evaluation.metrics.definitions import MetricGroup
 from src.inference.generation import Generation
 from src.inference.generation_store import PrefixKey
 from src.logs.declare import ConformanceChecker
-from src.runs.artifacts import read_metadata, with_metadata
-from src.runs.provenance import ArtifactProvenance
 
 GROUPS = tuple(MetricGroup)
 
@@ -187,9 +190,7 @@ class EvaluationReport:
     def write(self, path: str | Path) -> Path:
         """Write the report as JSON."""
         path = Path(path)
-        temporary = path.with_suffix('.json.tmp')
-        temporary.write_text(json.dumps(asdict(self), indent=4))
-        temporary.replace(path)
+        path.write_text(json.dumps(asdict(self), indent=4))
         return path
 
 
@@ -294,21 +295,23 @@ def stream_prefix_scores(
         for values in columns.values():
             values.clear()
 
-    temporary = path.with_suffix('.parquet.tmp')
-    with pq.ParquetWriter(
-        where=temporary, schema=with_metadata(_PREFIX_SCORE_SCHEMA, metadata)
-    ) as writer:
-        for summary, (case_id, prefix_len) in zip(summaries, keys, strict=True):
-            columns['case_id'].append(case_id)
-            columns['prefix_len'].append(prefix_len)
-            columns['suffix_len'].append(summary.suffix_len)
-            for name, value in flatten_scores(summary).items():
-                columns[name].append(value)
-            if len(columns['case_id']) >= BLOCK:
-                flush(writer)
-            yield summary
-        flush(writer)
-    temporary.replace(path)
+    try:
+        with pq.ParquetWriter(
+            where=path, schema=with_provenance_metadata(_PREFIX_SCORE_SCHEMA, metadata)
+        ) as writer:
+            for summary, (case_id, prefix_len) in zip(summaries, keys, strict=True):
+                columns['case_id'].append(case_id)
+                columns['prefix_len'].append(prefix_len)
+                columns['suffix_len'].append(summary.suffix_len)
+                for name, value in flatten_scores(summary).items():
+                    columns[name].append(value)
+                if len(columns['case_id']) >= BLOCK:
+                    flush(writer)
+                yield summary
+            flush(writer)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
 
 
 def require_columns(path: Path, columns: Sequence[str]) -> None:
@@ -342,7 +345,7 @@ def score_files(reports: Sequence[Path]) -> dict[str, dict[str, Path]]:
         try:
             require_columns(scores, (*PREFIX_SCORE_KEYS, *METRICS.entries))
             with pq.ParquetFile(scores) as parquet:
-                runs.append((read_metadata(parquet), scores))
+                runs.append((read_provenance_metadata(parquet), scores))
         except (ValueError, TypeError, KeyError) as error:
             raise ValueError(f'{scores} is not a per-prefix scores file: {error}') from error
     return _group_by_model(runs)

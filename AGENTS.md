@@ -35,6 +35,7 @@ Read the most specific guide before changing files in its scope.
 | --- | --- |
 | Pipeline commands, stage behavior, artifact handoffs | [`pipelines/AGENTS.md`](pipelines/AGENTS.md) |
 | Source layout and shared coding contracts | [`src/AGENTS.md`](src/AGENTS.md) |
+| Artifact locations, manifests, hashing, and provenance | [`src/AGENTS.md`](src/AGENTS.md) |
 | Model interface, checkpoints, architecture selection | [`src/models/AGENTS.md`](src/models/AGENTS.md) |
 | Joint Diffusion Transformer | [`src/models/architectures/diffusion_transformer/AGENTS.md`](src/models/architectures/diffusion_transformer/AGENTS.md) |
 | SuTraN-PH | [`src/models/architectures/head_sampling_transformer/AGENTS.md`](src/models/architectures/head_sampling_transformer/AGENTS.md) |

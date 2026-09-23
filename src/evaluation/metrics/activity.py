@@ -1,5 +1,5 @@
 from src.evaluation.metrics.definitions import Direction, MetricGroup, Unit
-from src.evaluation.metrics.helpers.activity import SuffixMetric, energy_score, sequence_similarity
+from src.evaluation.metrics.helpers.activity import SuffixMetric, energy_score
 from src.evaluation.metrics.prepared import PreparedPrefix
 from src.evaluation.metrics.registry import METRICS
 

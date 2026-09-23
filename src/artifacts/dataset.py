@@ -8,10 +8,10 @@ from typing import Self
 
 from omegaconf import DictConfig, OmegaConf
 
-from src import paths
-from src.logs import Split
-from src.runs.hashes import sha256, validate_sha256
-from src.runs.identity import validate_dataset, validate_run_id
+import src.artifacts.paths as paths
+from src.artifacts.hashes import sha256, validate_sha256
+from src.artifacts.identity import validate_dataset, validate_run_id
+from src.logs.keys import Split
 
 _SCHEMA_VERSION = 1
 
@@ -182,3 +182,27 @@ class DatasetManifest:
         path = paths.DATASET_MANIFEST.prepare(self.dataset)
         path.write_text(json.dumps(asdict(self), indent=4))
         return path
+
+
+def require_dataset_bundle(
+    dataset: str, *, expected_fingerprint: str | None = None
+) -> DatasetManifest:
+    """Validate the complete preprocessing bundle installed for a dataset."""
+    outputs = [
+        paths.ORIGINAL_LOG.path(dataset),
+        paths.CODEC.path(dataset),
+        paths.DECLARE_MODEL.path(dataset),
+        *(paths.PROCESSED_SPLIT.path(dataset=dataset, split=split) for split in Split),
+        paths.DATASET_MANIFEST.path(dataset),
+    ]
+    missing = [output for output in outputs if not output.exists()]
+    if missing:
+        raise FileNotFoundError(
+            f'"{dataset}" has not been preprocessed: '
+            f'{", ".join(str(output) for output in missing)} '
+            f'{"are" if len(missing) > 1 else "is"} missing. '
+            f'Run `uv run python -m pipelines.preprocess dataset={dataset}` first.'
+        )
+    manifest = DatasetManifest.load(dataset)
+    manifest.verify(expected_fingerprint)
+    return manifest

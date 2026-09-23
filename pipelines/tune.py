@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src import paths
+from src import artifacts
 from src.cli import banner, step
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset, fixed_subset
@@ -29,7 +29,6 @@ from src.models import (
     model_from_checkpoint,
     save_tuned_checkpoint,
 )
-from src.runs.hashes import sha256
 from src.runs.hydra import output_path, save_config, start_stage
 from src.selection import selection_score
 from src.validation import validate_tuning
@@ -122,7 +121,7 @@ def run(
     if checkpoint.get('tuning') is not None:
         raise ValueError('Checkpoint has already been tuned')
     run = checkpoint_identity(checkpoint)
-    checkpoint_hash = sha256(checkpoint_path)
+    checkpoint_hash = artifacts.sha256(checkpoint_path)
     dataset_fingerprint = checkpoint['dataset_fingerprint']
     config = OmegaConf.create(checkpoint['config'])
     if device is not None:
@@ -148,7 +147,7 @@ def run(
         )
     )
 
-    paths.require_preprocessed(config.data.name, expected_fingerprint=dataset_fingerprint)
+    artifacts.require_dataset_bundle(config.data.name, expected_fingerprint=dataset_fingerprint)
     pairs = config.training.generation_pairs if pairs is None else pairs
     samples = config.inference.validation_samples if samples is None else samples
 

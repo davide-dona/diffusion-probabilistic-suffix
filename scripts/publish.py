@@ -5,7 +5,8 @@ from huggingface_hub import CommitOperationAdd, create_commit, file_exists, whoa
 from huggingface_hub.errors import HfHubHTTPError, LocalTokenNotFoundError
 
 from scripts.hub import HF_REPO_ID
-from src import paths
+from src import artifacts
+from src.cli import existing_file
 from src.models import load_checkpoint, require_generation_ready
 
 
@@ -65,8 +66,8 @@ def run(model_paths: list[Path]) -> None:
         model = checkpoint['config']['model']['name']
         label = f'{dataset}/{model}'
 
-        fetched_to = paths.PRETRAINED.path(dataset=dataset, model=model)
-        path_in_repo = fetched_to.relative_to(paths.PRETRAINED_DIR).as_posix()
+        fetched_to = artifacts.PRETRAINED.path(dataset=dataset, model=model)
+        path_in_repo = fetched_to.relative_to(artifacts.PRETRAINED_DIR).as_posix()
         replaces = file_exists(HF_REPO_ID, path_in_repo, repo_type='model')
 
         print(
@@ -116,7 +117,7 @@ def main() -> None:
     parser.add_argument(
         '-m',
         '--checkpoint',
-        type=paths.existing_file,
+        type=existing_file,
         metavar='CHECKPOINT',
         nargs='+',
         required=True,

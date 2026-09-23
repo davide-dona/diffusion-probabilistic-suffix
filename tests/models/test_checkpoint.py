@@ -4,6 +4,7 @@ import pytest
 import torch
 from omegaconf import OmegaConf
 
+from src.artifacts import RunIdentity
 from src.datasets.codec import DatasetCodec
 from src.inference.tuning import SearchPass, TuningPoint, TuningReport
 from src.models import (
@@ -14,7 +15,6 @@ from src.models import (
     save_checkpoint,
     save_tuned_checkpoint,
 )
-from src.runs.identity import RunIdentity
 from tests.conftest import model_config
 
 _DATASET_FINGERPRINT = '1' * 64

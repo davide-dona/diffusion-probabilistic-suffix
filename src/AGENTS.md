@@ -8,13 +8,13 @@ points; source modules should expose typed operations that can be tested without
 | Area | Responsibility |
 | --- | --- |
 | `datasets/` | Tensor structures, prefix and suffix cuts, fitted codecs, and split loading. |
+| `artifacts/` | Stored artifact locations, dataset manifests, hashes, identities, and provenance. |
 | `models/` | Shared model interface, architectures, checkpoint loading, and time derivation. |
 | `training/` | Optimization, validation, early stopping, and scalar records. |
 | `inference/` | Batch generation, tuning reports, decoded samples, and generations Parquet I/O. |
 | `evaluation/` | Metric registration, prefix scoring, aggregation, and evaluation reports. |
 | `logs/` | Event-log I/O, preprocessing transforms, Declare discovery, and conformance. |
-| `runs/` | Run identity, artifact provenance, hashing, Hydra setup, and output paths. |
-| `paths/` | Canonical locations and required-artifact checks. |
+| `runs/` | Hydra invocation setup, effective configuration, and output directories. |
 | `validation/` | Configuration and stage-boundary validation. |
 | `visualization/` | Figure and table catalogues, labels, and rendering. |
 | `uncertainty/` | Case-level resampling and significance comparisons. |
@@ -33,7 +33,8 @@ Read the nested guides for [`datasets/`](datasets/AGENTS.md), [`models/`](models
   tuning.
 - Validate external artifacts at read time: schema, required metadata, run identity, vocabulary,
   and source hashes are part of their contracts.
-- Use temporary files followed by `Path.replace` for checkpoints, JSON reports, and Parquet files.
+- Protect replacement of an existing best checkpoint with a temporary file and `Path.replace`.
+- Remove directly streamed Parquet destinations when a handled write failure interrupts them.
 - Keep random selection reproducible through explicit seeds or generators. Do not depend on prior
   global random state.
 - Avoid importing orchestration code from `pipelines/` into `src/`.

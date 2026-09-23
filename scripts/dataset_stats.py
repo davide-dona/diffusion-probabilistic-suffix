@@ -4,7 +4,7 @@ import hydra
 import pandas as pd
 from omegaconf import DictConfig
 
-from src import paths
+from src import artifacts
 from src.cli import banner
 from src.logs.io import read_log
 from src.logs.keys import (
@@ -50,7 +50,7 @@ def read_processed_log(dataset: str) -> pd.DataFrame:
         The processed log, one row per event.
     """
     splits = [
-        read_log(paths.PROCESSED_SPLIT.require(dataset=dataset, split=split)) for split in Split
+        read_log(artifacts.PROCESSED_SPLIT.require(dataset=dataset, split=split)) for split in Split
     ]
     return pd.concat(splits, ignore_index=True)
 

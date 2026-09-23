@@ -8,7 +8,7 @@ from pathlib import Path
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
-from src.runs.identity import RunIdentity, validate_dataset, validate_run_id
+from src.artifacts import RunIdentity, validate_dataset, validate_run_id
 
 
 def _available(path: Path) -> Path:

@@ -7,8 +7,7 @@ from typing import Self
 
 from pydantic import TypeAdapter, ValidationError
 
-from src.runs.hashes import validate_sha256
-from src.runs.identity import RunIdentity
+from src.artifacts import RunIdentity, validate_sha256
 from src.selection import SELECTION_METRIC
 
 
@@ -96,9 +95,7 @@ class TuningReport:
         return asdict(self)
 
     def write(self, path: Path) -> Path:
-        temporary = path.with_suffix('.json.tmp')
-        temporary.write_text(json.dumps(asdict(self), indent=2))
-        temporary.replace(path)
+        path.write_text(json.dumps(asdict(self), indent=2))
         return path
 
 

@@ -14,15 +14,15 @@ the safe inspection and test commands below while developing.
 | Preprocess | `uv run python -m pipelines.preprocess dataset=sepsis` | `data/<dataset>/original.csv` | processed splits, codec, Declare model, invocation config | Sorts cases, filters configured outliers, derives attributes, makes chronological splits, fits the codec on train, and mines the Declare model on train. |
 | Train | `uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer` | train and validation splits, codec | `outputs/train/<dataset>/<model>/<run-id>/best.pt`, resolved config, W&B run | Optimizes on train, validates on fixed validation subsets, and selects the checkpoint by minimum DLS energy score. |
 | Tune | `uv run python -m pipelines.tune checkpoint=/path/to/best.pt device=cpu` | checkpoint, validation split, codec, Declare model | `outputs/tune/<dataset>/<model>/<run-id>/tuning.json`, effective config | Searches temperature and top-p for SuTraN-PH and selects minimum DLS energy score. |
-| Generate | `uv run python -m pipelines.generate checkpoint=/path/to/best.pt device=cpu num_samples=100` | checkpoint, test split, codec, optional tuning report | `outputs/generate/<dataset>/<model>/<run-id>/generations.parquet`, effective config | Draws suffixes for every test prefix and writes one Parquet row per prefix with nested samples and provenance. |
+| Generate | `uv run python -m pipelines.generate checkpoint=/path/to/best.pt device=cpu num_samples=100` | generation-ready checkpoint, test split, codec | `outputs/generate/<dataset>/<model>/<run-id>/generations.parquet`, effective config | Draws suffixes for every test prefix and writes one Parquet row per prefix with nested samples and provenance. |
 | Evaluate | `uv run python -m pipelines.evaluate generations=/path/to/generations.parquet workers=4` | generations file, Declare model | `evaluation.json`, `prefix_scores.parquet` under the evaluation output | Scores Parquet row groups in worker processes and aggregates scores overall and by prefix and suffix length. |
 | Visualize | `uv run python -m pipelines.visualize 'evaluations=[/a/evaluation.json,/b/evaluation.json]'` | reports and adjacent prefix score files | PDF figures and LaTeX tables under `outputs/visualize/` | Compares runs, performs paired case bootstrap analysis, and renders the registered catalogue. |
 
-For a tuned SuTraN-PH checkpoint, generation must name the report explicitly:
+For SuTraN-PH, generation must use the checkpoint written by tuning:
 
 ```sh
-uv run python -m pipelines.generate checkpoint=/path/to/best.pt \
-  tuning=/path/to/tuning.json device=cpu num_samples=100
+uv run python -m pipelines.generate checkpoint=/path/to/tuned.pt \
+  device=cpu num_samples=100
 ```
 
 Visualization can discover reports recursively:
@@ -40,10 +40,11 @@ directory, but Hydra does not pass artifacts to the next stage. Supply every dow
   reads or model execution.
 - Store the fully resolved training configuration in checkpoints. For tuning and generation, save
   the source path, source hash, run identity, and effective runtime overrides.
-- Require preprocessing artifacts through `src.paths.require_preprocessed` before work that depends
-  on them.
+- Require preprocessing artifacts through `src.artifacts.require_dataset_bundle` before work that
+  depends on them.
 - Keep split responsibilities separate. Tuning reads validation only; generation reads test only.
-- Write durable artifacts atomically. Interrupted writes must not leave readable partial files.
+- Protect replacement of the best checkpoint atomically. Remove directly streamed Parquet outputs
+  after handled write failures.
 - Preserve `RunIdentity` and the checkpoint SHA-256 through tuning, generation, and evaluation.
 - Generation batches may be sorted for efficiency, but prefix keys must align results across runs.
 

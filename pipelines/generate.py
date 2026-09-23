@@ -8,7 +8,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src import paths
+from src import artifacts
 from src.cli import banner, step
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset
@@ -21,9 +21,7 @@ from src.models import (
     model_from_checkpoint,
     require_generation_ready,
 )
-from src.runs.hashes import sha256
 from src.runs.hydra import output_path, save_config, start_stage
-from src.runs.provenance import ArtifactProvenance
 from src.validation import validate_generation
 
 
@@ -53,10 +51,10 @@ def run(
         checkpoint = load_checkpoint(checkpoint_path)
     run = checkpoint_identity(checkpoint)
     tuning = require_generation_ready(checkpoint)
-    provenance = ArtifactProvenance(
+    provenance = artifacts.ArtifactProvenance(
         run=run,
         dataset_fingerprint=checkpoint['dataset_fingerprint'],
-        checkpoint_sha256=sha256(checkpoint_path),
+        checkpoint_sha256=artifacts.sha256(checkpoint_path),
     )
     metadata = provenance.as_metadata()
     # Start with the config stored in the checkpoint and apply runtime overrides.
@@ -82,7 +80,7 @@ def run(
         )
     )
 
-    paths.require_preprocessed(
+    artifacts.require_dataset_bundle(
         config.data.name, expected_fingerprint=metadata['dataset_fingerprint']
     )
     torch.manual_seed(config.seed)

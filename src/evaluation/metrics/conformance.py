@@ -24,7 +24,6 @@ def conformance_sample_mean(context: PreparedPrefix) -> float:
     return _sample_mean(context, 'share')
 
 
-
 @METRICS.register(
     'conformance_observed',
     label='Conformance observed',

@@ -8,10 +8,9 @@ import pandas as pd
 from omegaconf import DictConfig
 from pandas.api.types import is_numeric_dtype
 
-from src import paths
+from src import artifacts
 from src.cli import banner, step
 from src.datasets.codec import DatasetCodec
-from src.datasets.manifest import DatasetManifest, DatasetProducer
 from src.logs import (
     CASE_ELAPSED_KEY,
     CASE_KEY,
@@ -174,12 +173,12 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
     banner(
         f'Preprocessing "{dataset}"',
         {
-            'original log': paths.ORIGINAL_LOG.path(dataset),
+            'original log': artifacts.ORIGINAL_LOG.path(dataset),
             'split': f'{data_config.train_split:.0%} train, {data_config.val_split:.0%} val, '
             f'{data_config.test_split:.0%} test, out of time',
-            'splits': paths.PROCESSED_SPLIT.directory(dataset),
-            'codec': paths.CODEC.path(dataset),
-            'declarative model': paths.DECLARE_MODEL.path(dataset),
+            'splits': artifacts.PROCESSED_SPLIT.directory(dataset),
+            'codec': artifacts.CODEC.path(dataset),
+            'declarative model': artifacts.DECLARE_MODEL.path(dataset),
         },
     )
 
@@ -226,7 +225,7 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
 
     with step('Writing the splits'):
         for split, rows in ((Split.TRAIN, train), (Split.VAL, val), (Split.TEST, test)):
-            write_log(rows, paths.PROCESSED_SPLIT.path(dataset=dataset, split=split))
+            write_log(rows, artifacts.PROCESSED_SPLIT.path(dataset=dataset, split=split))
 
     # Fit the vocabularies and normalization statistics on the train split, writng them out to
     # `dataset.json`. The generated values can be decoded back using the same codec.
@@ -251,11 +250,11 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
                 ['git', 'status', '--porcelain'], capture_output=True, text=True, check=False
             ).stdout.strip()
         )
-        manifest = DatasetManifest.create(
+        manifest = artifacts.DatasetManifest.create(
             dataset=dataset,
             data_config=data_config,
             declare_config=declare_config,
-            producer=DatasetProducer(run_id=run_id, revision=revision, dirty=dirty),
+            producer=artifacts.DatasetProducer(run_id=run_id, revision=revision, dirty=dirty),
         )
         manifest.write()
 

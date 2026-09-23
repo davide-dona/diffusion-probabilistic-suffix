@@ -10,10 +10,15 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from omegaconf import DictConfig, OmegaConf
 
+from src.artifacts import (
+    ArtifactProvenance,
+    RunIdentity,
+    read_activity_vocabulary,
+    read_provenance_metadata,
+    with_activity_vocabulary,
+    with_provenance_metadata,
+)
 from src.inference.generation import DecodedEvents, Draws, Generation
-from src.runs.artifacts import read_metadata, read_vocabulary, with_metadata, with_vocabulary
-from src.runs.identity import RunIdentity
-from src.runs.provenance import ArtifactProvenance
 
 # Which prefix a row answers, and so what the rows of two runs of one log are matched on. A cut is
 # a case and a length, and the pair is unique within a file.
@@ -112,17 +117,16 @@ class GenerationWriter:
             sampling: How the activity head was sampled. Written so the checkpoint hash alone does
                 not need to identify the inference setting.
         """
-        schema = with_vocabulary(_SCHEMA, vocabulary)
+        schema = with_activity_vocabulary(_SCHEMA, vocabulary)
         if sampling is not None:
             schema = schema.with_metadata(
                 (schema.metadata or {})
                 | {_SAMPLING: json.dumps(OmegaConf.to_container(sampling, resolve=True))}
             )
-        schema = with_metadata(schema, provenance.as_metadata())
+        schema = with_provenance_metadata(schema, provenance.as_metadata())
         self._path = path
-        self._temporary = path.with_suffix('.parquet.tmp')
         self._writer = pq.ParquetWriter(
-            where=self._temporary,
+            where=self._path,
             schema=schema,
             compression=_COMPRESSION,
             compression_level=_COMPRESSION_LEVEL,
@@ -142,11 +146,13 @@ class GenerationWriter:
         exception: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        self._writer.close()
-        if exception_type is None:
-            self._temporary.replace(self._path)
-        else:
-            self._temporary.unlink(missing_ok=True)
+        try:
+            self._writer.close()
+        except BaseException:
+            self._path.unlink(missing_ok=True)
+            raise
+        if exception_type is not None:
+            self._path.unlink(missing_ok=True)
 
     def write(self, generations: list[Generation]) -> None:
         """Write one batch's generations as one block of the file, one row per prefix.
@@ -226,7 +232,7 @@ class Generations:
     @property
     def provenance(self) -> ArtifactProvenance:
         """Validated training run and checkpoint that produced this file."""
-        return ArtifactProvenance.from_metadata(read_metadata(self._parquet))
+        return ArtifactProvenance.from_metadata(read_provenance_metadata(self._parquet))
 
     @property
     def run(self) -> RunIdentity:
@@ -244,7 +250,7 @@ class Generations:
         Raises:
             ValueError: If the file has no activity vocabulary.
         """
-        return read_vocabulary(self._parquet.schema_arrow)
+        return read_activity_vocabulary(self._parquet.schema_arrow)
 
     @property
     def blocks(self) -> int:

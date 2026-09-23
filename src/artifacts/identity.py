@@ -2,7 +2,6 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Self
 
-# Regular expressions for validating run identity components.
 _DATASET = re.compile(r'[a-z0-9][a-z0-9-]*')
 _MODEL = re.compile(r'[a-z0-9][a-z0-9_]*')
 _RUN_ID = re.compile(r'\d{8}-\d{6}-\d{6}')
@@ -27,12 +26,7 @@ def validate_run_id(value: object) -> str:
 
 @dataclass(frozen=True)
 class RunIdentity:
-    """The dataset, model, and invocation that identify one training run.
-
-    Its string form is the relative path ``dataset/model/run_id`` used beneath stage output
-    directories. It deliberately excludes a checkpoint hash: several checkpoints or downstream
-    artifacts can belong to the same training run.
-    """
+    """The dataset, model, and invocation that identify one training run."""
 
     dataset: str
     model: str

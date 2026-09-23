@@ -1,7 +1,7 @@
 from dataclasses import dataclass, replace
 from functools import lru_cache
 
-from src import paths
+from src import artifacts
 from src.datasets.codec import ActivityCodec
 from src.logs.declare.constraints import read_constraints
 from src.logs.declare.templates import Positions
@@ -62,7 +62,7 @@ class ConformanceChecker:
                     else codes.codes.get(constraint.second, _UNMATCHABLE)
                 ),
             )
-            for constraint in read_constraints(paths.DECLARE_MODEL.require(dataset))
+            for constraint in read_constraints(artifacts.DECLARE_MODEL.require(dataset))
         )
 
     @lru_cache(maxsize=100_000)  # noqa: B019 -- one checker per scoring process

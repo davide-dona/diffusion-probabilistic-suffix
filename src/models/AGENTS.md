@@ -30,7 +30,8 @@ needed to evaluate one stochastic diffusion pass.
   loads on CPU, validates required keys, and checks identity against configuration.
 - `model_from_checkpoint` rebuilds from the stored model configuration, loads weights, moves to the
   requested device, and returns evaluation mode. Do not reconstruct from a current YAML file.
-- Save checkpoints atomically through a temporary `.pt.tmp` file.
+- Save the repeatedly replaced best checkpoint through a temporary `.pt.tmp` file. Checkpoints
+  written once may be written directly to their final destination.
 
 ## Shared Semantics
 

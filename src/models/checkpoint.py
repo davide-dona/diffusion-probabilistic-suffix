@@ -6,9 +6,8 @@ import numpy as np
 import torch
 from torch import nn
 
+from src.artifacts import RunIdentity, validate_sha256
 from src.inference.tuning import TuningReport
-from src.runs.hashes import validate_sha256
-from src.runs.identity import RunIdentity
 from src.selection import SELECTION_METRIC
 
 MODEL_KEYS = ('config', 'model_state_dict')
@@ -136,7 +135,5 @@ def save_tuned_checkpoint(checkpoint: dict, report: TuningReport, path: Path) ->
     tuned = copy.deepcopy(checkpoint)
     tuned['config']['model']['sampling'] = report.chosen
     tuned['tuning'] = report.as_dict()
-    temporary = path.with_suffix('.pt.tmp')
-    torch.save(tuned, temporary)
-    temporary.replace(path)
+    torch.save(tuned, path)
     return path

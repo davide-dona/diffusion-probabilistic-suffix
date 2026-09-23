@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from omegaconf import DictConfig
 
-from src import paths
+from src import artifacts
 from src.logs.keys import (
     ACTIVITY_KEY,
     CASE_KEY,
@@ -61,7 +61,7 @@ def read_original_log(data_config: DictConfig) -> pd.DataFrame:
         The raw log as a DataFrame, one row per event, with no derived column added yet.
     """
     return read_log(
-        paths.ORIGINAL_LOG.path(data_config.name),
+        artifacts.ORIGINAL_LOG.path(data_config.name),
         separator=data_config.separator,
         column_mapping={
             data_config.case_key: CASE_KEY,

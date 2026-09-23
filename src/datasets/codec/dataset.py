@@ -9,7 +9,7 @@ from omegaconf import DictConfig
 from pandas.api.types import is_numeric_dtype
 from pydantic import BaseModel, ConfigDict, Field
 
-from src import paths
+from src import artifacts
 from src.datasets.codec.activity import ActivityCodec
 from src.datasets.codec.categorical import (
     ACTIVITY_TOKENS,
@@ -129,13 +129,13 @@ class DatasetCodec(BaseModel):
             FileNotFoundError: If the dataset has not been preprocessed.
         """
         name = data_config.name
-        path = paths.CODEC.require(name)
+        path = artifacts.CODEC.require(name)
         payload = json.loads(path.read_text())
         return cls.model_validate(payload | {'dataset': name})
 
     def save(self) -> Path:
         """Write this codec to its own directory, and return where it went."""
-        path = paths.CODEC.prepare(self.dataset)
+        path = artifacts.CODEC.prepare(self.dataset)
         path.write_text(self.model_dump_json(indent=2))
         return path
 
@@ -147,7 +147,7 @@ class DatasetCodec(BaseModel):
         Returns:
             The path to that split's file.
         """
-        return paths.PROCESSED_SPLIT.path(dataset=self.dataset, split=split)
+        return artifacts.PROCESSED_SPLIT.path(dataset=self.dataset, split=split)
 
     def read_split(self, split: Split) -> pd.DataFrame:
         """Read a preprocessed split with categorical columns forced to text."""
