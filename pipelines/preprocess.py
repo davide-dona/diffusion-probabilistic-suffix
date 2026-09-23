@@ -8,8 +8,8 @@ import pandas as pd
 from omegaconf import DictConfig
 from pandas.api.types import is_numeric_dtype
 
+from pipelines.console import banner, step
 from src import artifacts
-from src.cli import banner, step
 from src.datasets.codec import DatasetCodec
 from src.logs import (
     CASE_ELAPSED_KEY,

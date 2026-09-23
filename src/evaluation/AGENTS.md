@@ -17,13 +17,14 @@ multiplicity when working with folded suffixes.
 
 | Group | Metrics | Preferred value |
 | --- | --- | --- |
-| Activity | Draw-weighted Damerau-Levenshtein similarity; DLS, exact-match, and bigram energy scores | Higher similarity; lower energy |
-| Suffix length | MAE, CRPS, central interval coverage gaps at 50%, 75%, and 95% | Lower error and CRPS; gap closest to zero |
+| Activity | DLS, exact-match, and bigram energy scores | Higher similarity; lower energy |
+| Suffix length | CRPS, central interval coverage gaps at 50%, 75%, and 95% | Lower error and CRPS; gap closest to zero |
 | Time | Remaining-time and aligned inter-event-time CRPS in days; central interval coverage gaps at 50%, 75%, and 95% | Lower CRPS; gap closest to zero |
 | Conformance | Mean satisfied-constraint share, full-conformance sample rate, and observed-log references | Higher model conformance |
 
 Energy scores combine distance to truth with a diversity correction between independent draws.
-CRPS is computed from the empirical sample distribution. Coverage gap is empirical central-interval
+CRPS uses the same fair finite-sample energy estimator with absolute distances, calculated
+efficiently through sorted samples. Coverage gap is empirical central-interval
 coverage minus its nominal level. Inter-event metrics compare against the observed suffix width;
 sampled time sequences are truncated or zero-padded to that width during preparation.
 
@@ -37,10 +38,10 @@ and compatibility consideration for old score files.
 
 ## Reports and Aggregation
 
-`PrefixSummary` stores prefix length, true suffix length, and every registered metric.
+`PrefixSummary` stores prefix length, true suffix length, and every report metric.
 `EvaluationSummary` reports the unweighted mean over all prefixes and separate means bucketed by
 prefix length and true suffix length. `evaluation.json` contains this summary and provenance.
-`prefix_scores.parquet` stores the prefix key, lengths, and all metric values for paired analysis.
+`prefix_scores.parquet` stores the prefix key, lengths, and all report metric values for paired analysis.
 
 Keep the two files adjacent. Visualization rejects duplicate model reports within one dataset and
 requires score files for significance analysis. Comparisons align identical prefix populations,
@@ -57,3 +58,11 @@ scores to Parquet while aggregating so full decoded generations never accumulate
 Test metric formulas on small deterministic samples, folded-draw weighting, empty or degenerate
 cases, schema rejection, prefix alignment, aggregation buckets, and reproducible significance
 analysis. Do not run full evaluation locally.
+
+## Diagnostics
+
+Register validation-only metrics with `diagnostic=True`. DLS sample mean and suffix-length MAE
+are diagnostics, logged as `diagnostic/<group>/<metric>` in W&B during training validation.
+They are not computed during final evaluation and do not enter JSON reports, default Parquet
+views, publication figures or tables, or significance comparisons. Historical score files may
+contain diagnostic columns; readers require only report columns.

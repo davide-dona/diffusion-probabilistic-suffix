@@ -173,7 +173,7 @@ def train(
                 f'Step {step:>{len(str(training.max_steps))}}/{training.max_steps}  '
                 f'train {train_metrics.loss:.4f}  '
                 f'val {val_metrics.loss:.4f}  '
-                f'gen_dls {gen_metrics.scores.activity["dls_sample_mean"]:.4f} mean / '
+                f'gen_dls {gen_metrics.diagnostics["dls_sample_mean"]:.4f} mean / '
                 f'energy {gen_metrics.scores.activity["energy_score_dls"]:.4f}',
                 flush=True,
             )

@@ -52,11 +52,9 @@ TABLES = (
         axis=Axis.OVERALL,
         note=None,
         columns=(
-            MetricEntry(METRICS['dls_sample_mean'], 'DLS mean'),
             MetricEntry(METRICS['energy_score_dls'], r'$ES_{\mathrm{DL}}$'),
             MetricEntry(METRICS['energy_score_exact'], r'$ES_{\mathrm{exact}}$'),
             MetricEntry(METRICS['energy_score_bigram'], r'$ES_{\mathrm{2-\text{gram}}}$'),
-            MetricEntry(METRICS['suffix_length_mae'], 'Suffix length mean'),
             MetricEntry(METRICS['suffix_length_crps'], 'Suffix length CRPS'),
         ),
     ),

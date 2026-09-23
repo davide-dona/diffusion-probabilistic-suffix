@@ -9,6 +9,7 @@ from src.evaluation.metrics.registry import METRICS
     label='Suffix length MAE',
     group=MetricGroup.SUFFIX_LENGTH,
     unit=Unit.EVENTS,
+    diagnostic=True,
     direction=Direction.LOWER,
 )
 def suffix_length_mae(context: PreparedPrefix) -> float:

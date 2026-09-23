@@ -8,6 +8,7 @@ from rapidfuzz.distance import DamerauLevenshtein
 from scipy.spatial.distance import cdist
 
 from src.datasets.codec import END_CODE, START_CODE
+from src.evaluation.metrics.helpers.statistics import energy_score
 
 
 class SuffixMetric(StrEnum):
@@ -126,13 +127,11 @@ def distances(
         queries: The sequences to measure, one row each. Either encoded suffixes, where a sequence
             is a string, or raw activity names, where it is a list of them.
         choices: The sequences to measure them against, one column each.
-        metric: How far apart two sequences are held to be. `DLD` is what a transport cost and the
-            per-prefix similarities read on; the other two are read by `energy_score` alone, and
+        metric: How far apart two sequences are held to be. `DLD` is also used by per-prefix
+            similarities, and
             `BIGRAM` holds a dense row over the bigrams both sets hold, so it is intended for
             small sets of draws.
-        dtype: What to accumulate in. The default halves a matrix that can run to hundreds of
-            megabytes; a caller measuring a handful of sequences has no such matrix and may ask for
-            `np.float64` instead.
+        dtype: What to accumulate in. Use `np.float64` when accumulating score terms.
     Returns:
         `[len(queries), len(choices)]`, holding the distance of each pair in `[0, 1]`.
     """
@@ -147,79 +146,20 @@ def distances(
         scorer=DamerauLevenshtein.normalized_similarity,
         dtype=dtype,
     )
-    # In place: the matrix is already the largest thing here, and a second copy of it is what a
-    # blocked walk exists to avoid.
     return np.subtract(1.0, similarities, out=similarities)
 
 
-# How many rows of the pairwise matrix `diversity` holds at once.
-_SPREAD_MATRIX_SIZE = 256
-
-
-def diversity(
-    sequences: Sequence[Sequence[Hashable]],
-    *,
-    weights: Sequence[float] | None = None,
-) -> float:
-    """How far apart two draws of one set of sequences are from each other, in `[0, 1]`.
-
-    The mean distance over every ordered pair of two distinct draws. A weighted set is a set of
-    distinct sequences standing for that many draws, so a sequence drawn twice is twice as likely
-    to be picked and the pair it makes with itself sits at distance 0.
-
-    It is the same `E[d(X, X')]` that `energy_score` subtracts. It walks in blocks so callers can
-    also use it on large collections without materializing the full pairwise matrix.
-
-    Args:
-        sequences: The distinct sequences, either encoded suffixes or raw activity names.
-        weights: How many draws each of them stands for, in the same order, or `None` for one
-            each.
-    Returns:
-        0.0 below two draws, or where every draw is the same sequence, up to 1.0 for sequences
-        sharing nothing.
-    """
-    counts = (
-        np.ones(len(sequences), dtype=np.float64)
-        if weights is None
-        else np.asarray(weights, dtype=np.float64)
-    )
-    draws = counts.sum()
-    if draws < 2 or len(sequences) < 2:
-        return 0.0
-
-    # Only one block of rows is needed at a time.
-    total = 0.0
-    for first in range(0, len(sequences), _SPREAD_MATRIX_SIZE):
-        block = sequences[first : first + _SPREAD_MATRIX_SIZE]
-        pairs = distances(queries=block, choices=sequences, dtype=np.float64)
-        total += float(counts[first : first + len(block)] @ pairs @ counts)
-    return total / (draws * (draws - 1.0))
-
-
-def energy_score(
+def sequence_energy_score(
     sequences: Sequence[Sequence[Hashable]],
     truth: Sequence[Hashable],
     *,
     weights: Sequence[float] | None = None,
     metric: SuffixMetric = SuffixMetric.DLD,
 ) -> float:
-    """The energy score of a set of draws, which is defined as:
-    `E[d(X, y)] - 0.5 * E[d(X, X')]` where `X` and `X'` are draws from the set and `y`
-    is the truth.
+    """Return fair sequence energy score, preserving folded draw multiplicities.
 
-    The first term is the mean distance of a draw to the truth, and the second term is the mean
-    distance between two draws.
-
-    Args:
-        sequences: The distinct sequences drawn, either encoded suffixes or raw activity names.
-        truth: The one sequence that was observed.
-        weights: How many draws each distinct sequence stands for, or `None` for one each.
-        metric: Which distance the score is read on. The three answer different questions and are
-            reported side by side rather than as one number, and only two of them make the score
-            proper.
-    Returns:
-        The score, lower being better. 1.0 where nothing was drawn, which is the worst any of the
-        three metrics can give rather than the 0.0 an empty mean would read as a perfect score.
+    Weights count draws of each sequence. Empty samples score 1.0, the worst distance
+    to truth for these bounded sequence distances.
     """
     if not len(sequences):
         return 1.0
@@ -232,20 +172,14 @@ def energy_score(
     if draws <= 0.0:
         return 1.0
 
-    # Both terms come off one matrix over the draws and the truth together: its last column is
-    # every distance to the truth and the block above-left of it is every distance between two
-    # draws. A prefix draws at most a few hundred suffixes, so the matrix is small enough to hold
-    # whole, whereas `diversity` walks in blocks for large collections.
     pairs = distances(
-        queries=(*sequences, truth),
+        queries=sequences,
         choices=(*sequences, truth),
         metric=metric,
         dtype=np.float64,
     )
-    accuracy = float(counts @ pairs[:-1, -1]) / draws
-    if draws < 2.0 or len(sequences) < 2:
-        return accuracy
-    # Ordered pairs of two distinct draws, so a suffix drawn twice pairs with itself at distance 0
-    # and the estimator stays unbiased, exactly as `diversity` takes it.
-    spread = float(counts @ pairs[:-1, :-1] @ counts) / (draws * (draws - 1.0))
-    return accuracy - 0.5 * spread
+    return energy_score(
+        truth_sum=float(counts @ pairs[:, -1]),
+        pair_sum=float(counts @ pairs[:, :-1] @ counts),
+        draws=float(draws),
+    )

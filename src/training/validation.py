@@ -26,6 +26,7 @@ class GenerationMetrics:
     """Validation metrics, with energy score averaged over every generated example."""
 
     scores: ScoreGroups
+    diagnostics: dict[str, float]
 
     def log(self, step: int) -> None:
         """Log every registered value under its declared evaluation group.
@@ -43,7 +44,11 @@ class GenerationMetrics:
         wandb.log(
             {
                 f'{namespaces[metric.group]}/{key}': values[key]
-                for key, metric in METRICS.entries.items()
+                for key, metric in METRICS.report.items()
+            }
+            | {
+                f'diagnostic/{metric.group.value.replace("_", "-")}/{key}': self.diagnostics[key]
+                for key, metric in METRICS.diagnostics.items()
             },
             step=step,
         )
@@ -128,5 +133,13 @@ def validate_generation(
         ]
         if not generations:
             raise ValueError('Validation generation subset is empty')
-        summaries = [PrefixSummary.of(one, checker=checker) for one in generations]
-        return GenerationMetrics(scores=ScoreGroups.mean([summary.scores for summary in summaries]))
+        summaries = [
+            PrefixSummary.of(one, checker=checker, include_diagnostics=True) for one in generations
+        ]
+        return GenerationMetrics(
+            scores=ScoreGroups.mean([summary.scores for summary in summaries]),
+            diagnostics={
+                key: sum(summary.diagnostics[key] for summary in summaries) / len(summaries)
+                for key in METRICS.diagnostics
+            },
+        )

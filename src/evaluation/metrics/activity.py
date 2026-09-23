@@ -1,5 +1,5 @@
 from src.evaluation.metrics.definitions import Direction, MetricGroup, Unit
-from src.evaluation.metrics.helpers.activity import SuffixMetric, energy_score
+from src.evaluation.metrics.helpers.activity import SuffixMetric, sequence_energy_score
 from src.evaluation.metrics.prepared import PreparedPrefix
 from src.evaluation.metrics.registry import METRICS
 
@@ -9,6 +9,7 @@ from src.evaluation.metrics.registry import METRICS
     label='DLS sample mean',
     group=MetricGroup.ACTIVITY,
     unit=Unit.SHARE,
+    diagnostic=True,
     direction=Direction.HIGHER,
 )
 def dls_sample_mean(context: PreparedPrefix) -> float:
@@ -32,7 +33,7 @@ def dls_sample_mean(context: PreparedPrefix) -> float:
 def energy_score_dls(context: PreparedPrefix) -> float:
     """Return the sampled activity energy score on normalized DLS distance."""
     samples, truth = context.generation.samples, context.generation.truth
-    return energy_score(
+    return sequence_energy_score(
         samples.suffixes, truth.activities, weights=samples.counts, metric=SuffixMetric.DLD
     )
 
@@ -47,7 +48,7 @@ def energy_score_dls(context: PreparedPrefix) -> float:
 def energy_score_exact(context: PreparedPrefix) -> float:
     """Return the sampled activity energy score on exact-match distance."""
     samples, truth = context.generation.samples, context.generation.truth
-    return energy_score(
+    return sequence_energy_score(
         samples.suffixes, truth.activities, weights=samples.counts, metric=SuffixMetric.EXACT
     )
 
@@ -62,6 +63,6 @@ def energy_score_exact(context: PreparedPrefix) -> float:
 def energy_score_bigram(context: PreparedPrefix) -> float:
     """Return the sampled activity energy score on bigram distance."""
     samples, truth = context.generation.samples, context.generation.truth
-    return energy_score(
+    return sequence_energy_score(
         samples.suffixes, truth.activities, weights=samples.counts, metric=SuffixMetric.BIGRAM
     )

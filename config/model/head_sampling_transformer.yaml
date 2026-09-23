@@ -4,8 +4,8 @@ kind: head_sampling_transformer
 name: head_sampling_transformer
 d_model: 32
 embeddings:
-  activity_dim: 16
-  resource_dim: 32
+  activity_dim: 32
+  resource_dim: 16
   feature_dim: 8
 encoder:
   num_layers: 4

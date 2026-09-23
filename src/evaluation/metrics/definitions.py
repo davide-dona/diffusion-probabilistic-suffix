@@ -63,3 +63,4 @@ class Metric:
     direction: Direction
     compute: Callable[..., float]
     owner: Owner = Owner.MODEL
+    diagnostic: bool = False

@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Self
@@ -26,7 +26,7 @@ GROUPS = tuple(MetricGroup)
 
 @dataclass(frozen=True)
 class ScoreGroups:
-    """Every metric value for a prefix or an aggregate, grouped by evaluation question."""
+    """Report metric values for a prefix or an aggregate, grouped by evaluation question."""
 
     activity: dict[str, float]
     suffix_length: dict[str, float]
@@ -35,8 +35,8 @@ class ScoreGroups:
 
     @classmethod
     def of(cls, values: dict[str, float]) -> 'ScoreGroups':
-        """Group a complete mapping of registered metric values."""
-        expected = set(METRICS.entries)
+        """Group a complete mapping of report metric values."""
+        expected = set(METRICS.report)
         missing = expected - set(values)
         extra = set(values) - expected
         if missing or extra:
@@ -46,7 +46,7 @@ class ScoreGroups:
             )
         grouped = {
             group: {
-                key: values[key] for key, metric in METRICS.entries.items() if metric.group is group
+                key: values[key] for key, metric in METRICS.report.items() if metric.group is group
             }
             for group in GROUPS
         }
@@ -58,7 +58,7 @@ class ScoreGroups:
         return cls.of(
             {
                 key: sum(value.flatten()[key] for value in values) / len(values) if values else 0.0
-                for key in METRICS.entries
+                for key in METRICS.report
             }
         )
 
@@ -70,7 +70,7 @@ class ScoreGroups:
             MetricGroup.TIME: self.time,
             MetricGroup.CONFORMANCE: self.conformance,
         }
-        return {key: groups[metric.group][key] for key, metric in METRICS.entries.items()}
+        return {key: groups[metric.group][key] for key, metric in METRICS.report.items()}
 
 
 @dataclass(frozen=True)
@@ -80,16 +80,28 @@ class PrefixSummary:
     prefix_len: int
     suffix_len: int
     scores: ScoreGroups
+    diagnostics: dict[str, float] = field(default_factory=dict)
 
     @classmethod
-    def of(cls, generation: Generation, *, checker: ConformanceChecker) -> 'PrefixSummary':
+    def of(
+        cls,
+        generation: Generation,
+        *,
+        checker: ConformanceChecker,
+        include_diagnostics: bool = False,
+    ) -> 'PrefixSummary':
         """Score one generated suffix against truth and constraints."""
         context = PreparedPrefix.of(generation, checker=checker)
         return cls(
             prefix_len=generation.prefix_len,
             suffix_len=len(generation.truth),
             scores=ScoreGroups.of(
-                {key: metric.compute(context) for key, metric in METRICS.entries.items()}
+                {key: metric.compute(context) for key, metric in METRICS.report.items()}
+            ),
+            diagnostics=(
+                {key: metric.compute(context) for key, metric in METRICS.diagnostics.items()}
+                if include_diagnostics
+                else {}
             ),
         )
 
@@ -273,7 +285,7 @@ _PREFIX_SCORE_SCHEMA = pa.schema(
         ('case_id', pa.large_string()),
         ('prefix_len', pa.int64()),
         ('suffix_len', pa.int64()),
-        *((key, pa.float64()) for key in METRICS.entries),
+        *((key, pa.float64()) for key in METRICS.report),
     ]
 )
 
@@ -322,9 +334,9 @@ def require_columns(path: Path, columns: Sequence[str]) -> None:
 
 
 def read_prefix_scores(path: Path, *, columns: Sequence[str] | None = None) -> pd.DataFrame:
-    """Read all or selected per-prefix score columns."""
-    require_columns(path, columns or (*PREFIX_SCORE_KEYS, *METRICS.entries))
-    wanted = None if columns is None else list(columns)
+    """Read report columns by default, or explicitly selected per-prefix score columns."""
+    wanted = list((*PREFIX_SCORE_KEYS, *METRICS.report) if columns is None else columns)
+    require_columns(path, wanted)
     return pq.read_table(source=path, columns=wanted).to_pandas()
 
 
@@ -343,7 +355,7 @@ def score_files(reports: Sequence[Path]) -> dict[str, dict[str, Path]]:
     runs: list[tuple[dict[str, str], Path]] = []
     for _, scores in files:
         try:
-            require_columns(scores, (*PREFIX_SCORE_KEYS, *METRICS.entries))
+            require_columns(scores, (*PREFIX_SCORE_KEYS, *METRICS.report))
             with pq.ParquetFile(scores) as parquet:
                 runs.append((read_provenance_metadata(parquet), scores))
         except (ValueError, TypeError, KeyError) as error:

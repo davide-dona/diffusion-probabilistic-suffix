@@ -6,7 +6,6 @@ from huggingface_hub.errors import HfHubHTTPError, LocalTokenNotFoundError
 
 from scripts.hub import HF_REPO_ID
 from src import artifacts
-from src.cli import existing_file
 from src.models import load_checkpoint, require_generation_ready
 
 
@@ -49,7 +48,7 @@ def run(model_paths: list[Path]) -> None:
         FileNotFoundError: If there is no checkpoint at one of `model_paths`.
         ValueError: If a checkpoint is missing a key rebuilding the model reads.
     """
-    missing = [path for path in model_paths if not path.exists()]
+    missing = [path for path in model_paths if not path.is_file()]
     if missing:
         raise FileNotFoundError(f'no checkpoint at {", ".join(str(path) for path in missing)}.')
 
@@ -117,7 +116,7 @@ def main() -> None:
     parser.add_argument(
         '-m',
         '--checkpoint',
-        type=existing_file,
+        type=Path,
         metavar='CHECKPOINT',
         nargs='+',
         required=True,

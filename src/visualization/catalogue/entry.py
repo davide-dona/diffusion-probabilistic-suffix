@@ -10,6 +10,10 @@ class MetricEntry:
     metric: Metric
     label: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.metric.diagnostic:
+            raise ValueError(f'diagnostic metric {self.metric.key!r} cannot appear in reports.')
+
     @property
     def display_label(self) -> str:
         """Return the catalogue override or the metric's canonical label."""

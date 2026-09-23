@@ -144,6 +144,10 @@ The report and its per-prefix scores are written under
 `outputs/evaluate/<dataset>/<model>/<run-id>/` as `evaluation.json` and
 `prefix_scores.parquet`.
 
+DLS sample mean and suffix-length MAE are validation diagnostics, logged to W&B under
+`diagnostic/activity/dls_sample_mean` and `diagnostic/suffix-length/suffix_length_mae`.
+They are excluded from final reports, score files, and publication comparisons.
+
 ### 6. Visualization
 
 Plot and tabulate one or more evaluation reports:
@@ -177,6 +181,8 @@ Datasets, models, training defaults, and runtime profiles live in the correspond
 `config/`. Training duration, warmup, and validation cadence are expressed in optimizer steps;
 early stopping is expressed in validation checks. The CUDA profile selects a batch size and training
 regime for each dataset automatically.
+All three models use activity/resource/attribute embedding widths of 32/16/8, projected to
+model width 32. Checkpoints retain their own embedding configuration.
 Override individual settings with dotted keys:
 
 ```bash

@@ -18,6 +18,7 @@ class MetricRegistry:
         unit: Unit,
         direction: Direction = Direction.NONE,
         owner: Owner = Owner.MODEL,
+        diagnostic: bool = False,
     ) -> Callable[[Callable[..., float]], Callable[..., float]]:
         """Register a prefix-scoring function under a stable metric key."""
 
@@ -31,11 +32,22 @@ class MetricRegistry:
                 unit=unit,
                 direction=direction,
                 owner=owner,
+                diagnostic=diagnostic,
                 compute=compute,
             )
             return compute
 
         return decorator
+
+    @property
+    def report(self) -> dict[str, Metric]:
+        """Return reportable metrics in declaration order."""
+        return {key: metric for key, metric in self.entries.items() if not metric.diagnostic}
+
+    @property
+    def diagnostics(self) -> dict[str, Metric]:
+        """Return validation-only metrics in declaration order."""
+        return {key: metric for key, metric in self.entries.items() if metric.diagnostic}
 
     def __getitem__(self, key: str) -> Metric:
         if key not in self.entries:

@@ -15,7 +15,7 @@ RESAMPLES = 10_000
 SEED = 42
 SIGNIFICANCE_COLUMNS = ('dataset', 'model', 'metric', 'p_value', 'best')
 RANKED = tuple(
-    key for key, metric in METRICS.entries.items() if metric.direction is not Direction.NONE
+    key for key, metric in METRICS.report.items() if metric.direction is not Direction.NONE
 )
 
 
