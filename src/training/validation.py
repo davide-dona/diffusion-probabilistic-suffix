@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from src.datasets.codec import DatasetCodec
 from src.evaluation import PrefixSummary, ScoreGroups
 from src.evaluation.metrics import METRICS
+from src.evaluation.metrics.metadata import Owner
 from src.inference.generate import generate_batch
 from src.logs.declare import ConformanceChecker
 from src.training.loss import Loss
@@ -29,7 +30,9 @@ class GenerationMetrics:
     diagnostics: dict[str, float]
 
     def log(self, step: int) -> None:
-        """Log every registered value under its declared evaluation group.
+        """Log model-owned report and diagnostic metrics under their evaluation groups.
+
+        Log-owned values remain in scores but are excluded from the W&B payload.
 
         Args:
             step: The training step this pass scores.
@@ -45,10 +48,12 @@ class GenerationMetrics:
             {
                 f'{namespaces[metric.group]}/{key}': values[key]
                 for key, metric in METRICS.report.items()
+                if metric.owner is Owner.MODEL
             }
             | {
                 f'diagnostic/{metric.group.value.replace("_", "-")}/{key}': self.diagnostics[key]
                 for key, metric in METRICS.diagnostics.items()
+                if metric.owner is Owner.MODEL
             },
             step=step,
         )

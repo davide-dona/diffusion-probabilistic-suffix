@@ -14,21 +14,43 @@ from src.evaluation.scoring import EvaluationSummary, LengthSummary, flatten_sco
 
 @dataclass(frozen=True)
 class EvaluationReport:
-    """Evaluation results and source artifact provenance."""
+    """Evaluation results and source artifact provenance.
+
+    metadata identifies the dataset, model, training run, dataset fingerprint, and checkpoint
+    hash. summary contains overall scores and both observed-length breakdowns.
+    """
 
     metadata: dict[str, str]
     summary: EvaluationSummary
 
     @classmethod
     def read(cls, path: str | Path) -> Self:
-        """Read and validate a JSON evaluation report."""
+        """Read and validate a JSON evaluation report.
+
+        Args:
+            path: JSON report containing an evaluation summary and artifact provenance.
+
+        Returns:
+            The validated report, including its run and checkpoint metadata.
+
+        Raises:
+            ValidationError: If the report does not match the expected structure.
+            ValueError: If the JSON or artifact provenance is invalid.
+        """
         path = Path(path)
         report = _REPORT_ADAPTER.validate_python(json.loads(path.read_bytes()))
         ArtifactProvenance.from_metadata(report.metadata)
         return report
 
     def write(self, path: str | Path) -> Path:
-        """Write the report as JSON."""
+        """Write the report as JSON.
+
+        Args:
+            path: Destination file in an existing directory, replacing any existing contents.
+
+        Returns:
+            The destination path.
+        """
         path = Path(path)
         path.write_text(json.dumps(asdict(self), indent=4))
         return path
@@ -89,7 +111,18 @@ def _report_rows(report: EvaluationReport) -> Iterator[dict[str, object]]:
 
 
 def read_reports(files: Sequence[Path]) -> pd.DataFrame:
-    """Load reports into the dataframe consumed by tables and figures."""
+    """Load reports into the dataframe consumed by tables and figures.
+
+    Args:
+        files: JSON evaluation reports, with at most one report per dataset and model.
+
+    Returns:
+        Long-form scores with REPORT_COLUMNS, ordered by report, aggregation level, bucket,
+        and registered metric. Overall rows have a missing length; empty input retains the schema.
+
+    Raises:
+        ValueError: If a report or its provenance is invalid, or a dataset repeats a model.
+    """
     reports: list[tuple[Path, EvaluationReport]] = []
     for file in files:
         try:

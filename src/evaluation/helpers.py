@@ -8,16 +8,13 @@ from rapidfuzz.distance import DamerauLevenshtein
 from scipy.spatial.distance import cdist
 
 from src.datasets.codec import END_CODE, START_CODE
-from src.evaluation.metrics.helpers.statistics import energy_score
 
 
 class SuffixMetric(StrEnum):
-    """How far apart two suffixes are held to be. Each charges for a different kind of wrongness:
-    - `DLD` is graded on positions, so a suffix one edit from another scores better than one
-    sharing nothing with it.
-    - `EXACT` reads a suffix as an atom and charges the same for a near miss as for a wrong answer.
-    - `BIGRAM` charges for the ordered pairs a suffix holds and how many times it holds each, which
-    is the ordering and the loop counts a process constrains rather than the positions they fell at.
+    """Distances between activity suffixes.
+
+    DLD measures normalized edit distance, EXACT measures sequence inequality, and
+    BIGRAM measures multiset Jaccard distance over padded activity pairs.
     """
 
     DLD = 'dld'  # Normalized Damerau-Levenshtein distance
@@ -31,6 +28,7 @@ def sequence_similarity(predicted: Sequence[Hashable], true: Sequence[Hashable])
     Args:
         predicted: The generated sequence.
         true: The ground-truth sequence.
+
     Returns:
         1.0 for identical sequences, including two empty ones. The shared terminal token is part
         of the normalization used by suffix-prediction evaluation.
@@ -48,7 +46,8 @@ def bigrams(sequence: Sequence[Hashable]) -> Counter[tuple[Hashable, Hashable]]:
     Without the padding sequences of zero or one element would break the distance calculation.
 
     Args:
-        sequence: An encoded suffix, where an element is a character.
+        sequence: Activity suffix with hashable elements, including an encoded string.
+
     Returns:
         Each pair to the number of times it occurs. Never empty: the empty sequence yields the one
         pair the two sentinels make.
@@ -63,15 +62,7 @@ def _exact_distances(
     *,
     dtype: type[np.floating],
 ) -> np.ndarray:
-    """Measure every pair on the discrete metric: 0 for two equal sequences, 1 for anything else.
-
-    Args:
-        queries: The sequences to measure, one row each.
-        choices: The sequences to measure them against, one column each.
-        dtype: What to hold the result in.
-    Returns:
-        `[len(queries), len(choices)]` of 0.0 and 1.0.
-    """
+    """Return [queries, choices] distances: zero for equal sequences and one otherwise."""
     # Tuples rather than the sequences themselves, so a string and a list of the same activities
     # compare as the sequences they are and `!=` never walks a NumPy array elementwise.
     left = np.empty(len(queries), dtype=object)
@@ -87,19 +78,7 @@ def _bigram_distances(
     *,
     dtype: type[np.floating],
 ) -> np.ndarray:
-    """Measure every pair on the multiset Jaccard distance over their bigrams.
-
-    `1 - |A n B| / |A u B|` on multisets, which is 0.0 for two sequences holding the
-    same pairs as often as each other, up to 1.0 for two sharing none.
-
-    Args:
-        queries: The sequences to measure, one row each.
-        choices: The sequences to measure them against, one column each.
-        dtype: What to hold the result in.
-    Returns:
-        `[len(queries), len(choices)]`, 0.0 for two sequences holding the same pairs as often as
-        each other, up to 1.0 for two sharing none.
-    """
+    """Return [queries, choices] multiset Jaccard distances over padded activity pairs."""
     counted = [bigrams(sequence) for sequence in (*queries, *choices)]
     vocabulary = {
         pair: column for column, pair in enumerate({pair for counts in counted for pair in counts})
@@ -125,15 +104,15 @@ def distances(
     dtype: type[np.floating] = np.float32,
 ) -> np.ndarray:
     """Measure every sequence of one set against every sequence of another.
+
     Args:
         queries: The sequences to measure, one row each. Either encoded suffixes, where a sequence
             is a string, or raw activity names, where it is a list of them.
         choices: The sequences to measure them against, one column each.
-        metric: How far apart two sequences are held to be. `DLD` is also used by per-prefix
-            similarities, and
-            `BIGRAM` holds a dense row over the bigrams both sets hold, so it is intended for
-            small sets of draws.
+        metric: Activity distance. DLD includes a shared terminal token in normalization.
+            BIGRAM uses dense counts over the pairs present in these samples.
         dtype: What to accumulate in. Use `np.float64` when accumulating score terms.
+
     Returns:
         `[len(queries), len(choices)]`, holding the distance of each pair in `[0, 1]`.
     """
@@ -151,6 +130,30 @@ def distances(
     return np.subtract(1.0, similarities, out=similarities)
 
 
+def energy_score(*, truth_sum: float, pair_sum: float, draws: float) -> float:
+    """Reduce distance sums to the fair finite-sample energy score.
+
+    Args:
+        truth_sum: Sum of distances from every draw to the observation.
+        pair_sum: Sum of distances over ordered pairs of distinct draws. Folded
+            samples contribute their multiplicities, not normalized weights.
+        draws: Total draw count, including repeated samples.
+
+    Returns:
+        Mean distance to truth minus the diversity correction. A singleton has no
+        correction. The fair estimate can be negative.
+
+    Raises:
+        ValueError: If the draw count is not positive.
+    """
+    if draws <= 0:
+        raise ValueError('energy score requires a positive draw count.')
+    accuracy = truth_sum / draws
+    if draws > 1:
+        return accuracy - pair_sum / (2.0 * draws * (draws - 1.0))
+    return accuracy
+
+
 def sequence_energy_score(
     sequences: Sequence[Sequence[Hashable]],
     truth: Sequence[Hashable],
@@ -160,8 +163,15 @@ def sequence_energy_score(
 ) -> float:
     """Return fair sequence energy score, preserving folded draw multiplicities.
 
-    Weights count draws of each sequence. Empty samples score 1.0, the worst distance
-    to truth for these bounded sequence distances.
+    Args:
+        sequences: Sampled activity sequences, optionally folded into distinct suffixes.
+        truth: Observed activity sequence.
+        weights: Draw multiplicity for each sequence; defaults to one draw per sequence.
+        metric: Bounded activity distance used for truth and pairwise comparisons.
+
+    Returns:
+        Fair energy score accumulated in float64. Empty samples or a nonpositive total
+        weight return 1.0. A singleton has no diversity correction.
     """
     if not len(sequences):
         return 1.0
@@ -185,3 +195,61 @@ def sequence_energy_score(
         pair_sum=float(counts @ pairs[:, :-1] @ counts),
         draws=float(draws),
     )
+
+
+def crps(draws: np.ndarray, truth: np.ndarray) -> float:
+    """Return mean fair CRPS over columns using sorted absolute-distance sums.
+
+    Args:
+        draws: Numeric samples shaped [S, D], with repeated draws retained.
+        truth: Observed quantities shaped [D], in the same units as the samples.
+
+    Returns:
+        Fair absolute-distance energy score averaged over D quantities, in the input
+        units. Returns zero with no draws or columns. A singleton gives absolute error.
+    """
+    count, columns = draws.shape
+    if count == 0 or columns == 0:
+        return 0.0
+    truth_sum = float(np.abs(draws - truth).sum(axis=0).mean())
+    ordered = np.sort(draws, axis=0)
+    ranks = np.arange(count, dtype=np.float64)[:, None]
+    spread = ((2.0 * ranks - count + 1.0) * ordered).sum(axis=0)
+    return energy_score(truth_sum=truth_sum, pair_sum=2.0 * float(spread.mean()), draws=count)
+
+
+def mae(draws: np.ndarray, truth: np.ndarray) -> float:
+    """Return mean absolute error over draws and predicted quantities.
+
+    Args:
+        draws: Numeric samples shaped [S, D], with repeated draws retained.
+        truth: Observed quantities shaped [D], in the same units as the samples.
+
+    Returns:
+        Absolute error averaged over draws and quantities, or zero if either axis is empty.
+    """
+    count, columns = draws.shape
+    if count == 0 or columns == 0:
+        return 0.0
+    return float(np.abs(draws - truth).mean())
+
+
+def coverage_gap(draws: np.ndarray, truth: np.ndarray, *, level: float) -> float:
+    """Return empirical minus nominal central-interval coverage.
+
+    Args:
+        draws: Numeric samples shaped [S, D], with repeated draws retained.
+        truth: Observed quantities shaped [D].
+        level: Nominal central-interval probability between zero and one.
+
+    Returns:
+        Share of observed quantities within the inclusive quantile bounds minus level.
+        Returns zero with no columns, or negative level with columns but no draws.
+    """
+    count, columns = draws.shape
+    if columns == 0:
+        return 0.0
+    if count == 0:
+        return -level
+    low, high = np.quantile(draws, [(1.0 - level) / 2.0, (1.0 + level) / 2.0], axis=0)
+    return float(((low <= truth) & (truth <= high)).mean()) - level

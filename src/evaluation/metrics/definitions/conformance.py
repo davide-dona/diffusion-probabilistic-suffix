@@ -1,8 +1,8 @@
 from collections.abc import Sequence
 
-from src.evaluation.metrics.definitions import Direction, MetricGroup, Owner, Unit
-from src.evaluation.metrics.prepared import PreparedPrefix
+from src.evaluation.metrics.metadata import Direction, MetricGroup, Owner, Unit
 from src.evaluation.metrics.registry import METRICS
+from src.evaluation.prepared import PreparedPrefix
 
 
 def _sample_mean(context: PreparedPrefix, values: Sequence[float]) -> float:
@@ -20,7 +20,14 @@ def _sample_mean(context: PreparedPrefix, values: Sequence[float]) -> float:
     direction=Direction.HIGHER,
 )
 def conformance_sample_mean(context: PreparedPrefix) -> float:
-    """Return the draw-weighted mean share of satisfied constraints."""
+    """Return the draw-weighted mean share of satisfied constraints.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The draw-weighted mean share of satisfied constraints. No sampled draws score zero.
+    """
     return _sample_mean(context, [check.share for check in context.sample_conformance])
 
 
@@ -32,7 +39,14 @@ def conformance_sample_mean(context: PreparedPrefix) -> float:
     owner=Owner.LOG,
 )
 def conformance_observed(context: PreparedPrefix) -> float:
-    """Return the satisfied-constraint share of the observed continuation."""
+    """Return the satisfied-constraint share of the observed continuation.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The satisfied-constraint share of the observed continuation.
+    """
     return context.observed_conformance.share
 
 
@@ -44,7 +58,15 @@ def conformance_observed(context: PreparedPrefix) -> float:
     direction=Direction.HIGHER,
 )
 def full_conformance_sample_rate(context: PreparedPrefix) -> float:
-    """Return the draw-weighted rate of fully conformant sampled suffixes."""
+    """Return the draw-weighted rate of fully conformant sampled suffixes.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The draw-weighted rate of fully conformant sampled suffixes. No sampled draws score
+        zero.
+    """
     return _sample_mean(context, [check.full for check in context.sample_conformance])
 
 
@@ -56,5 +78,12 @@ def full_conformance_sample_rate(context: PreparedPrefix) -> float:
     owner=Owner.LOG,
 )
 def full_conformance_observed(context: PreparedPrefix) -> float:
-    """Return whether the observed continuation fully conforms."""
+    """Return whether the observed continuation fully conforms.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        Whether the observed continuation fully conforms.
+    """
     return context.observed_conformance.full

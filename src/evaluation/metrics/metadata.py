@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from src.evaluation.metrics.prepared import PreparedPrefix
+from src.evaluation.prepared import PreparedPrefix
 
 type MetricCompute = Callable[[PreparedPrefix], float]
 
@@ -18,12 +18,21 @@ class Unit(StrEnum):
 
     @property
     def symbol(self) -> str:
-        """Return the suffix written after a metric label."""
+        """Return the suffix written after a metric label.
+
+        Returns:
+            The unit name for days and events, or an empty string for dimensionless values.
+        """
         return '' if self in (Unit.SHARE, Unit.SCORE, Unit.COUNT) else str(self)
 
     @property
     def bounds(self) -> tuple[float | None, float | None]:
-        """Return fixed display bounds, leaving data-dependent sides open."""
+        """Return fixed display bounds, leaving data-dependent sides open.
+
+        Returns:
+            Lower and upper bounds; None leaves that side open. Shares use [0, 1], scores
+            leave both sides open, and counts, days, and events have a zero lower bound.
+        """
         if self is Unit.SHARE:
             return 0.0, 1.0
         if self is Unit.SCORE:
@@ -58,7 +67,12 @@ class MetricGroup(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Metric:
-    """One evaluation value and the function that computes it for a prefix."""
+    """One evaluation value and the function that computes it for a prefix.
+
+    The key identifies report fields and artifact columns. Unit and direction control
+    presentation and comparison; owner distinguishes model scores from log references.
+    Diagnostic metrics are available during validation but excluded from final reports.
+    """
 
     key: str
     label: str

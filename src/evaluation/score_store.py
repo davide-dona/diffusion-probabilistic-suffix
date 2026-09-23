@@ -30,7 +30,22 @@ def stream_prefix_scores(
     path: Path,
     metadata: dict[str, str],
 ) -> Iterator[PrefixSummary]:
-    """Write per-prefix scores while yielding the original summaries."""
+    """Write per-prefix scores while yielding the original summaries.
+
+    Args:
+        summaries: Scores in the same prefix order as keys, consumed once.
+        keys: Case identifier and prefix length for each summary.
+        path: Parquet destination in an existing directory, replacing any existing file.
+        metadata: Artifact provenance stored with the score schema.
+
+    Yields:
+        Each input summary unchanged. Consume the iterator fully to flush all buffered rows
+        and finish the file; closing an unfinished iterator removes the partial destination.
+
+    Raises:
+        ValueError: If the summary and key counts differ. Failures during writing remove
+            the destination before propagating the error.
+    """
     columns: dict[str, list[str | int | float]] = {name: [] for name in _PREFIX_SCORE_SCHEMA.names}
 
     def flush(writer: pq.ParquetWriter) -> None:
@@ -60,7 +75,15 @@ def stream_prefix_scores(
 
 
 def require_columns(path: Path, columns: Sequence[str]) -> None:
-    """Require the requested columns in a score file's schema."""
+    """Require the requested columns in a score file's schema.
+
+    Args:
+        path: Parquet score file to inspect.
+        columns: Required column names; additional columns are allowed.
+
+    Raises:
+        ValueError: If any requested column is missing.
+    """
     available = set(pq.read_schema(where=path).names)
     absent = [key for key in columns if key not in available]
     if absent:
@@ -68,14 +91,37 @@ def require_columns(path: Path, columns: Sequence[str]) -> None:
 
 
 def read_prefix_scores(path: Path, *, columns: Sequence[str] | None = None) -> pd.DataFrame:
-    """Read report columns by default, or explicitly selected per-prefix score columns."""
+    """Read report columns by default, or explicitly selected per-prefix score columns.
+
+    Args:
+        path: Parquet score file to read.
+        columns: Requested columns in output order. Defaults to prefix identifiers, lengths,
+            and registered report metrics; historical diagnostic columns are not required.
+
+    Returns:
+        Selected columns as a dataframe, retaining the stored row order.
+
+    Raises:
+        ValueError: If a requested column is missing.
+    """
     wanted = list((*PREFIX_SCORE_KEYS, *METRICS.report) if columns is None else columns)
     require_columns(path, wanted)
     return pq.read_table(source=path, columns=wanted).to_pandas()
 
 
 def score_files(reports: Sequence[Path]) -> dict[str, dict[str, Path]]:
-    """Find score files beside reports and group them by dataset."""
+    """Find score files beside reports and group them by dataset.
+
+    Args:
+        reports: Report paths with an adjacent prefix_scores.parquet file for each run.
+
+    Returns:
+        Dataset names mapped to model names and their score paths, validated for report
+        columns and artifact provenance.
+
+    Raises:
+        ValueError: If score files are missing or invalid, or a dataset repeats a model.
+    """
     files = [(report, report.with_name('prefix_scores.parquet')) for report in reports]
     missing = [str(report) for report, scores in files if not scores.exists()]
     if missing:

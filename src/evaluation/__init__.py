@@ -1,3 +1,4 @@
+from src.evaluation.prepared import PreparedPrefix
 from src.evaluation.reports import REPORT_COLUMNS, Axis, EvaluationReport, read_reports
 from src.evaluation.score_store import (
     BLOCK,
@@ -25,6 +26,7 @@ __all__ = [
     'EvaluationSummary',
     'LengthSummary',
     'PrefixSummary',
+    'PreparedPrefix',
     'ScoreGroups',
     'Summarized',
     'flatten_scores',

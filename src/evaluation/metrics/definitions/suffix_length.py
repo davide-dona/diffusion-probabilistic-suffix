@@ -1,7 +1,7 @@
-from src.evaluation.metrics.definitions import Direction, MetricGroup, Unit
-from src.evaluation.metrics.helpers.statistics import coverage_gap, crps, mae
-from src.evaluation.metrics.prepared import PreparedPrefix
+from src.evaluation.helpers import coverage_gap, crps, mae
+from src.evaluation.metrics.metadata import Direction, MetricGroup, Unit
 from src.evaluation.metrics.registry import METRICS
+from src.evaluation.prepared import PreparedPrefix
 
 
 @METRICS.register(
@@ -13,7 +13,14 @@ from src.evaluation.metrics.registry import METRICS
     direction=Direction.LOWER,
 )
 def suffix_length_mae(context: PreparedPrefix) -> float:
-    """Return the sampled suffix-length mean absolute error."""
+    """Return the sampled suffix-length mean absolute error.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The sampled suffix-length mean absolute error. No sampled draws score zero.
+    """
     return mae(context.suffix_lengths, context.true_suffix_length)
 
 
@@ -25,7 +32,14 @@ def suffix_length_mae(context: PreparedPrefix) -> float:
     direction=Direction.LOWER,
 )
 def suffix_length_crps(context: PreparedPrefix) -> float:
-    """Return the sampled suffix-length CRPS."""
+    """Return the sampled suffix-length CRPS.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The sampled suffix-length CRPS. No draws or predicted quantities score zero.
+    """
     return crps(context.suffix_lengths, context.true_suffix_length)
 
 
@@ -37,7 +51,15 @@ def suffix_length_crps(context: PreparedPrefix) -> float:
     direction=Direction.ZERO,
 )
 def suffix_length_coverage_gap_50(context: PreparedPrefix) -> float:
-    """Return the 50% suffix-length central-interval coverage gap."""
+    """Return the 50% suffix-length central-interval coverage gap.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The 50% suffix-length central-interval coverage gap. No draws give negative nominal
+        coverage; no quantities give zero.
+    """
     return coverage_gap(context.suffix_lengths, context.true_suffix_length, level=0.50)
 
 
@@ -49,7 +71,15 @@ def suffix_length_coverage_gap_50(context: PreparedPrefix) -> float:
     direction=Direction.ZERO,
 )
 def suffix_length_coverage_gap_75(context: PreparedPrefix) -> float:
-    """Return the 75% suffix-length central-interval coverage gap."""
+    """Return the 75% suffix-length central-interval coverage gap.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The 75% suffix-length central-interval coverage gap. No draws give negative nominal
+        coverage; no quantities give zero.
+    """
     return coverage_gap(context.suffix_lengths, context.true_suffix_length, level=0.75)
 
 
@@ -61,5 +91,13 @@ def suffix_length_coverage_gap_75(context: PreparedPrefix) -> float:
     direction=Direction.ZERO,
 )
 def suffix_length_coverage_gap_95(context: PreparedPrefix) -> float:
-    """Return the 95% suffix-length central-interval coverage gap."""
+    """Return the 95% suffix-length central-interval coverage gap.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The 95% suffix-length central-interval coverage gap. No draws give negative nominal
+        coverage; no quantities give zero.
+    """
     return coverage_gap(context.suffix_lengths, context.true_suffix_length, level=0.95)

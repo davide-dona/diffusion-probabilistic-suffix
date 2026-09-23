@@ -1,7 +1,7 @@
-from src.evaluation.metrics.definitions import Direction, MetricGroup, Unit
-from src.evaluation.metrics.helpers.activity import SuffixMetric, sequence_energy_score
-from src.evaluation.metrics.prepared import PreparedPrefix
+from src.evaluation.helpers import SuffixMetric, sequence_energy_score
+from src.evaluation.metrics.metadata import Direction, MetricGroup, Unit
 from src.evaluation.metrics.registry import METRICS
+from src.evaluation.prepared import PreparedPrefix
 
 
 @METRICS.register(
@@ -13,7 +13,15 @@ from src.evaluation.metrics.registry import METRICS
     direction=Direction.HIGHER,
 )
 def dls_sample_mean(context: PreparedPrefix) -> float:
-    """Return the draw-weighted DLS similarity of activity suffix samples."""
+    """Return the draw-weighted DLS similarity of activity suffix samples.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The draw-weighted DLS similarity of activity suffix samples. No sampled draws score
+        zero.
+    """
     samples = context.generation.samples
     draws = len(samples)
     return (
@@ -31,7 +39,15 @@ def dls_sample_mean(context: PreparedPrefix) -> float:
     direction=Direction.LOWER,
 )
 def energy_score_dls(context: PreparedPrefix) -> float:
-    """Return the sampled activity energy score on normalized DLS distance."""
+    """Return the sampled activity energy score on normalized DLS distance.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The sampled activity energy score on normalized DLS distance. Empty samples score
+        1.0; a singleton has no diversity correction.
+    """
     samples, truth = context.generation.samples, context.generation.truth
     return sequence_energy_score(
         samples.suffixes, truth.activities, weights=samples.counts, metric=SuffixMetric.DLD
@@ -46,7 +62,15 @@ def energy_score_dls(context: PreparedPrefix) -> float:
     direction=Direction.LOWER,
 )
 def energy_score_exact(context: PreparedPrefix) -> float:
-    """Return the sampled activity energy score on exact-match distance."""
+    """Return the sampled activity energy score on exact-match distance.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The sampled activity energy score on exact-match distance. Empty samples score 1.0;
+        a singleton has no diversity correction.
+    """
     samples, truth = context.generation.samples, context.generation.truth
     return sequence_energy_score(
         samples.suffixes, truth.activities, weights=samples.counts, metric=SuffixMetric.EXACT
@@ -61,7 +85,15 @@ def energy_score_exact(context: PreparedPrefix) -> float:
     direction=Direction.LOWER,
 )
 def energy_score_bigram(context: PreparedPrefix) -> float:
-    """Return the sampled activity energy score on bigram distance."""
+    """Return the sampled activity energy score on bigram distance.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The sampled activity energy score on bigram distance. Empty samples score 1.0; a
+        singleton has no diversity correction.
+    """
     samples, truth = context.generation.samples, context.generation.truth
     return sequence_energy_score(
         samples.suffixes, truth.activities, weights=samples.counts, metric=SuffixMetric.BIGRAM

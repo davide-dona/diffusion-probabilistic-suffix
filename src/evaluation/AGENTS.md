@@ -8,10 +8,20 @@ suffixes. Metrics operate per prefix first, then reports average prefixes with e
 - `scoring.py` owns immutable score records, prefix scoring, and aggregation.
 - `reports.py` owns JSON reports and the dataframe view used by visualization.
 - `score_store.py` owns streaming Parquet writes, score readers, and adjacent-file discovery.
-- `metrics/` owns preparation, ordered metric declarations, and numerical helpers.
+- `prepared.py` owns the shared per-prefix arrays and conformance checks.
+- `helpers.py` owns activity distances and numerical scoring operations, including the shared
+  fair energy-score reduction used by sequence energy scores and CRPS.
+- `metrics/metadata.py` defines metric records, groups, units, owners, and ranking directions.
+- `metrics/registry.py` owns ordered registration and report/diagnostic selection.
+- `metrics/definitions/` contains the registered activity, conformance, suffix-length, and time
+  metrics. Importing `metrics` registers these groups in that order.
 
 Import shared operations from `src.evaluation`; metric declarations remain under
-`src.evaluation.metrics`.
+`src.evaluation.metrics`. Keep package initializers limited to imports and exports.
+
+Public operations use a concise summary followed by `Args`, `Returns` or `Yields`, and explicit
+contract errors under `Raises` where applicable. Document array shapes, units, draw multiplicities,
+and empty-input behavior where they affect the result; keep private documentation brief.
 
 ## Input and Preparation
 
@@ -40,7 +50,9 @@ sampled time sequences are truncated or zero-padded to that width during prepara
 
 Declare checks evaluate the full trace formed by prefix plus suffix against constraints mined from
 the training split. Observed conformance metrics belong to the log and have no model ranking
-direction.
+direction. Training validation logs only model-owned report and diagnostic metrics to W&B.
+Log-owned metrics are still computed during validation and remain in report scores, JSON reports,
+and Parquet columns; ownership filtering applies only to metric logging.
 
 Metric registration order is part of report and Parquet column order. A new metric requires a
 unique stable key, label, group, unit, owner, direction, compute function, visualization handling,

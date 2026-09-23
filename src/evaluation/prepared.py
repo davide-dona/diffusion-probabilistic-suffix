@@ -5,7 +5,7 @@ from typing import Self
 
 import numpy as np
 
-from src.evaluation.metrics.helpers.activity import sequence_similarity
+from src.evaluation.helpers import sequence_similarity
 from src.inference.generation import Generation
 from src.logs.declare import ConformanceChecker
 from src.logs.declare.checker import Conformance
@@ -13,7 +13,13 @@ from src.logs.declare.checker import Conformance
 
 @dataclass(frozen=True, slots=True)
 class PreparedPrefix:
-    """Decoded values and constraint checks shared by every metric for one prefix."""
+    """Decoded values and constraint checks shared by every metric for one prefix.
+
+    Similarities and sample conformance follow distinct suffix order; generation sample
+    counts give their draw multiplicities. Numeric arrays retain every draw: suffix lengths
+    and remaining times have shape [S, 1], and inter-event times have shape [S, T], where T
+    is the observed suffix length. Truth arrays have shape [1] or [T]. Times are in minutes.
+    """
 
     generation: Generation
     similarities: tuple[float, ...]
@@ -28,7 +34,16 @@ class PreparedPrefix:
 
     @classmethod
     def of(cls, generation: Generation, *, checker: ConformanceChecker) -> Self:
-        """Prepare the shared draw and observation arrays for one prefix."""
+        """Prepare the shared draw and observation arrays for one prefix.
+
+        Args:
+            generation: Decoded prefix, sampled suffixes, and observed continuation.
+            checker: Declare checker applied to the full prefix plus each suffix.
+
+        Returns:
+            Shared metric inputs, with inter-event times truncated or zero-padded to the
+            observed suffix length and numeric arrays stored in float64.
+        """
         samples = generation.samples
         truth = generation.truth
         draws = len(samples)
@@ -69,5 +84,13 @@ class PreparedPrefix:
 
 
 def aligned_inter_event_times(predicted: Sequence[float], *, length: int) -> list[float]:
-    """Pad or truncate inter-event times to the observed suffix length."""
+    """Pad or truncate inter-event times to the observed suffix length.
+
+    Args:
+        predicted: Sampled inter-event times in minutes.
+        length: Nonnegative number of observed suffix events.
+
+    Returns:
+        Exactly length values, retaining leading times and filling missing events with zero.
+    """
     return list(islice(chain(predicted, repeat(0.0)), length))
