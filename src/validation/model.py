@@ -1,3 +1,5 @@
+import math
+
 from omegaconf import DictConfig
 
 from src.validation.primitives import validate_identifier, validate_number
@@ -32,20 +34,24 @@ def validate_model(model: DictConfig) -> None:
         r'[a-z0-9][a-z0-9_]*',
         'lowercase letters, digits, and underscores',
     )
-    if model.kind not in {'head_sampling_transformer', 'diffusion_transformer'}:
+    if model.kind not in {'head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran'}:
         raise ValueError(f'Unknown model kind: {model.kind}')
 
     validate_number(model.d_model, 'model.d_model', integer=True)
     for key, value in model.embeddings.items():
         validate_number(value, f'model.embeddings.{key}', integer=True)
 
-    if model.kind == 'head_sampling_transformer':
-        _validate_head_sampling_transformer(model)
+    if model.kind in {'head_sampling_transformer', 'u_ed_sutran'}:
+        _validate_sutran(model)
+        if model.kind == 'head_sampling_transformer':
+            validate_sampling(model.sampling)
+        else:
+            _validate_uncertainty(model)
     else:
         _validate_diffusion_transformer(model)
 
 
-def _validate_head_sampling_transformer(model: DictConfig) -> None:
+def _validate_sutran(model: DictConfig) -> None:
     for name in ('encoder', 'decoder'):
         section = model[name]
 
@@ -62,7 +68,30 @@ def _validate_head_sampling_transformer(model: DictConfig) -> None:
 
     validate_number(model.decoder.head_hidden_dim, 'model.decoder.head_hidden_dim', integer=True)
 
-    validate_sampling(model.sampling)
+
+def _validate_uncertainty(model: DictConfig) -> None:
+    if 'sampling' in model:
+        raise ValueError('u_ed_sutran does not support sampler tuning or sampling controls')
+    config = model.uncertainty
+    expected = {'log_variance_min', 'log_variance_max', 'categorical_samples', 'validation_seed'}
+    if set(config) != expected:
+        raise ValueError(f'model.uncertainty must contain exactly {sorted(expected)}')
+    for key in ('log_variance_min', 'log_variance_max'):
+        value = config[key]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (float, int))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f'model.uncertainty.{key} must be finite')
+    if config.log_variance_min >= config.log_variance_max:
+        raise ValueError('model.uncertainty.log_variance_min must be below log_variance_max')
+    validate_number(
+        config.categorical_samples, 'model.uncertainty.categorical_samples', integer=True
+    )
+    validate_number(
+        config.validation_seed, 'model.uncertainty.validation_seed', integer=True, inclusive=True
+    )
 
 
 def _validate_diffusion_transformer(model: DictConfig) -> None:

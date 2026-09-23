@@ -86,7 +86,13 @@ Choose the dataset and architecture independently:
 uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
-Available architectures are `head_sampling_transformer` and `diffusion_transformer`. Training
+Available architectures are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
+(U-ED-SuTraN), and `diffusion_transformer`. U-ED-SuTraN shares SuTraN-PH's encoder and causal
+decoder, adding MC dropout and learned activity-logit and time variances. Its defaults use 20
+categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
+`model.uncertainty`. Both SuTraN models train on complete suffixes with activity-only decoder inputs.
+Validation uses isolated seeded draws and selects checkpoints by the existing generation metric.
+Training
 writes the best validation checkpoint to
 `outputs/train/<dataset>/<model>/<run-id>/best.pt`. Runs cannot be resumed, but an interrupted run
 retains its last successfully saved best checkpoint.
@@ -105,6 +111,9 @@ uv run python -m pipelines.tune checkpoint=/path/to/best.pt device=cpu
 The selected sampler and full search are written to
 `outputs/tune/<dataset>/<model>/<run-id>/tuning.json`. The same directory contains `tuned.pt`, a
 self-contained checkpoint required for Head-sampling Transformer generation.
+
+U-ED-SuTraN samples its learned distribution directly. It does not support temperature or top-p
+tuning, and its `best.pt` can be used for generation without this stage.
 
 ### 4. Inference
 

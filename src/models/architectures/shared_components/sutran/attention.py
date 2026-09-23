@@ -25,7 +25,7 @@ class MultiHeadAttention(nn.Module):
     runs once and its result is reused for each step.
     """
 
-    def __init__(self, *, d_model: int, num_heads: int, dropout: float):
+    def __init__(self, *, d_model: int, num_heads: int, dropout: float) -> None:
         """Build the query, key, value, and output projections."""
         super().__init__()
         self.num_heads = num_heads
@@ -94,7 +94,7 @@ class MultiHeadAttention(nn.Module):
         )  # [batch_size, num_heads, query_len, head_dim]
 
         merged = attended.transpose(dim0=1, dim1=2).reshape(
-            batch_size, query_len, d_model
+            (batch_size, query_len, d_model)
         )  # [B, H, T, Dh] -> [B, T, D]
         return self.output_projection(merged)  # [B, T, D]
 
@@ -102,6 +102,6 @@ class MultiHeadAttention(nn.Module):
         """`[batch_size, length, d_model]` -> `[batch_size, num_heads, length, head_dim]`,
         giving each head its own slice of the embedding dimension."""
         batch_size, length, _ = projected.shape
-        return projected.view(batch_size, length, self.num_heads, self.head_dim).transpose(
+        return projected.view((batch_size, length, self.num_heads, self.head_dim)).transpose(
             dim0=1, dim1=2
         )  # [B, T, D] -> [B, H, T, Dh]

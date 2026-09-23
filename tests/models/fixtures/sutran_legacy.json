@@ -1,0 +1,423 @@
+{
+  "state_shapes": {
+    "embeddings.content.activity_embedding.weight": [
+      6,
+      4
+    ],
+    "embeddings.content.resource_embedding.weight": [
+      4,
+      4
+    ],
+    "embeddings.content.projection.weight": [
+      8,
+      9
+    ],
+    "embeddings.content.projection.bias": [
+      8
+    ],
+    "encoder.cls_token": [
+      1,
+      1,
+      8
+    ],
+    "encoder.embeddings.content.activity_embedding.weight": [
+      6,
+      4
+    ],
+    "encoder.embeddings.content.resource_embedding.weight": [
+      4,
+      4
+    ],
+    "encoder.embeddings.content.projection.weight": [
+      8,
+      9
+    ],
+    "encoder.embeddings.content.projection.bias": [
+      8
+    ],
+    "encoder.embedding_norm.weight": [
+      8
+    ],
+    "encoder.embedding_norm.bias": [
+      8
+    ],
+    "encoder.encoder.layers.0.self_attn.in_proj_weight": [
+      24,
+      8
+    ],
+    "encoder.encoder.layers.0.self_attn.in_proj_bias": [
+      24
+    ],
+    "encoder.encoder.layers.0.self_attn.out_proj.weight": [
+      8,
+      8
+    ],
+    "encoder.encoder.layers.0.self_attn.out_proj.bias": [
+      8
+    ],
+    "encoder.encoder.layers.0.linear1.weight": [
+      16,
+      8
+    ],
+    "encoder.encoder.layers.0.linear1.bias": [
+      16
+    ],
+    "encoder.encoder.layers.0.linear2.weight": [
+      8,
+      16
+    ],
+    "encoder.encoder.layers.0.linear2.bias": [
+      8
+    ],
+    "encoder.encoder.layers.0.norm1.weight": [
+      8
+    ],
+    "encoder.encoder.layers.0.norm1.bias": [
+      8
+    ],
+    "encoder.encoder.layers.0.norm2.weight": [
+      8
+    ],
+    "encoder.encoder.layers.0.norm2.bias": [
+      8
+    ],
+    "encoder.encoder.norm.weight": [
+      8
+    ],
+    "encoder.encoder.norm.bias": [
+      8
+    ],
+    "decoder.embeddings.content.activity_embedding.weight": [
+      6,
+      4
+    ],
+    "decoder.embeddings.content.resource_embedding.weight": [
+      4,
+      4
+    ],
+    "decoder.embeddings.content.projection.weight": [
+      8,
+      9
+    ],
+    "decoder.embeddings.content.projection.bias": [
+      8
+    ],
+    "decoder.embedding_norm.weight": [
+      8
+    ],
+    "decoder.embedding_norm.bias": [
+      8
+    ],
+    "decoder.layers.0.self_attention.query_projection.weight": [
+      8,
+      8
+    ],
+    "decoder.layers.0.self_attention.query_projection.bias": [
+      8
+    ],
+    "decoder.layers.0.self_attention.key_projection.weight": [
+      8,
+      8
+    ],
+    "decoder.layers.0.self_attention.key_projection.bias": [
+      8
+    ],
+    "decoder.layers.0.self_attention.value_projection.weight": [
+      8,
+      8
+    ],
+    "decoder.layers.0.self_attention.value_projection.bias": [
+      8
+    ],
+    "decoder.layers.0.self_attention.output_projection.weight": [
+      8,
+      8
+    ],
+    "decoder.layers.0.self_attention.output_projection.bias": [
+      8
+    ],
+    "decoder.layers.0.cross_attention.query_projection.weight": [
+      8,
+      8
+    ],
+    "decoder.layers.0.cross_attention.query_projection.bias": [
+      8
+    ],
+    "decoder.layers.0.cross_attention.key_projection.weight": [
+      8,
+      8
+    ],
+    "decoder.layers.0.cross_attention.key_projection.bias": [
+      8
+    ],
+    "decoder.layers.0.cross_attention.value_projection.weight": [
+      8,
+      8
+    ],
+    "decoder.layers.0.cross_attention.value_projection.bias": [
+      8
+    ],
+    "decoder.layers.0.cross_attention.output_projection.weight": [
+      8,
+      8
+    ],
+    "decoder.layers.0.cross_attention.output_projection.bias": [
+      8
+    ],
+    "decoder.layers.0.feedforward.0.weight": [
+      16,
+      8
+    ],
+    "decoder.layers.0.feedforward.0.bias": [
+      16
+    ],
+    "decoder.layers.0.feedforward.3.weight": [
+      8,
+      16
+    ],
+    "decoder.layers.0.feedforward.3.bias": [
+      8
+    ],
+    "decoder.layers.0.self_attention_norm.weight": [
+      8
+    ],
+    "decoder.layers.0.self_attention_norm.bias": [
+      8
+    ],
+    "decoder.layers.0.cross_attention_norm.weight": [
+      8
+    ],
+    "decoder.layers.0.cross_attention_norm.bias": [
+      8
+    ],
+    "decoder.layers.0.feedforward_norm.weight": [
+      8
+    ],
+    "decoder.layers.0.feedforward_norm.bias": [
+      8
+    ],
+    "decoder.norm.weight": [
+      8
+    ],
+    "decoder.norm.bias": [
+      8
+    ],
+    "decoder.shared_layer.0.weight": [
+      8,
+      8
+    ],
+    "decoder.shared_layer.0.bias": [
+      8
+    ],
+    "decoder.activity_head.weight": [
+      6,
+      8
+    ],
+    "decoder.activity_head.bias": [
+      6
+    ],
+    "decoder.inter_event_time_head.weight": [
+      1,
+      8
+    ],
+    "decoder.inter_event_time_head.bias": [
+      1
+    ]
+  },
+  "initial_state_sha256": "ef08cd2064b800e3403a8b7cc578ca93a4e97cb302e7b2a83093a5636fb34e60",
+  "outputs": {
+    "logits": [
+      [
+        [
+          0.24291998147964478,
+          -0.43216365575790405,
+          -0.3391820192337036,
+          0.08838212490081787,
+          0.1546468436717987,
+          -0.08072169125080109
+        ],
+        [
+          0.22067362070083618,
+          -0.3913412094116211,
+          -0.2846521735191345,
+          0.05094456672668457,
+          0.20924082398414612,
+          -0.08504413068294525
+        ],
+        [
+          0.060828715562820435,
+          -0.45621928572654724,
+          -0.18937191367149353,
+          0.09427723288536072,
+          0.1820182204246521,
+          -0.06902803480625153
+        ],
+        [
+          0.0062239766120910645,
+          -0.4337865710258484,
+          -0.16117852926254272,
+          0.05944541096687317,
+          0.17182692885398865,
+          -0.0460083931684494
+        ]
+      ],
+      [
+        [
+          0.2944209575653076,
+          -0.3773631155490875,
+          -0.39383944869041443,
+          0.07261419296264648,
+          0.1613108366727829,
+          -0.07281078398227692
+        ],
+        [
+          0.19475790858268738,
+          -0.5607247948646545,
+          -0.3927001655101776,
+          0.1620309054851532,
+          0.1358724981546402,
+          -0.058821603655815125
+        ],
+        [
+          0.08884835243225098,
+          -0.4156944155693054,
+          -0.22306233644485474,
+          0.08056645095348358,
+          0.2137632817029953,
+          -0.06505341827869415
+        ],
+        [
+          -0.00877290964126587,
+          -0.3920052647590637,
+          -0.13001582026481628,
+          0.054804444313049316,
+          0.1798197627067566,
+          -0.050099536776542664
+        ]
+      ]
+    ],
+    "times": [
+      [
+        0.18908372521400452,
+        0.12394097447395325,
+        0.1348649114370346,
+        0.13633206486701965
+      ],
+      [
+        0.22798770666122437,
+        0.22696085274219513,
+        0.09077656269073486,
+        0.10923627763986588
+      ]
+    ],
+    "loss": 1.2074388265609741,
+    "generated.activities": [
+      [
+        [
+          3,
+          5,
+          5,
+          4
+        ],
+        [
+          4,
+          3,
+          4,
+          3
+        ],
+        [
+          5,
+          1,
+          3,
+          5
+        ]
+      ],
+      [
+        [
+          3,
+          1,
+          4,
+          5
+        ],
+        [
+          5,
+          3,
+          4,
+          4
+        ],
+        [
+          5,
+          4,
+          5,
+          3
+        ]
+      ]
+    ],
+    "generated.lengths": [
+      [
+        4,
+        4,
+        1
+      ],
+      [
+        1,
+        4,
+        4
+      ]
+    ],
+    "generated.inter_event_times": [
+      [
+        [
+          1.454046368598938,
+          -1.696945071220398,
+          0.22047552466392517,
+          1.4337407350540161
+        ],
+        [
+          0.15554514527320862,
+          -1.6070101261138916,
+          1.3649120330810547,
+          0.05939469113945961
+        ],
+        [
+          1.0668954849243164,
+          0.6189111471176147,
+          0.7424185872077942,
+          -0.05110311508178711
+        ]
+      ],
+      [
+        [
+          -2.222123384475708,
+          0.63242506980896,
+          -1.258355975151062,
+          -0.5414981245994568
+        ],
+        [
+          1.2422518730163574,
+          0.15863144397735596,
+          -1.3421026468276978,
+          -1.7448397874832153
+        ],
+        [
+          0.9222556948661804,
+          -0.33955076336860657,
+          -0.08129486441612244,
+          -0.3560498058795929
+        ]
+      ]
+    ],
+    "generated.remaining_time": [
+      [
+        3.108262538909912,
+        1.5798518657684326,
+        1.0668954849243164
+      ],
+      [
+        0.0,
+        1.4008833169937134,
+        0.9222556948661804
+      ]
+    ]
+  }
+}

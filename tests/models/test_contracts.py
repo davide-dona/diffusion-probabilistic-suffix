@@ -7,7 +7,9 @@ from src.models import build_model
 from tests.conftest import model_config
 
 
-@pytest.mark.parametrize('name', ['head_sampling_transformer', 'diffusion_transformer'])
+@pytest.mark.parametrize(
+    'name', ['head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran']
+)
 # Checks that each model can produce finite loss and valid generated suffixes for a small batch.
 def test_model_smoke(name: str, codec: DatasetCodec, batch: TraceCut) -> None:
     model = build_model(config=model_config(name), codec=codec).eval()
@@ -28,7 +30,9 @@ def test_model_smoke(name: str, codec: DatasetCodec, batch: TraceCut) -> None:
     assert torch.isfinite(generated.remaining_time).all()
 
 
-@pytest.mark.parametrize('name', ['head_sampling_transformer', 'diffusion_transformer'])
+@pytest.mark.parametrize(
+    'name', ['head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran']
+)
 # Checks that loss gradients are present and finite for every model.
 def test_model_loss_backpropagates(name: str, codec: DatasetCodec, batch: TraceCut) -> None:
     model = build_model(config=model_config(name), codec=codec).train()
@@ -41,14 +45,23 @@ def test_model_loss_backpropagates(name: str, codec: DatasetCodec, batch: TraceC
     assert all(torch.isfinite(gradient).all() for gradient in gradients)
 
 
-@pytest.mark.parametrize('name', ['head_sampling_transformer', 'diffusion_transformer'])
+@pytest.mark.parametrize(
+    'name', ['head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran']
+)
 # Checks that generated suffixes do not depend on the ground-truth suffix supplied in the batch.
 def test_generation_reads_prefix_only(name: str, codec: DatasetCodec, batch: TraceCut) -> None:
     model = build_model(config=model_config(name), codec=codec).eval()
     changed_suffix = batch.suffix._replace(
-        activities=torch.full_like(batch.suffix.activities, fill_value=-1)
+        **{
+            name: torch.full_like(input=value, fill_value=-1)
+            for name, value in zip(batch.suffix._fields, batch.suffix, strict=True)
+        }
     )
-    changed_batch = batch._replace(suffix=changed_suffix)
+    changed_batch = batch._replace(
+        suffix=changed_suffix,
+        inter_event_times=torch.full_like(input=batch.inter_event_times, fill_value=float('nan')),
+        remaining_times=torch.full_like(input=batch.remaining_times, fill_value=float('nan')),
+    )
 
     torch.manual_seed(17)
     original = model.generate(batch, num_samples=2)
@@ -60,7 +73,9 @@ def test_generation_reads_prefix_only(name: str, codec: DatasetCodec, batch: Tra
     assert torch.equal(original.lengths, changed.lengths)
 
 
-@pytest.mark.parametrize('name', ['head_sampling_transformer', 'diffusion_transformer'])
+@pytest.mark.parametrize(
+    'name', ['head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran']
+)
 # Checks that categorical and numeric event features are embedded by every model.
 def test_event_features_embed_in_both_models(
     name: str, codec: DatasetCodec, batch: TraceCut

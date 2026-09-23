@@ -20,6 +20,8 @@ events before EOT, or the generated canvas length when no EOT appears.
 `DecoderOutput` holds activity logits `[B, T, V]` and standardized time predictions `[B, T]`.
 `DiffusionOutput` also carries the clean and noisy states, sampled timesteps, noise, and loss masks
 needed to evaluate one stochastic diffusion pass.
+`UncertaintyAwareDecoderOutput` carries Gaussian activity-logit means and log-variances `[B, T, V]`
+and standardized time means and log-variances `[B, T]`.
 
 ## Construction and Persistence
 
@@ -52,7 +54,7 @@ needed to evaluate one stochastic diffusion pass.
 | --- | --- | --- |
 | `diffusion_transformer` | [`architectures/diffusion_transformer/AGENTS.md`](architectures/diffusion_transformer/AGENTS.md) | Implemented main model |
 | `head_sampling_transformer` | [`architectures/head_sampling_transformer/AGENTS.md`](architectures/head_sampling_transformer/AGENTS.md) | Implemented SuTraN-PH baseline |
-| `u_ed_lstm` | [`architectures/u_ed_lstm/AGENTS.md`](architectures/u_ed_lstm/AGENTS.md) | Planned, not registered |
+| `u_ed_sutran` | [`architectures/u_ed_sutran/AGENTS.md`](architectures/u_ed_sutran/AGENTS.md) | Implemented uncertainty-aware SuTraN |
 
 Run `uv run pytest tests/models` after model interface, architecture, checkpoint, or configuration
 changes. Use the small fixtures and reduced diffusion steps in the tests. Do not start training.

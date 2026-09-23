@@ -91,10 +91,11 @@ and repeatedly:
 4. Samples the next activity from the resulting categorical distribution.
 5. Samples standardized time as `mean + epsilon`, with `epsilon ~ N(0,1)`.
 
-A row finishes when it samples EOT. EOT is replaced by PAD in the returned activity canvas and does
-not contribute a time. Unfinished rows stop at the maximum decoder steps, which equals the batch's
-padded prefix width, and are marked with `used_sentinel`. Finished rows receive standardized zero in
-unused time positions. Remaining time is derived from retained sampled durations.
+A row finishes when it samples EOT. Its length excludes EOT, and downstream decoding reads only
+positions before that length. Raw activity and time tensors retain EOT and subsequent sampled
+values; those durations do not contribute to remaining time. Unfinished rows stop at the maximum
+decoder steps, which equals the batch's padded prefix width. This baseline leaves `used_sentinel`
+unset. Preserve these raw tensor semantics for compatibility.
 
 Generation may read `TraceCut.prefix` only. Never use the true suffix for teacher forcing or stopping
 during sampling.
@@ -111,6 +112,10 @@ and Declare model. It selects the minimum activity DLS energy score. A tuning re
 generation only when both `RunIdentity` and checkpoint SHA-256 match.
 
 ## Configuration and Tests
+
+The encoder, embeddings, attention, causal decoder trunk, cache, and generation loop live in
+`shared_components/sutran` and are shared with U-ED-SuTraN. The local decoder owns baseline heads
+and sampler controls. Keep parameter registration paths and initialization order stable.
 
 `config/model/head_sampling_transformer.yaml` defines model and embedding widths, encoder and
 decoder depth, attention heads, feedforward sizes, dropout, teacher-forced activity dropout, shared

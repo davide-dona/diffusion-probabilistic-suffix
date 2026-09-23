@@ -75,7 +75,7 @@ def model_config(name: str) -> DictConfig:
     OmegaConf.update(config, 'embeddings.activity_dim', 4)
     OmegaConf.update(config, 'embeddings.resource_dim', 4)
     OmegaConf.update(config, 'embeddings.feature_dim', 4)
-    if name == 'head_sampling_transformer':
+    if name in {'head_sampling_transformer', 'u_ed_sutran'}:
         for section in ('encoder', 'decoder'):
             OmegaConf.update(config, f'{section}.num_layers', 1)
             OmegaConf.update(config, f'{section}.num_heads', 2)

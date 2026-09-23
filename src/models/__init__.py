@@ -7,10 +7,11 @@ from src.models.checkpoint import (
     save_checkpoint,
     save_tuned_checkpoint,
 )
-from src.models.contracts import ModelOutput
+from src.models.contracts import ModelOutput, UncertaintyAwareDecoderOutput
 from src.models.factory import (
     DiffusionTransformer,
     HeadSamplingTransformer,
+    UEDSuTraN,
     build_model,
     model_from_checkpoint,
 )
@@ -22,6 +23,8 @@ __all__ = [
     'SuffixModel',
     'HeadSamplingTransformer',
     'DiffusionTransformer',
+    'UEDSuTraN',
+    'UncertaintyAwareDecoderOutput',
     'build_model',
     'checkpoint_identity',
     'load_checkpoint',

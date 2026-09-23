@@ -36,4 +36,14 @@ class GeneratedSuffix:
     used_sentinel: torch.Tensor | None = None  # [...]
 
 
-ModelOutput = DecoderOutput | DiffusionOutput
+@dataclass(frozen=True)
+class UncertaintyAwareDecoderOutput:
+    """Gaussian activity-logit and standardized duration distributions at each position."""
+
+    activity_logit_means: torch.Tensor  # [B, T, V]
+    activity_log_variances: torch.Tensor  # [B, T, V]
+    inter_event_time_means: torch.Tensor  # [B, T]
+    inter_event_time_log_variances: torch.Tensor  # [B, T]
+
+
+ModelOutput = DecoderOutput | DiffusionOutput | UncertaintyAwareDecoderOutput

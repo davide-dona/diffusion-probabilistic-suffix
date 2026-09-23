@@ -30,6 +30,7 @@ MODELS = Registry[ModelStyle](
             label='Joint Diffusion Transformer', color='#2A7F9E', marker='^', linestyle='-'
         ),
         'u_ed_lstm': ModelStyle(label='U-ED-LSTM', color='#7A4E97', marker='s', linestyle='--'),
+        'u_ed_sutran': ModelStyle(label='U-ED-SuTraN', color='#57834B', marker='P', linestyle='--'),
     },
 )
 

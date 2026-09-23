@@ -13,7 +13,7 @@ from src.models.architectures.shared_components.embeddings import (
 class EventEmbeddings(nn.Module):
     """Add fixed positions to shared event content for the head sampling model."""
 
-    def __init__(self, config: DictConfig, codec: DatasetCodec, *, d_model: int):
+    def __init__(self, config: DictConfig, codec: DatasetCodec, *, d_model: int) -> None:
         """Build content embeddings and a positional encoding table."""
         super().__init__()
         self.content = EventContentEmbedding(config=config, codec=codec, d_model=d_model)

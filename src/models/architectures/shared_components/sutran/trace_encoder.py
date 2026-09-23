@@ -7,7 +7,7 @@ from omegaconf import DictConfig
 from torch import nn
 
 from src.datasets.dataset import Events
-from src.models.architectures.head_sampling_transformer.components.embeddings import (
+from src.models.architectures.shared_components.sutran.embeddings import (
     EventEmbeddings,
 )
 
@@ -30,7 +30,7 @@ class TraceEncoder(nn.Module):
     see only the `EncodedTrace` it comes back as.
     """
 
-    def __init__(self, config: DictConfig, embeddings: EventEmbeddings, *, d_model: int):
+    def __init__(self, config: DictConfig, embeddings: EventEmbeddings, *, d_model: int) -> None:
         """Build a prefix encoder with a learned summary token."""
         super().__init__()
         self.embeddings = embeddings
@@ -75,7 +75,7 @@ class TraceEncoder(nn.Module):
             self.dropout(self.embeddings(events))
         )  # [batch_size, seq_len, d_model]
 
-        cls_token = self.cls_token.expand(embedded.size(dim=0), -1, -1)  # [batch_size, 1, d_model]
+        cls_token = self.cls_token.expand((embedded.size(dim=0), -1, -1))  # [B, 1, D]
         sequence = torch.cat(
             tensors=(cls_token, embedded), dim=1
         )  # [batch_size, 1 + seq_len, d_model]

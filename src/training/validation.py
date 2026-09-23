@@ -13,6 +13,7 @@ from src.evaluation.results import PrefixSummary, ScoreGroups
 from src.inference.generate import generate_batch
 from src.logs.declare import ConformanceChecker
 from src.training.loss import Loss
+from src.training.randomness import validation_randomness
 
 if TYPE_CHECKING:
     from src.models import SuffixModel
@@ -49,27 +50,31 @@ class GenerationMetrics:
 
 
 @torch.no_grad()
-def validate(model: SuffixModel, loader: DataLoader, *, device: torch.device) -> Loss:
+def validate(
+    model: SuffixModel, loader: DataLoader, *, device: torch.device, seed: int | None = None
+) -> Loss:
     """
     Run one pass over `loader` without learning from it.
     Args:
         model: The model to evaluate. Put in evaluation mode here, and left in it.
         loader: The dataloader to iterate over. Its batches are `TraceCut`s.
         device: The device to run the computations on.
+        seed: Optional isolated seed for reproducible validation draws.
     Returns:
         The loss terms of the pass, averaged over the traces of the split.
     """
-    model.eval()
+    with validation_randomness(seed=seed, device=device):
+        model.eval()
 
-    totals = Loss()
-    for batch in loader:
-        batch = batch.to(device)
-        output = model(batch)
-        _, metrics = model.compute_loss(output, batch)
-        totals += metrics
+        totals = Loss()
+        for batch in loader:
+            batch = batch.to(device)
+            output = model(batch)
+            _, metrics = model.compute_loss(output, batch)
+            totals += metrics
 
-    traces = len(loader.dataset)
-    return totals / traces
+        traces = len(loader.dataset)
+        return totals / traces
 
 
 @torch.no_grad()
@@ -81,6 +86,7 @@ def validate_generation(
     codec: DatasetCodec,
     checker: ConformanceChecker,
     device: torch.device,
+    seed: int | None = None,
 ) -> GenerationMetrics:
     """
     Generate suffixes from the prefixes in `loader` and compare them to the ground truth and the
@@ -103,22 +109,24 @@ def validate_generation(
             validated on.
         checker: The declarative model to check generated suffixes against.
         device: The device to run the computations on.
+        seed: Optional isolated seed for reproducible validation draws.
     Returns:
         The metrics of the pass, averaged over prefixes.
     """
-    model.eval()
+    with validation_randomness(seed=seed, device=device):
+        model.eval()
 
-    generations = [
-        generation
-        for batch in loader
-        for generation in generate_batch(
-            model=model,
-            batch=batch.to(device),
-            num_samples=num_samples,
-            codec=codec,
-        )
-    ]
-    if not generations:
-        raise ValueError('Validation generation subset is empty')
-    summaries = [PrefixSummary.of(one, checker=checker) for one in generations]
-    return GenerationMetrics(scores=ScoreGroups.mean([summary.scores for summary in summaries]))
+        generations = [
+            generation
+            for batch in loader
+            for generation in generate_batch(
+                model=model,
+                batch=batch.to(device),
+                num_samples=num_samples,
+                codec=codec,
+            )
+        ]
+        if not generations:
+            raise ValueError('Validation generation subset is empty')
+        summaries = [PrefixSummary.of(one, checker=checker) for one in generations]
+        return GenerationMetrics(scores=ScoreGroups.mean([summary.scores for summary in summaries]))

@@ -7,7 +7,7 @@ sequence and its inter-event times. Evaluation draws several suffixes per prefix
 accuracy, diversity, calibration, time prediction, and process conformance.
 
 The main model is a Joint Diffusion Transformer over categorical activities and continuous times.
-It is compared with the implemented probabilistic SuTraN-PH baseline and the planned U-ED-LSTM
+It is compared with the implemented probabilistic SuTraN-PH baseline and the uncertainty-aware U-ED-SuTraN
 baseline on Sepsis, BPIC12, BPIC17, and BPIC19.
 
 ## Safety and Correctness
@@ -39,7 +39,7 @@ Read the most specific guide before changing files in its scope.
 | Model interface, checkpoints, architecture selection | [`src/models/AGENTS.md`](src/models/AGENTS.md) |
 | Joint Diffusion Transformer | [`src/models/architectures/diffusion_transformer/AGENTS.md`](src/models/architectures/diffusion_transformer/AGENTS.md) |
 | SuTraN-PH | [`src/models/architectures/head_sampling_transformer/AGENTS.md`](src/models/architectures/head_sampling_transformer/AGENTS.md) |
-| Planned U-ED-LSTM | [`src/models/architectures/u_ed_lstm/AGENTS.md`](src/models/architectures/u_ed_lstm/AGENTS.md) |
+| U-ED-SuTraN | [`src/models/architectures/u_ed_sutran/AGENTS.md`](src/models/architectures/u_ed_sutran/AGENTS.md) |
 | Dataset tensors and codecs | [`src/datasets/AGENTS.md`](src/datasets/AGENTS.md) |
 | Source and generated data artifacts | [`data/AGENTS.md`](data/AGENTS.md) |
 | Hydra configuration | [`config/AGENTS.md`](config/AGENTS.md) |

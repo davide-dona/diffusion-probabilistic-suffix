@@ -155,15 +155,18 @@ def train(
                 continue
 
             train_metrics = interval_totals / seen
-            val_metrics = validate(model, val_loader, device=device)
+            val_metrics = validate(
+                model=model, loader=val_loader, device=device, seed=experiment_config['seed']
+            )
             log_records({'val': val_metrics}, step=step)
             gen_metrics = validate_generation(
-                model,
-                generation_loader,
+                model=model,
+                loader=generation_loader,
                 num_samples=generation_samples,
                 codec=codec,
                 checker=checker,
                 device=device,
+                seed=experiment_config['seed'],
             )
             gen_metrics.log(step)
             print(
