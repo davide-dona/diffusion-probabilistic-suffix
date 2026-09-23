@@ -23,6 +23,12 @@ def model_from_checkpoint(
     require_keys(
         checkpoint=checkpoint, keys=MODEL_KEYS, purpose='rebuilt', remedy='Train the model again.'
     )
+    checkpoint_dataset = checkpoint['config']['data']['name']
+    if codec.dataset != checkpoint_dataset:
+        raise ValueError(
+            f'Checkpoint dataset {checkpoint_dataset!r} does not match codec dataset '
+            f'{codec.dataset!r}'
+        )
     config = OmegaConf.create(checkpoint['config']['model'])
     model = build_model(config=config, codec=codec).to(device=device)
     model.load_state_dict(state_dict=checkpoint['model_state_dict'])

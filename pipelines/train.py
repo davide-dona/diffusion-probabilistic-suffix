@@ -26,7 +26,7 @@ def run(config: DictConfig, run: RunIdentity) -> None:
         config: The validated experiment config.
         run: The stable identity assigned to this training invocation.
     """
-    paths.require_preprocessed(config.data.name)
+    dataset_manifest = paths.require_preprocessed(config.data.name)
 
     # Seeded before anything is built, so weight initialization and shuffling are both reproducible.
     torch.manual_seed(config.seed)
@@ -124,6 +124,7 @@ def run(config: DictConfig, run: RunIdentity) -> None:
         generation_samples=config.inference.validation_samples,
         codec=codec,
         run=run,
+        dataset_fingerprint=dataset_manifest.fingerprint,
         optimizer_config=config.optimizer,
         training=config.training,
         early_stopping_config=config.early_stopping,

@@ -1,3 +1,4 @@
+import copy
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -5,6 +6,8 @@ import numpy as np
 import torch
 from torch import nn
 
+from src.inference.tuning import TuningReport
+from src.runs.hashes import validate_sha256
 from src.runs.identity import RunIdentity
 from src.selection import SELECTION_METRIC
 
@@ -16,6 +19,7 @@ CHECKPOINT_KEYS = (
     'selection_score',
     'selection_metric',
     'selection_direction',
+    'dataset_fingerprint',
 )
 
 NUMPY_SAFE_GLOBALS = (
@@ -44,9 +48,11 @@ def save_checkpoint(
     selection_score: float,
     wandb_id: str | None,
     run: RunIdentity,
+    dataset_fingerprint: str,
     path: Path,
 ) -> Path:
     """Atomically save model weights and run metadata to `path`."""
+    validate_sha256(dataset_fingerprint, 'checkpoint dataset fingerprint')
     temp = path.with_suffix('.pt.tmp')
     torch.save(
         obj={
@@ -58,6 +64,7 @@ def save_checkpoint(
             'selection_metric': SELECTION_METRIC.key,
             'selection_direction': 'min',
             'wandb_id': wandb_id,
+            'dataset_fingerprint': dataset_fingerprint,
         },
         f=temp,
     )
@@ -74,11 +81,62 @@ def load_checkpoint(model_path: str | Path) -> dict:
     model = checkpoint.get('config', {}).get('model', {})
     data = checkpoint.get('config', {}).get('data', {})
     run = RunIdentity.from_dict(checkpoint['run'])
+    dataset_fingerprint = validate_sha256(
+        checkpoint['dataset_fingerprint'], 'checkpoint dataset fingerprint'
+    )
     if run.dataset != data.get('name') or run.model != model.get('name'):
         raise ValueError('Checkpoint run identity does not match its training configuration')
+    tuning_payload = checkpoint.get('tuning')
+    if tuning_payload is not None:
+        tuning = TuningReport.from_payload(tuning_payload)
+        if model.get('kind') != 'head_sampling_transformer':
+            raise ValueError('Only head_sampling_transformer checkpoints can contain tuning')
+        if tuning.run != run:
+            raise ValueError('Checkpoint tuning belongs to a different training run')
+        if tuning.dataset_fingerprint != dataset_fingerprint:
+            raise ValueError('Checkpoint tuning belongs to a different dataset bundle')
+        if tuning.chosen != model.get('sampling'):
+            raise ValueError('Checkpoint sampler does not match its tuning report')
     return checkpoint
 
 
 def checkpoint_identity(checkpoint: dict) -> RunIdentity:
     """Read the run identity embedded in a validated checkpoint."""
     return RunIdentity.from_dict(checkpoint['run'])
+
+
+def require_generation_ready(checkpoint: dict) -> TuningReport | None:
+    """Require post-training sampler selection for architectures that need it."""
+    kind = checkpoint['config']['model']['kind']
+    tuning_payload = checkpoint.get('tuning')
+    if kind == 'head_sampling_transformer':
+        if tuning_payload is None:
+            raise ValueError(
+                'head_sampling_transformer generation requires a tuned checkpoint. '
+                'Run `python -m pipelines.tune checkpoint=/path/to/best.pt` first.'
+            )
+        return TuningReport.from_payload(tuning_payload)
+    if tuning_payload is not None:
+        raise ValueError(f'{kind} does not support sampler tuning')
+    return None
+
+
+def save_tuned_checkpoint(checkpoint: dict, report: TuningReport, path: Path) -> Path:
+    """Write a generation-ready SuTraN-PH checkpoint with its tuning evidence."""
+    if checkpoint['config']['model']['kind'] != 'head_sampling_transformer':
+        raise ValueError('Only head_sampling_transformer checkpoints can be tuned')
+    if checkpoint.get('tuning') is not None:
+        raise ValueError('Checkpoint has already been tuned')
+    run = checkpoint_identity(checkpoint)
+    if report.run != run:
+        raise ValueError('Tuning report belongs to a different training run')
+    if report.dataset_fingerprint != checkpoint['dataset_fingerprint']:
+        raise ValueError('Tuning report belongs to a different dataset bundle')
+
+    tuned = copy.deepcopy(checkpoint)
+    tuned['config']['model']['sampling'] = report.chosen
+    tuned['tuning'] = report.as_dict()
+    temporary = path.with_suffix('.pt.tmp')
+    torch.save(tuned, temporary)
+    temporary.replace(path)
+    return path

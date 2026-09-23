@@ -47,6 +47,7 @@ def train(
     generation_samples: int,
     codec: DatasetCodec,
     run: RunIdentity,
+    dataset_fingerprint: str,
     experiment_config: dict,
     optimizer_config: DictConfig,
     training: DictConfig,
@@ -70,6 +71,7 @@ def train(
         codec: The codec the splits were encoded through, passed on to the
             generation pass so its remaining times are scored in minutes.
         run: The stable identity shared by the checkpoint and its downstream artifacts.
+        dataset_fingerprint: Exact preprocessing bundle used by every dataset reader in this run.
         experiment_config: The whole `DictConfig`, dumped to plain data, written into the
             checkpoint so the model can be rebuilt from the file alone.
         optimizer_config: The optimizer hyperparameters, including step-relative warmup and decay.
@@ -184,6 +186,7 @@ def train(
                     selection_score=score,
                     wandb_id=tracking.id,
                     run=run,
+                    dataset_fingerprint=dataset_fingerprint,
                     path=output_path('best.pt'),
                 )
                 print(f'New best model (step {step}, score {score:.4f}) saved at {path}')
@@ -219,6 +222,7 @@ def train(
                 'selection_direction': 'min',
                 'step': best_step,
                 'selection_score': early_stopper.min_validation_score,
+                'dataset_fingerprint': dataset_fingerprint,
             },
         )
         artifact.add_file(str(output_path('best.pt')), name='model.pt')

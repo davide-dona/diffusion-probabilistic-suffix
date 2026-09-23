@@ -70,12 +70,13 @@ uv run python -m pipelines.preprocess dataset=sepsis
 ```
 
 The original log is read from `data/sepsis/original.csv`. The out-of-time splits, fitted codec,
-and declarative model are written under `data/sepsis/` and reused by later stages. Invocation
-records are written under `outputs/preprocess/sepsis/<timestamp>/`.
+declarative model, and content-hashed dataset manifest are written under `data/sepsis/` and reused
+by later stages. Invocation records are written under `outputs/preprocess/sepsis/<timestamp>/`.
 
 > [!WARNING]
-> Training, generation, and evaluation stop if their required preprocessing artifacts are
-> missing.
+> Training, tuning, generation, and evaluation stop if the preprocessing manifest is missing or
+> any dataset artifact differs from its recorded hash. Existing datasets must be preprocessed
+> again, and checkpoints created before this contract must be retrained.
 
 ### 2. Training
 
@@ -101,22 +102,22 @@ Tune a Head-sampling Transformer on the validation split before test generation:
 uv run python -m pipelines.tune checkpoint=/path/to/best.pt device=cpu
 ```
 
-The selected sampler is written to
-`outputs/tune/<dataset>/<model>/<run-id>/tuning.json`.
+The selected sampler and full search are written to
+`outputs/tune/<dataset>/<model>/<run-id>/tuning.json`. The same directory contains `tuned.pt`, a
+self-contained checkpoint required for Head-sampling Transformer generation.
 
 ### 4. Inference
 
 Generate suffixes for every prefix of the test split:
 
 ```bash
-uv run python -m pipelines.generate checkpoint=/path/to/best.pt device=cpu num_samples=100
+uv run python -m pipelines.generate checkpoint=/path/to/checkpoint.pt device=cpu num_samples=100
 ```
 
-For a tuned Head-sampling Transformer, pass the tuning report explicitly:
+For a Head-sampling Transformer, pass the checkpoint produced by sampler tuning:
 
 ```bash
-uv run python -m pipelines.generate checkpoint=/path/to/best.pt \
-  tuning=/path/to/tuning.json device=cpu num_samples=100
+uv run python -m pipelines.generate checkpoint=/path/to/tuned.pt device=cpu num_samples=100
 ```
 
 The generations are written to
@@ -184,10 +185,11 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer 
 
 ### Publish a checkpoint
 
-Once a run has been evaluated, propose its checkpoint as a published model:
+Once a run has been evaluated, propose its generation-ready checkpoint as a published model. Use
+`tuned.pt` for a Head-sampling Transformer and `best.pt` for a diffusion model:
 
 ```bash
-uv run python -m scripts.publish -m /path/to/best.pt
+uv run python -m scripts.publish -m /path/to/checkpoint.pt
 ```
 
 This opens a pull request against the Hugging Face model repository.

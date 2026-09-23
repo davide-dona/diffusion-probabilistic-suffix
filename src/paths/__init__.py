@@ -2,6 +2,7 @@ from src.paths.arguments import existing_directory, existing_file
 from src.paths.artifact import Artifact
 from src.paths.dataset import (
     CODEC,
+    DATASET_MANIFEST,
     DECLARE_MODEL,
     ORIGINAL_LOG,
     PROCESSED_SPLIT,
@@ -22,6 +23,7 @@ __all__ = [
     'CODEC',
     'CONFIG_DIR',
     'DATA_DIR',
+    'DATASET_MANIFEST',
     'DECLARE_MODEL',
     'ORIGINAL_LOG',
     'OUTPUTS_DIR',

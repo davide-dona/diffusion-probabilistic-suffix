@@ -216,7 +216,7 @@ class Generations:
 
     @property
     def metadata(self) -> dict[str, str]:
-        """Stable run identity and the source checkpoint hash.
+        """Stable run identity, dataset fingerprint, and source checkpoint hash.
 
         Raises:
             ValueError: If the file has no run identity.

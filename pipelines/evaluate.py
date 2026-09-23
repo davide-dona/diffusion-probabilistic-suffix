@@ -15,7 +15,7 @@ from src.datasets.codec import ActivityCodec
 from src.evaluation import EvaluationReport, EvaluationSummary, PrefixSummary, stream_prefix_scores
 from src.inference.generation_store import Generations
 from src.logs.declare import ConformanceChecker, discovery_settings
-from src.runs.artifacts import sha256
+from src.runs.hashes import sha256
 from src.runs.hydra import output_path, start_stage
 from src.validation import validate_evaluation
 
@@ -129,7 +129,7 @@ def run(generations_file: Path, workers: int | None) -> None:
 
     # Check that the dataset was preprocessed.
     dataset = metadata['dataset']
-    paths.require_preprocessed(dataset)
+    paths.require_preprocessed(dataset, expected_fingerprint=metadata['dataset_fingerprint'])
 
     # What the pool will actually start, which is what the wait before the first block is spent on.
     processes = workers if workers is not None else os.cpu_count()

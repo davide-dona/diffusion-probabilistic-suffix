@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Self
 
+from src.runs.hashes import validate_sha256
 from src.runs.identity import RunIdentity
 
 
@@ -8,22 +9,24 @@ from src.runs.identity import RunIdentity
 class ArtifactProvenance:
     """The training run and exact checkpoint from which an artifact was derived.
 
-    Artifact metadata may contain additional, artifact-specific keys. This value owns the four
+    Artifact metadata may contain additional, artifact-specific keys. This value owns the five
     common keys and leaves those additional keys untouched when reading metadata.
     """
 
     run: RunIdentity
+    dataset_fingerprint: str
     checkpoint_sha256: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.checkpoint_sha256, str) or not self.checkpoint_sha256:
-            raise ValueError(
-                f'Invalid artifact provenance checkpoint_sha256: {self.checkpoint_sha256!r}'
-            )
+        validate_sha256(self.dataset_fingerprint, 'artifact provenance dataset_fingerprint')
+        validate_sha256(self.checkpoint_sha256, 'artifact provenance checkpoint_sha256')
 
     def as_metadata(self) -> dict[str, str]:
         """Return the metadata fields shared by every checkpoint-derived artifact."""
-        return self.run.as_dict() | {'checkpoint_sha256': self.checkpoint_sha256}
+        return self.run.as_dict() | {
+            'dataset_fingerprint': self.dataset_fingerprint,
+            'checkpoint_sha256': self.checkpoint_sha256,
+        }
 
     @classmethod
     def from_metadata(cls, metadata: object) -> Self:
@@ -33,5 +36,6 @@ class ArtifactProvenance:
         checkpoint_sha256 = metadata.get('checkpoint_sha256')
         return cls(
             run=RunIdentity.from_metadata(metadata),
+            dataset_fingerprint=metadata.get('dataset_fingerprint'),
             checkpoint_sha256=checkpoint_sha256,
         )

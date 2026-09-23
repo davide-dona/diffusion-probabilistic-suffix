@@ -2,8 +2,10 @@ from src.models.checkpoint import (
     CHECKPOINT_KEYS,
     checkpoint_identity,
     load_checkpoint,
+    require_generation_ready,
     require_keys,
     save_checkpoint,
+    save_tuned_checkpoint,
 )
 from src.models.contracts import ModelOutput
 from src.models.factory import (
@@ -24,6 +26,8 @@ __all__ = [
     'checkpoint_identity',
     'load_checkpoint',
     'model_from_checkpoint',
+    'require_generation_ready',
     'require_keys',
     'save_checkpoint',
+    'save_tuned_checkpoint',
 ]

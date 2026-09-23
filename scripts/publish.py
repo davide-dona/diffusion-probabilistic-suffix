@@ -6,7 +6,7 @@ from huggingface_hub.errors import HfHubHTTPError, LocalTokenNotFoundError
 
 from scripts.hub import HF_REPO_ID
 from src import paths
-from src.models import load_checkpoint
+from src.models import load_checkpoint, require_generation_ready
 
 
 def _mebibytes(path: Path) -> str:
@@ -39,9 +39,10 @@ def run(model_paths: list[Path]) -> None:
     there is nothing to trim off one before it is published.
 
     Args:
-        model_paths: The checkpoints to publish, from `outputs/train/`. Named rather
-            than searched for: every run of one config is a candidate and choosing between them
-            is the whole point of this step.
+        model_paths: The checkpoints to publish, from `outputs/train/` for finalized models or
+            `outputs/tune/` for the head-sampling Transformer. Named rather than searched for:
+            every run of one config is a candidate and choosing between them is the whole point
+            of this step.
     Raises:
         SystemExit: If there are no Hugging Face credentials, or if the confirmation is declined.
         FileNotFoundError: If there is no checkpoint at one of `model_paths`.
@@ -57,6 +58,7 @@ def run(model_paths: list[Path]) -> None:
     descriptions = []
     for model_path in model_paths:
         checkpoint = load_checkpoint(model_path)
+        require_generation_ready(checkpoint)
         # The destination comes from the run's identity, not the checkpoint's filename, making it
         # invariant to local naming.
         dataset = checkpoint['config']['data']['name']
@@ -118,7 +120,7 @@ def main() -> None:
         metavar='CHECKPOINT',
         nargs='+',
         required=True,
-        help='Path(s) to the checkpoint(s) to publish, from `outputs/train/`.',
+        help='Path(s) to generation-ready checkpoint(s) to publish.',
     )
     args = parser.parse_args()
 

@@ -1,9 +1,13 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.logs import Split
 from src.paths.artifact import Artifact
 from src.paths.locations import DATA_DIR
+
+if TYPE_CHECKING:
+    from src.datasets.manifest import DatasetManifest
 
 
 @dataclass(frozen=True)
@@ -79,9 +83,16 @@ DECLARE_MODEL = DatasetArtifact(
     remedy='Run `uv run python -m pipelines.preprocess dataset={dataset}` first.',
     relative='declare/model.decl',
 )
+DATASET_MANIFEST = DatasetArtifact(
+    kind='dataset manifest',
+    remedy='Run `uv run python -m pipelines.preprocess dataset={dataset}` first.',
+    relative='manifest.json',
+)
 
 
-def require_preprocessed(dataset: str) -> None:
+def require_preprocessed(
+    dataset: str, *, expected_fingerprint: str | None = None
+) -> 'DatasetManifest':
     """Check that everything training and generation read from preprocessing is on disk, and say
     what is missing if it is not.
 
@@ -92,8 +103,9 @@ def require_preprocessed(dataset: str) -> None:
     Raises:
         FileNotFoundError: If any preprocessing output is missing, naming every one of them.
     """
-    outputs = [CODEC.path(dataset)]
+    outputs = [ORIGINAL_LOG.path(dataset), CODEC.path(dataset), DECLARE_MODEL.path(dataset)]
     outputs += [PROCESSED_SPLIT.path(dataset=dataset, split=split) for split in Split]
+    outputs.append(DATASET_MANIFEST.path(dataset))
 
     missing = [output for output in outputs if not output.exists()]
     if missing:
@@ -103,3 +115,8 @@ def require_preprocessed(dataset: str) -> None:
             f'{"are" if len(missing) > 1 else "is"} missing. '
             f'Run `uv run python -m pipelines.preprocess dataset={dataset}` first.'
         )
+    from src.datasets.manifest import DatasetManifest
+
+    manifest = DatasetManifest.load(dataset)
+    manifest.verify(expected_fingerprint)
+    return manifest

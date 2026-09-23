@@ -27,8 +27,9 @@ from src.models import (
     checkpoint_identity,
     load_checkpoint,
     model_from_checkpoint,
+    save_tuned_checkpoint,
 )
-from src.runs.artifacts import sha256
+from src.runs.hashes import sha256
 from src.runs.hydra import output_path, save_config, start_stage
 from src.selection import selection_score
 from src.validation import validate_tuning
@@ -118,8 +119,11 @@ def run(
     """
     with step(f'Reading the checkpoint at {checkpoint_path}'):
         checkpoint = load_checkpoint(checkpoint_path)
+    if checkpoint.get('tuning') is not None:
+        raise ValueError('Checkpoint has already been tuned')
     run = checkpoint_identity(checkpoint)
     checkpoint_hash = sha256(checkpoint_path)
+    dataset_fingerprint = checkpoint['dataset_fingerprint']
     config = OmegaConf.create(checkpoint['config'])
     if device is not None:
         config.training.device = device
@@ -135,6 +139,7 @@ def run(
             {
                 'checkpoint': str(checkpoint_path.resolve()),
                 'checkpoint_sha256': checkpoint_hash,
+                'dataset_fingerprint': dataset_fingerprint,
                 'run': run.as_dict(),
                 'effective': OmegaConf.to_container(config, resolve=True),
                 'temperatures': temperatures,
@@ -143,11 +148,12 @@ def run(
         )
     )
 
-    paths.require_preprocessed(config.data.name)
+    paths.require_preprocessed(config.data.name, expected_fingerprint=dataset_fingerprint)
     pairs = config.training.generation_pairs if pairs is None else pairs
     samples = config.inference.validation_samples if samples is None else samples
 
     report_path = output_path('tuning.json')
+    tuned_checkpoint_path = output_path('tuned.pt')
     torch_device = torch.device(config.training.device)
     grid = [
         OmegaConf.create({'temperature': temperature, 'top_p': top_p})
@@ -166,6 +172,7 @@ def run(
             'grid': f'{len(grid)} points over temperature {temperatures} and top_p {top_ps}',
             'chosen on': 'minimum activity-sequence DLS energy score',
             'report': report_path,
+            'tuned checkpoint': tuned_checkpoint_path,
         },
     )
 
@@ -220,14 +227,16 @@ def run(
 
     report = TuningReport.of(
         run,
+        dataset_fingerprint,
         checkpoint_hash,
         search=SearchPass(pairs=len(subset), samples=samples, seed=config.seed),
         grid=points,
     )
     report.write(report_path)
+    save_tuned_checkpoint(checkpoint, report, tuned_checkpoint_path)
     print(
         f'Chose temperature {report.chosen["temperature"]}, top_p {report.chosen["top_p"]}. '
-        f'Wrote the search to {report_path}'
+        f'Wrote the search to {report_path} and tuned checkpoint to {tuned_checkpoint_path}'
     )
 
 

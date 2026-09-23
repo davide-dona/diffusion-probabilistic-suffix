@@ -1,18 +1,11 @@
-import hashlib
 import json
 from collections.abc import Sequence
-from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from src.runs.hashes import sha256 as sha256
 from src.runs.provenance import ArtifactProvenance
-
-
-def sha256(path: Path) -> str:
-    """Return the SHA-256 digest of a file's bytes."""
-    with path.open('rb') as file:
-        return hashlib.file_digest(file, 'sha256').hexdigest()
 
 
 def with_metadata(schema: pa.Schema, metadata: dict[str, str]) -> pa.Schema:

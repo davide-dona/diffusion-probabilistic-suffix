@@ -1,6 +1,5 @@
 import re
 from collections.abc import Sequence
-from pathlib import Path
 
 from omegaconf import DictConfig, OmegaConf
 
@@ -83,23 +82,6 @@ def validate_training(config: DictConfig) -> None:
 
     if config.wandb.mode not in ('online', 'offline', 'disabled'):
         raise ValueError('wandb.mode must be online, offline, or disabled')
-
-
-def validate_generation_request(
-    config: DictConfig, *, tuning: Path | None, sampling: DictConfig | None
-) -> None:
-    """Validate optional generation sampler overrides before reading a tuning report.
-
-    A tuning report and direct sampler are mutually exclusive. Direct sampler overrides are
-    available only to the head-sampling Transformer.
-    """
-    if tuning is not None and sampling is not None:
-        raise ValueError('Choose either tuning or sampling overrides')
-
-    if sampling is not None:
-        if config.model.kind != 'head_sampling_transformer':
-            raise ValueError(f'{config.model.kind} does not support sampler overrides')
-        validate_sampling(sampling)
 
 
 def validate_generation(config: DictConfig) -> None:

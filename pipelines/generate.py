@@ -14,13 +14,17 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset
 from src.inference.generate import generate_batch, generation_batch_size
 from src.inference.generation_store import GenerationWriter
-from src.inference.tuning import TuningReport
 from src.logs import Split
-from src.models import checkpoint_identity, load_checkpoint, model_from_checkpoint
-from src.runs.artifacts import sha256
+from src.models import (
+    checkpoint_identity,
+    load_checkpoint,
+    model_from_checkpoint,
+    require_generation_ready,
+)
+from src.runs.hashes import sha256
 from src.runs.hydra import output_path, save_config, start_stage
 from src.runs.provenance import ArtifactProvenance
-from src.validation import validate_generation, validate_generation_request
+from src.validation import validate_generation
 
 
 def run(
@@ -28,8 +32,6 @@ def run(
     *,
     device: str | None,
     num_samples: int | None,
-    tuning: Path | None,
-    sampling: DictConfig | None,
     num_workers: int | None = None,
 ) -> None:
     """Generate suffixes for every prefix of the test split and write them out.
@@ -39,23 +41,23 @@ def run(
             matches every run ever started from it, and picking one of them is a decision the
             caller makes, not one to be inferred from a filename. It carries the config of the
             run that wrote it, so nothing about the model or the dataset is passed alongside it.
+            A head-sampling Transformer must use the tuned checkpoint from `pipelines.tune`.
         device: Overrides the run's own `training.device`, e.g. to generate on a different
             machine than the one it trained on. `None` keeps it.
         num_samples: How many suffixes to draw per prefix, or `None` for the run's own
             `inference.evaluation_samples`.
-        tuning: A tuning report to read the sampler out of, or `None`. Named rather than looked
-            up beside the checkpoint: which operating point a set of weights is read at is a
-            decision the caller makes, and the report is checked against the checkpoint hash
-            before it is used.
-        sampling: The sampler to draw with, or `None` for the one the run trained under.
-            Mutually exclusive with `tuning`.
     """
     # The run's own config. Read before the codec, since it is what says which dataset's codec
     # to read.
     with step(f'Reading the checkpoint at {checkpoint_path}'):
         checkpoint = load_checkpoint(checkpoint_path)
     run = checkpoint_identity(checkpoint)
-    provenance = ArtifactProvenance(run=run, checkpoint_sha256=sha256(checkpoint_path))
+    tuning = require_generation_ready(checkpoint)
+    provenance = ArtifactProvenance(
+        run=run,
+        dataset_fingerprint=checkpoint['dataset_fingerprint'],
+        checkpoint_sha256=sha256(checkpoint_path),
+    )
     metadata = provenance.as_metadata()
     # Start with the config stored in the checkpoint and apply runtime overrides.
     config = OmegaConf.create(checkpoint['config'])
@@ -65,14 +67,6 @@ def run(
         config.inference.evaluation_samples = num_samples
     if num_workers is not None:
         config.dataloader.num_workers = num_workers
-    # Check the requested sampler before loading a tuning report.
-    validate_generation_request(config, tuning=tuning, sampling=sampling)
-    # Use the sampler selected for this checkpoint when a tuning report is given.
-    if tuning is not None:
-        sampling = TuningReport.read(tuning).sampling_for(run, metadata['checkpoint_sha256'])
-    if sampling is not None:
-        config.model.sampling = sampling
-    # Check the final config after the selected sampler has been applied.
     validate_generation(config)
     # Record the exact settings used for this generation run.
     save_config(
@@ -80,14 +74,17 @@ def run(
             {
                 'checkpoint': str(checkpoint_path.resolve()),
                 'checkpoint_sha256': metadata['checkpoint_sha256'],
+                'dataset_fingerprint': metadata['dataset_fingerprint'],
                 'run': run.as_dict(),
                 'effective': OmegaConf.to_container(config, resolve=True),
-                'tuning': str(tuning) if tuning is not None else None,
+                'tuning': tuning.as_dict() if tuning is not None else None,
             }
         )
     )
 
-    paths.require_preprocessed(config.data.name)
+    paths.require_preprocessed(
+        config.data.name, expected_fingerprint=metadata['dataset_fingerprint']
+    )
     torch.manual_seed(config.seed)
 
     path = output_path('generations.parquet')
@@ -125,10 +122,6 @@ def run(
 
     with step(f'Building the model and moving it onto {device}'):
         model = model_from_checkpoint(checkpoint, codec, device=config.training.device)
-        if drawn_with is not None:
-            if not hasattr(model, 'decoder'):
-                raise ValueError(f'{config.model.kind} does not support sampler overrides.')
-            model.decoder.read_with(drawn_with)
         model.eval()
 
     # Build the DataLoader for the test split
@@ -188,8 +181,6 @@ def main(cfg: DictConfig) -> None:
         Path(cfg.checkpoint),
         device=cfg.device,
         num_samples=cfg.num_samples,
-        tuning=Path(cfg.tuning) if cfg.tuning is not None else None,
-        sampling=cfg.sampling,
         num_workers=cfg.num_workers,
     )
 

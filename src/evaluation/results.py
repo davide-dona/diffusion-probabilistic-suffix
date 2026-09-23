@@ -16,7 +16,7 @@ from src.inference.generation import Generation
 from src.inference.generation_store import PrefixKey
 from src.logs.declare import ConformanceChecker
 from src.runs.artifacts import read_metadata, with_metadata
-from src.runs.identity import RunIdentity
+from src.runs.provenance import ArtifactProvenance
 
 GROUPS = tuple(MetricGroup)
 
@@ -181,7 +181,7 @@ class EvaluationReport:
         """Read and validate a JSON evaluation report."""
         path = Path(path)
         report = _REPORT_ADAPTER.validate_python(json.loads(path.read_bytes()))
-        RunIdentity.from_metadata(report.metadata)
+        ArtifactProvenance.from_metadata(report.metadata)
         return report
 
     def write(self, path: str | Path) -> Path:
