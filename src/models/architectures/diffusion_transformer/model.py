@@ -126,11 +126,12 @@ class DiffusionTransformer(SuffixModel):
             if step == 1:
                 probabilities = self.activities.prohibit_initial_eot(probabilities)  # [B * S, T, K]
             activities = self.activities.sample_reverse(
-                noisy=activities, predicted=probabilities, timestep=timestep
+                noisy=activities,
+                predicted=probabilities,
+                timestep=timestep,
+                final_step=step == 1,
             )  # [B * S, T]
-            times = self.times.sample_reverse(
-                times=times, noise=noise, timestep=timestep
-            )  # [B * S, T]
+            times = self.times.sample_reverse(times=times, noise=noise, step=step)  # [B * S, T]
 
         codec_activities = self.activities.diffusion_to_codec[activities]  # [B * S, T]
         first_eot = codec_activities.eq(self.eot_activity_index)  # [B * S, T]

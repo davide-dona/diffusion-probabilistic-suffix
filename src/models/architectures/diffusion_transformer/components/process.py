@@ -92,30 +92,27 @@ class CategoricalDiffusion(nn.Module):
         current = self.alpha_bars[timestep - 1]  # [B]
         beta = self.betas[timestep - 1]  # [B]
         k = self.num_activities
-        candidate = torch.arange(end=k, device=noisy.device).view(1, 1, k)  # [1, 1, K]
-        clean_ids = torch.arange(end=k, device=noisy.device).view(1, 1, 1, k)  # [1, 1, 1, K]
-        # The last two axes enumerate previous activity candidates and predicted clean states.
-        prior = (1 - previous).view(-1, 1, 1, 1) / k + previous.view(-1, 1, 1, 1) * (
-            clean_ids == candidate.unsqueeze(dim=-1)
-        )  # [B, 1, K, K]
-        likelihood = beta.view(-1, 1, 1) / k + (1 - beta).view(-1, 1, 1) * (
-            candidate == noisy.unsqueeze(dim=-1)
-        )  # [B, T, K]
-        evidence = (1 - current).view(-1, 1, 1) / k + current.view(-1, 1, 1) * F.one_hot(
-            input=noisy, num_classes=k
-        )  # [B, T, K]
-        posterior = (
-            prior * likelihood.unsqueeze(dim=-1) / evidence.unsqueeze(dim=-1)
-        )  # [B, T, K, K]
-        return (posterior * predicted.unsqueeze(dim=2)).sum(dim=-1)  # [B, T, K]
+        observed = F.one_hot(input=noisy, num_classes=k)  # [B, T, K]
+        likelihood = beta.view(-1, 1, 1) / k + (1 - beta).view(-1, 1, 1) * observed
+        evidence = (1 - current).view(-1, 1, 1) / k + current.view(-1, 1, 1) * observed
+        weighted = predicted / evidence.clamp_min(1e-12)  # [B, T, K]
+        prior = (1 - previous).view(-1, 1, 1) / k * weighted.sum(
+            dim=-1, keepdim=True
+        ) + previous.view(-1, 1, 1) * weighted  # [B, T, K]
+        return prior * likelihood  # [B, T, K]
 
     def sample_reverse(
-        self, noisy: torch.Tensor, predicted: torch.Tensor, timestep: torch.Tensor
+        self,
+        noisy: torch.Tensor,
+        predicted: torch.Tensor,
+        timestep: torch.Tensor,
+        *,
+        final_step: bool,
     ) -> torch.Tensor:
         """Draw previous activities when every row has the same timestep."""
         probabilities = (
             predicted
-            if int(timestep[0]) == 1
+            if final_step
             else self.reverse_probabilities(noisy=noisy, predicted=predicted, timestep=timestep)
         )  # [B, T, K]
         flat = probabilities.flatten(end_dim=1)  # [B, T, K] -> [B * T, K]
@@ -143,14 +140,14 @@ class GaussianDiffusion(nn.Module):
         return noisy, noise
 
     def sample_reverse(
-        self, times: torch.Tensor, noise: torch.Tensor, timestep: torch.Tensor
+        self, times: torch.Tensor, noise: torch.Tensor, *, step: int
     ) -> torch.Tensor:
         """Draw previous times from predicted noise at a shared timestep."""
-        index = timestep[0] - 1
+        index = step - 1
         alpha = self.alphas[index]
         alpha_bar = self.alpha_bars[index]
         mean = (times - self.betas[index] / (1 - alpha_bar).sqrt() * noise) / alpha.sqrt()
-        if int(timestep[0]) == 1:
+        if step == 1:
             return mean
         variance = self.betas[index] * (1 - self.alpha_bars[index - 1]) / (1 - alpha_bar)
         return mean + variance.sqrt() * torch.randn_like(times)  # [B, T]
