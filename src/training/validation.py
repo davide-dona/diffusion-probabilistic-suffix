@@ -19,7 +19,7 @@ from src.training.randomness import validation_randomness
 if TYPE_CHECKING:
     from src.models import SuffixModel
 
-ACTIVITY_LOG_NAMESPACE = 'generation/activity'
+ACTIVITY_LOG_NAMESPACE = 'generation-activity'
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,9 +39,9 @@ class GenerationMetrics:
         """
         namespaces = {
             'activity': ACTIVITY_LOG_NAMESPACE,
-            'suffix_length': 'generation/suffix-length',
-            'time': 'generation/time',
-            'conformance': 'generation/conformance',
+            'suffix_length': 'generation-suffix-length',
+            'time': 'generation-time',
+            'conformance': 'generation-conformance',
         }
         values = self.scores.flatten()
         wandb.log(
@@ -51,7 +51,7 @@ class GenerationMetrics:
                 if metric.owner is Owner.MODEL
             }
             | {
-                f'diagnostic/{metric.group.value.replace("_", "-")}/{key}': self.diagnostics[key]
+                f'diagnostic-{metric.group.value.replace("_", "-")}/{key}': self.diagnostics[key]
                 for key, metric in METRICS.diagnostics.items()
                 if metric.owner is Owner.MODEL
             },
