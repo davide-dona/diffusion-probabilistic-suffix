@@ -9,15 +9,18 @@ suffixes. Metrics operate per prefix first, then reports average prefixes with e
 - `reports.py` owns JSON reports and the dataframe view used by visualization.
 - `score_store.py` owns streaming Parquet writes, score readers, and adjacent-file discovery.
 - `prepared.py` owns the shared per-prefix arrays and conformance checks.
-- `helpers.py` owns activity distances and numerical scoring operations, including the shared
-  fair energy-score reduction used by sequence energy scores and CRPS.
-- `metrics/metadata.py` defines metric records, groups, units, owners, and ranking directions.
+- `metrics/helpers.py` owns the draw-weighted sample mean, distance-parametrized energy score,
+  CRPS, MAE, and coverage gap.
+- `metrics/definitions/activity.py` defines each activity distance inside its registered metric.
+- `metrics/metadata.py` defines metric records, groups, display labels, units and bounds, owners,
+  and ranking directions.
 - `metrics/registry.py` owns ordered registration and report/diagnostic selection.
 - `metrics/definitions/` contains the registered activity, conformance, suffix-length, and time
   metrics. Importing `metrics` registers these groups in that order.
 
-Import shared operations from `src.evaluation`; metric declarations remain under
-`src.evaluation.metrics`. Keep package initializers limited to imports and exports.
+Import scoring and report operations from `src.evaluation`; metric definitions and their
+numerical helpers remain under `src.evaluation.metrics`. Keep package initializers limited to
+imports and exports.
 
 Public operations use a concise summary followed by `Args`, `Returns` or `Yields`, and explicit
 contract errors under `Raises` where applicable. Document array shapes, units, draw multiplicities,
@@ -29,9 +32,9 @@ and empty-input behavior where they affect the result; keep private documentatio
 are folded into distinct strings plus draw indices; time sequences remain one per draw. The file
 schema also stores truth, activity vocabulary, sampler settings, run identity, and checkpoint hash.
 
-`PreparedPrefix` expands only the values needed by metrics: draw weights, activity similarities,
-suffix lengths, aligned inter-event times, remaining times, and Declare conformance. Preserve draw
-multiplicity when working with folded suffixes.
+`PreparedPrefix` expands shared values: suffix lengths, aligned inter-event times, remaining times,
+and Declare conformance. The validation-only DLS similarity is computed only when requested.
+Preserve draw multiplicity when working with folded suffixes.
 
 ## Metric Semantics
 
@@ -55,17 +58,18 @@ Log-owned metrics are still computed during validation and remain in report scor
 and Parquet columns; ownership filtering applies only to metric logging.
 
 Metric registration order is part of report and Parquet column order. A new metric requires a
-unique stable key, label, group, unit, owner, direction, compute function, visualization handling,
-and compatibility consideration for old score files.
+unique stable key, label, group, optional publication label, display unit and bounds, owner,
+direction, compute function, and visualization handling.
 
 ## Reports and Aggregation
 
-`PrefixSummary` stores prefix length, true suffix length, and every report metric.
+`PrefixSummary` stores prefix length, true suffix length, and grouped report scores.
 `EvaluationSummary` reports the unweighted mean over all prefixes and separate means bucketed by
-prefix length and true suffix length. Aggregation consumes summaries once, retaining only metric
-totals and counts overall and per length bucket. Each prefix is flattened once for aggregation;
-summation follows input order and length buckets are emitted in ascending order. Empty aggregates
-contain zero scores. `evaluation.json` contains this summary and provenance.
+prefix length and true suffix length. Each summary holds one grouped `scores` record. Aggregation
+consumes summaries once, retaining only metric totals and counts overall and per length bucket.
+Each prefix is flattened once for aggregation; summation follows input order and length buckets
+are emitted in ascending order. Empty aggregates contain zero scores. `evaluation.json` contains
+this summary and provenance.
 `prefix_scores.parquet` stores the prefix key, lengths, and all report metric values for paired analysis.
 
 Keep the two files adjacent. Visualization rejects duplicate model reports within one dataset and
@@ -89,5 +93,4 @@ analysis. Do not run full evaluation locally.
 Register validation-only metrics with `diagnostic=True`. DLS sample mean and suffix-length MAE
 are diagnostics, logged as `diagnostic-<group>/<metric>` in W&B during training validation.
 They are not computed during final evaluation and do not enter JSON reports, default Parquet
-views, publication figures or tables, or significance comparisons. Historical score files may
-contain diagnostic columns; readers require only report columns.
+views, publication figures or tables, or significance comparisons.

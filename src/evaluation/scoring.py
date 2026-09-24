@@ -125,31 +125,12 @@ class LengthSummary:
     """Mean scores for prefixes with one shared length.
 
     length identifies the prefix-length or true-suffix-length bucket; prefixes counts its
-    members. Each metric group holds equally weighted means over those members.
+    members. Scores hold equally weighted means over those members.
     """
 
     length: int
     prefixes: int
-    activity: dict[str, float]
-    suffix_length: dict[str, float]
-    time: dict[str, float]
-    conformance: dict[str, float]
-
-    @classmethod
-    def of(cls, prefixes: Sequence[PrefixSummary], *, length: int) -> 'LengthSummary':
-        """Aggregate scores for prefixes with a common length.
-
-        Args:
-            prefixes: Prefix summaries already selected for the requested bucket.
-            length: Shared prefix or true suffix length used to label the bucket.
-
-        Returns:
-            Equally weighted report means and the prefix count; empty input gives zero scores.
-        """
-        accumulator = _ScoreAccumulator()
-        for prefix in prefixes:
-            accumulator.add(prefix.scores.flatten())
-        return accumulator.length_summary(length)
+    scores: ScoreGroups
 
 
 @dataclass
@@ -174,10 +155,7 @@ class _ScoreAccumulator:
         return LengthSummary(
             length=length,
             prefixes=self.count,
-            activity=scores.activity,
-            suffix_length=scores.suffix_length,
-            time=scores.time,
-            conformance=scores.conformance,
+            scores=scores,
         )
 
 
@@ -199,10 +177,7 @@ class EvaluationSummary:
     """Aggregate evaluation scores for one run."""
 
     prefixes: int
-    activity: dict[str, float]
-    suffix_length: dict[str, float]
-    time: dict[str, float]
-    conformance: dict[str, float]
+    scores: ScoreGroups
     by_prefix_length: list[LengthSummary]
     by_suffix_length: list[LengthSummary]
 
@@ -228,32 +203,7 @@ class EvaluationSummary:
         scores = overall.mean()
         return cls(
             prefixes=overall.count,
-            activity=scores.activity,
-            suffix_length=scores.suffix_length,
-            time=scores.time,
-            conformance=scores.conformance,
+            scores=scores,
             by_prefix_length=_by_length(prefix_buckets),
             by_suffix_length=_by_length(suffix_buckets),
         )
-
-
-type Summarized = PrefixSummary | LengthSummary | EvaluationSummary
-
-
-def flatten_scores(summary: Summarized) -> dict[str, float]:
-    """Flatten a summary's grouped scores into a registry-ordered mapping.
-
-    Args:
-        summary: Per-prefix, length-bucket, or overall evaluation summary.
-
-    Returns:
-        Report metric values in declaration order, excluding diagnostics.
-    """
-    if isinstance(summary, PrefixSummary):
-        return summary.scores.flatten()
-    return ScoreGroups(
-        activity=summary.activity,
-        suffix_length=summary.suffix_length,
-        time=summary.time,
-        conformance=summary.conformance,
-    ).flatten()

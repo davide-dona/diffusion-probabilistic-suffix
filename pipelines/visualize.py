@@ -18,7 +18,6 @@ from src.visualization import (
     apply_style,
     compose_figure,
     latex_table,
-    reported_models,
 )
 
 
@@ -89,15 +88,14 @@ def run(evaluation_files: Sequence[Path]) -> None:
     )
 
     with step(f'Reading {len(evaluation_files)} evaluation report(s)'):
-        # Models sharing a style are one model from here on: one line, one column, one legend key.
-        reports = reported_models(read_reports(evaluation_files))
+        reports = read_reports(evaluation_files)
 
     logs = sorted(set(reports['dataset']))
     with step(f'Drawing {", ".join(logs)}'):
         drawn = _draw_figures(reports)
 
     with step('Comparing means with a paired case bootstrap'):
-        significance = reported_models(test_significance(evaluation_files))
+        significance = test_significance(evaluation_files)
 
     with step('Writing the comparison tables'):
         tables = _write_tables(reports, significance)

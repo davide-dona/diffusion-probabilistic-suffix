@@ -9,7 +9,7 @@ import pandas as pd
 from pydantic import TypeAdapter, ValidationError
 
 from src.artifacts import ArtifactProvenance
-from src.evaluation.scoring import EvaluationSummary, LengthSummary, flatten_scores
+from src.evaluation.scoring import EvaluationSummary, LengthSummary
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ def _summary_rows(
     axis: Axis,
     length: int | None,
 ) -> Iterator[dict[str, object]]:
-    for metric, value in flatten_scores(summary).items():
+    for metric, value in summary.scores.flatten().items():
         yield identity | {
             'axis': axis,
             'length': length,

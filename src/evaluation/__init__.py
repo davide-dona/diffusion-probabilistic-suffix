@@ -13,8 +13,6 @@ from src.evaluation.scoring import (
     LengthSummary,
     PrefixSummary,
     ScoreGroups,
-    Summarized,
-    flatten_scores,
 )
 
 __all__ = [
@@ -28,8 +26,6 @@ __all__ = [
     'PrefixSummary',
     'PreparedPrefix',
     'ScoreGroups',
-    'Summarized',
-    'flatten_scores',
     'read_prefix_scores',
     'read_reports',
     'require_columns',
