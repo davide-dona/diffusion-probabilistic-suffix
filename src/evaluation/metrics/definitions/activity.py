@@ -47,6 +47,7 @@ def dls_sample_mean(context: PreparedPrefix) -> float:
 @METRICS.register(
     'energy_score_dls',
     label='DLS energy score',
+    publication_label=r'$ES_{\mathrm{DL}}$',
     group=MetricGroup.ACTIVITY,
     direction=Direction.LOWER,
 )
@@ -85,6 +86,7 @@ def energy_score_dls(context: PreparedPrefix) -> float:
 @METRICS.register(
     'energy_score_exact',
     label='Exact energy score',
+    publication_label=r'$ES_{\mathrm{exact}}$',
     group=MetricGroup.ACTIVITY,
     direction=Direction.LOWER,
 )
@@ -122,6 +124,7 @@ def energy_score_exact(context: PreparedPrefix) -> float:
 @METRICS.register(
     'energy_score_bigram',
     label='Bigram energy score',
+    publication_label=r'$ES_{\mathrm{2-\text{gram}}}$',
     group=MetricGroup.ACTIVITY,
     direction=Direction.LOWER,
 )

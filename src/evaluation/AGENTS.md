@@ -12,8 +12,8 @@ suffixes. Metrics operate per prefix first, then reports average prefixes with e
 - `metrics/helpers.py` owns the draw-weighted sample mean, distance-parametrized energy score,
   CRPS, MAE, and coverage gap.
 - `metrics/definitions/activity.py` defines each activity distance inside its registered metric.
-- `metrics/metadata.py` defines metric records, groups, independent display units and bounds,
-  owners, and ranking directions.
+- `metrics/metadata.py` defines metric records, groups, display labels, units and bounds, owners,
+  and ranking directions.
 - `metrics/registry.py` owns ordered registration and report/diagnostic selection.
 - `metrics/definitions/` contains the registered activity, conformance, suffix-length, and time
   metrics. Importing `metrics` registers these groups in that order.
@@ -58,8 +58,8 @@ Log-owned metrics are still computed during validation and remain in report scor
 and Parquet columns; ownership filtering applies only to metric logging.
 
 Metric registration order is part of report and Parquet column order. A new metric requires a
-unique stable key, label, group, optional display unit and bounds, owner, direction, compute
-function, and visualization handling.
+unique stable key, label, group, optional publication label, display unit and bounds, owner,
+direction, compute function, and visualization handling.
 
 ## Reports and Aggregation
 

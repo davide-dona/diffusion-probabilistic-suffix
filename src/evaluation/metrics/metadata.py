@@ -36,9 +36,9 @@ class MetricGroup(StrEnum):
 class Metric:
     """One evaluation value and the function that computes it for a prefix.
 
-    The key identifies report fields and artifact columns. Unit labels and bounds control
-    presentation; direction controls comparison, and owner distinguishes model scores
-    from log references.
+    The key identifies report fields and artifact columns. The optional publication label,
+    unit, and bounds control presentation; direction controls comparison, and owner
+    distinguishes model scores from log references.
     Diagnostic metrics are available during validation but excluded from final reports.
     """
 
@@ -47,6 +47,7 @@ class Metric:
     group: MetricGroup
     direction: Direction
     compute: Callable[[PreparedPrefix], float]
+    publication_label: str | None = None
     unit: str | None = None
     bounds: tuple[float | None, float | None] = (None, None)
     owner: Owner = Owner.MODEL

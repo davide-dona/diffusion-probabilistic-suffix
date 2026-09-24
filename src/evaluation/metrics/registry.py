@@ -21,6 +21,7 @@ class MetricRegistry:
         *,
         label: str,
         group: MetricGroup,
+        publication_label: str | None = None,
         unit: str | None = None,
         bounds: tuple[float | None, float | None] = (None, None),
         direction: Direction = Direction.NONE,
@@ -33,6 +34,7 @@ class MetricRegistry:
             key: Unique identifier used in score mappings and artifact columns.
             label: Human-readable metric name.
             group: Evaluation question used to group scores.
+            publication_label: Optional short label for publication tables.
             unit: Unit label displayed after the metric name, if any.
             bounds: Optional lower and upper plot limits.
             direction: Preferred value when comparing models.
@@ -53,6 +55,7 @@ class MetricRegistry:
                 key=key,
                 label=label,
                 group=group,
+                publication_label=publication_label,
                 unit=unit,
                 bounds=bounds,
                 direction=direction,

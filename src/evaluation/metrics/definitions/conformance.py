@@ -6,7 +6,7 @@ from src.evaluation.prepared import PreparedPrefix
 
 @METRICS.register(
     'conformance_sample_mean',
-    label='Conformance sample mean',
+    label='Conformance (sample mean)',
     group=MetricGroup.CONFORMANCE,
     bounds=(0.0, 1.0),
     direction=Direction.HIGHER,

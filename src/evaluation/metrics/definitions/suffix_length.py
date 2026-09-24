@@ -48,6 +48,7 @@ def suffix_length_crps(context: PreparedPrefix) -> float:
 @METRICS.register(
     'suffix_length_coverage_gap_50',
     label='Suffix length coverage gap 50%',
+    publication_label=r'50\%',
     group=MetricGroup.SUFFIX_LENGTH,
     direction=Direction.ZERO,
 )
@@ -67,6 +68,7 @@ def suffix_length_coverage_gap_50(context: PreparedPrefix) -> float:
 @METRICS.register(
     'suffix_length_coverage_gap_75',
     label='Suffix length coverage gap 75%',
+    publication_label=r'75\%',
     group=MetricGroup.SUFFIX_LENGTH,
     direction=Direction.ZERO,
 )
@@ -86,6 +88,7 @@ def suffix_length_coverage_gap_75(context: PreparedPrefix) -> float:
 @METRICS.register(
     'suffix_length_coverage_gap_95',
     label='Suffix length coverage gap 95%',
+    publication_label=r'95\%',
     group=MetricGroup.SUFFIX_LENGTH,
     direction=Direction.ZERO,
 )
