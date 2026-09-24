@@ -18,7 +18,3 @@ diffusion:
     cosine_offset: 0.008
   time_schedule:
     cosine_offset: 0.008
-validation:
-  samples: 16
-  generation_pairs:
-    sepsis: 500

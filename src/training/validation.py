@@ -140,7 +140,7 @@ def validate_generation(
         synchronize_device(device)
         generation_start = perf_counter()
         generations = []
-        for batch_number, batch in enumerate(loader, start=1):
+        for batch in loader:
             generations.extend(
                 generate_batch(
                     model=model,
@@ -149,12 +149,7 @@ def validate_generation(
                     codec=codec,
                 )
             )
-            synchronize_device(device)
-            print(
-                f'Generation validation batch {batch_number}/{len(loader)} '
-                f'({perf_counter() - generation_start:.1f}s elapsed)',
-                flush=True,
-            )
+        synchronize_device(device)
         generation_seconds = perf_counter() - generation_start
         if not generations:
             raise ValueError('Validation generation subset is empty')

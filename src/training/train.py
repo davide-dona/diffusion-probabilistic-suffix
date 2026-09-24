@@ -163,17 +163,11 @@ def train(
             train_metrics = interval_totals / seen
             synchronize_device(device)
             validation_start = perf_counter()
-            print(f'Step {step}: starting validation loss', flush=True)
             val_metrics = validate(
                 model=model, loader=val_loader, device=device, seed=experiment_config['seed']
             )
             synchronize_device(device)
             validation_seconds = perf_counter() - validation_start
-            print(
-                f'Step {step}: validation loss finished in {validation_seconds:.1f}s; '
-                'starting generation',
-                flush=True,
-            )
             log_records({'val': val_metrics}, step=step)
             gen_metrics = validate_generation(
                 model=model,
