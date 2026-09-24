@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 import torch
@@ -28,6 +29,8 @@ class GenerationMetrics:
 
     scores: ScoreGroups
     diagnostics: dict[str, float]
+    generation_seconds: float
+    scoring_seconds: float
 
     def log(self, step: int) -> None:
         """Log model-owned report and diagnostic metrics under their evaluation groups.
@@ -57,6 +60,14 @@ class GenerationMetrics:
             },
             step=step,
         )
+
+
+def synchronize_device(device: torch.device) -> None:
+    """Wait for queued device work before reading a wall-clock timer."""
+    if device.type == 'cuda':
+        torch.cuda.synchronize(device)
+    elif device.type == 'mps':
+        torch.mps.synchronize()
 
 
 @torch.no_grad()
@@ -126,18 +137,28 @@ def validate_generation(
     with validation_randomness(seed=seed, device=device):
         model.eval()
 
-        generations = [
-            generation
-            for batch in loader
-            for generation in generate_batch(
-                model=model,
-                batch=batch.to(device),
-                num_samples=num_samples,
-                codec=codec,
+        synchronize_device(device)
+        generation_start = perf_counter()
+        generations = []
+        for batch_number, batch in enumerate(loader, start=1):
+            generations.extend(
+                generate_batch(
+                    model=model,
+                    batch=batch.to(device),
+                    num_samples=num_samples,
+                    codec=codec,
+                )
             )
-        ]
+            synchronize_device(device)
+            print(
+                f'Generation validation batch {batch_number}/{len(loader)} '
+                f'({perf_counter() - generation_start:.1f}s elapsed)',
+                flush=True,
+            )
+        generation_seconds = perf_counter() - generation_start
         if not generations:
             raise ValueError('Validation generation subset is empty')
+        scoring_start = perf_counter()
         summaries = [
             PrefixSummary.of(one, checker=checker, include_diagnostics=True) for one in generations
         ]
@@ -147,4 +168,6 @@ def validate_generation(
                 key: sum(summary.diagnostics[key] for summary in summaries) / len(summaries)
                 for key in METRICS.diagnostics
             },
+            generation_seconds=generation_seconds,
+            scoring_seconds=perf_counter() - scoring_start,
         )

@@ -11,7 +11,7 @@ training:
   val_every_n_steps: ${oc.select:training.regimes.${data.name}.val_every_n_steps}
   grad_clip_norm: 1.0
   validation_pairs: ${oc.select:training.regimes.${data.name}.validation_pairs}
-  generation_pairs: ${oc.select:training.regimes.${data.name}.generation_pairs}
+  generation_pairs: ${oc.select:model.validation.generation_pairs.${data.name},${oc.select:training.regimes.${data.name}.generation_pairs}}
   regimes:
     sepsis:
       lr: 0.0003
@@ -45,6 +45,6 @@ early_stopping:
   patience_validations: 20
   min_delta_perc: 0.005
 inference:
-  validation_samples: 32
+  validation_samples: ${oc.select:model.validation.samples,32}
   evaluation_samples: 100
   generation_rows_upper_bound: 8192

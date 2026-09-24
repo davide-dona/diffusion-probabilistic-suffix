@@ -109,3 +109,12 @@ def _validate_diffusion_transformer(model: DictConfig) -> None:
             f'model.diffusion.{channel}.cosine_offset',
             inclusive=True,
         )
+    if 'validation' in model:
+        validation = model.validation
+        if set(validation) != {'samples', 'generation_pairs'}:
+            raise ValueError('model.validation must contain exactly samples and generation_pairs')
+        validate_number(
+            validation.samples, 'model.validation.samples', minimum=10, inclusive=True, integer=True
+        )
+        for dataset, pairs in validation.generation_pairs.items():
+            validate_number(pairs, f'model.validation.generation_pairs.{dataset}', integer=True)
