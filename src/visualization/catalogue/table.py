@@ -2,8 +2,7 @@ from dataclasses import dataclass
 
 from src.evaluation import Axis
 from src.evaluation.metrics import METRICS
-from src.evaluation.metrics.metadata import Direction
-from src.visualization.catalogue.entry import MetricEntry
+from src.evaluation.metrics.metadata import Direction, Metric
 
 
 @dataclass(frozen=True)
@@ -20,29 +19,19 @@ class Table:
 
     name: str
     axis: Axis
-    note: str | None
-    columns: tuple[MetricEntry, ...]
+    columns: tuple[Metric, ...]
     column_groups: tuple[ColumnGroup, ...] = ()
 
     def __post_init__(self) -> None:
-        undirected = [
-            entry.metric.key for entry in self.columns if entry.metric.direction is Direction.NONE
-        ]
+        undirected = [metric.key for metric in self.columns if metric.direction is Direction.NONE]
         if undirected:
-            raise ValueError(
-                f'the {self.name} table holds {", ".join(undirected)}, which have no better value '
-                f'and so no cell a reader could rank or the emphasis could mark. A property of the '
-                f"log is drawn in FIGURES as the log's own series rather than tabulated."
-            )
+            raise ValueError(f'{self.name} has metrics without a ranking direction: {undirected}')
         if any(group.span < 1 for group in self.column_groups):
             raise ValueError(f'every {self.name} table column group must span at least one column.')
         if self.column_groups and sum(group.span for group in self.column_groups) != len(
             self.columns
         ):
-            raise ValueError(
-                f'the {self.name} table groups {sum(group.span for group in self.column_groups)} '
-                f'columns but declares {len(self.columns)}.'
-            )
+            raise ValueError(f'{self.name} column groups do not cover its columns.')
 
 
 # Each table answers one evaluation question with directional metrics.
@@ -50,22 +39,20 @@ TABLES = (
     Table(
         name='sample-prediction',
         axis=Axis.OVERALL,
-        note=None,
         columns=(
-            MetricEntry(METRICS['energy_score_dls'], r'$ES_{\mathrm{DL}}$'),
-            MetricEntry(METRICS['energy_score_exact'], r'$ES_{\mathrm{exact}}$'),
-            MetricEntry(METRICS['energy_score_bigram'], r'$ES_{\mathrm{2-\text{gram}}}$'),
-            MetricEntry(METRICS['suffix_length_crps'], 'Suffix length CRPS'),
+            METRICS.report['energy_score_dls'],
+            METRICS.report['energy_score_exact'],
+            METRICS.report['energy_score_bigram'],
+            METRICS.report['suffix_length_crps'],
         ),
     ),
     Table(
         name='calibration',
         axis=Axis.OVERALL,
-        note=None,
         columns=(
-            MetricEntry(METRICS['suffix_length_coverage_gap_50'], r'50\%'),
-            MetricEntry(METRICS['suffix_length_coverage_gap_75'], r'75\%'),
-            MetricEntry(METRICS['suffix_length_coverage_gap_95'], r'95\%'),
+            METRICS.report['suffix_length_coverage_gap_50'],
+            METRICS.report['suffix_length_coverage_gap_75'],
+            METRICS.report['suffix_length_coverage_gap_95'],
         ),
         column_groups=(ColumnGroup('Suffix length', 3),),
     ),

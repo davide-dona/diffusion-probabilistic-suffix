@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 from src.artifacts import read_provenance_metadata, with_provenance_metadata
 from src.evaluation.metrics import METRICS
 from src.evaluation.reports import _group_by_model
-from src.evaluation.scoring import PrefixSummary, flatten_scores
+from src.evaluation.scoring import PrefixSummary
 from src.inference.generation_store import PrefixKey
 
 BLOCK = 16_384
@@ -63,7 +63,7 @@ def stream_prefix_scores(
                 columns['case_id'].append(case_id)
                 columns['prefix_len'].append(prefix_len)
                 columns['suffix_len'].append(summary.suffix_len)
-                for name, value in flatten_scores(summary).items():
+                for name, value in summary.scores.flatten().items():
                     columns[name].append(value)
                 if len(columns['case_id']) >= BLOCK:
                     flush(writer)
