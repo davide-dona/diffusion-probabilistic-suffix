@@ -5,7 +5,6 @@ from typing import Self
 
 import numpy as np
 
-from src.evaluation.helpers import sequence_similarity
 from src.inference.generation import Generation
 from src.logs.declare import ConformanceChecker
 from src.logs.declare.checker import Conformance
@@ -15,14 +14,13 @@ from src.logs.declare.checker import Conformance
 class PreparedPrefix:
     """Decoded values and constraint checks shared by every metric for one prefix.
 
-    Similarities and sample conformance follow distinct suffix order; generation sample
-    counts give their draw multiplicities. Numeric arrays retain every draw: suffix lengths
-    and remaining times have shape [S, 1], and inter-event times have shape [S, T], where T
-    is the observed suffix length. Truth arrays have shape [1] or [T]. Times are in minutes.
+    Sample conformance follows distinct suffix order; generation sample counts give its draw
+    multiplicities. Numeric arrays retain every draw: suffix lengths and remaining times have
+    shape [S, 1], and inter-event times have shape [S, T], where T is the observed suffix
+    length. Truth arrays have shape [1] or [T]. Times are in minutes.
     """
 
     generation: Generation
-    similarities: tuple[float, ...]
     suffix_lengths: np.ndarray
     remaining_times: np.ndarray
     inter_event_times: np.ndarray
@@ -50,9 +48,6 @@ class PreparedPrefix:
         prefix = generation.prefix_activities
         truth_length = len(truth)
 
-        similarities = tuple(
-            sequence_similarity(suffix, truth.activities) for suffix in samples.suffixes
-        )
         suffix_lengths = np.array(
             [float(len(events)) for events in samples.events], dtype=np.float64
         ).reshape(draws, 1)
@@ -71,7 +66,6 @@ class PreparedPrefix:
 
         return cls(
             generation=generation,
-            similarities=similarities,
             suffix_lengths=suffix_lengths,
             remaining_times=remaining_times,
             inter_event_times=inter_event_times,

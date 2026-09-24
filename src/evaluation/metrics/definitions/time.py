@@ -1,5 +1,5 @@
-from src.evaluation.helpers import coverage_gap, crps
-from src.evaluation.metrics.metadata import Direction, MetricGroup, Unit
+from src.evaluation.metrics.helpers import coverage_gap, crps
+from src.evaluation.metrics.metadata import Direction, MetricGroup
 from src.evaluation.metrics.registry import METRICS
 from src.evaluation.prepared import PreparedPrefix
 
@@ -10,7 +10,8 @@ MINUTES_PER_DAY = 1440.0
     'remaining_time_crps_days',
     label='Remaining-time CRPS',
     group=MetricGroup.TIME,
-    unit=Unit.DAYS,
+    unit='days',
+    bounds=(0.0, None),
     direction=Direction.LOWER,
 )
 def remaining_time_crps_days(context: PreparedPrefix) -> float:
@@ -29,7 +30,8 @@ def remaining_time_crps_days(context: PreparedPrefix) -> float:
     'inter_event_time_crps_days',
     label='Inter-event-time CRPS',
     group=MetricGroup.TIME,
-    unit=Unit.DAYS,
+    unit='days',
+    bounds=(0.0, None),
     direction=Direction.LOWER,
 )
 def inter_event_time_crps_days(context: PreparedPrefix) -> float:
@@ -48,7 +50,6 @@ def inter_event_time_crps_days(context: PreparedPrefix) -> float:
     'remaining_time_coverage_gap_50',
     label='Remaining time coverage gap 50%',
     group=MetricGroup.TIME,
-    unit=Unit.SCORE,
     direction=Direction.ZERO,
 )
 def remaining_time_coverage_gap_50(context: PreparedPrefix) -> float:
@@ -68,7 +69,6 @@ def remaining_time_coverage_gap_50(context: PreparedPrefix) -> float:
     'remaining_time_coverage_gap_75',
     label='Remaining time coverage gap 75%',
     group=MetricGroup.TIME,
-    unit=Unit.SCORE,
     direction=Direction.ZERO,
 )
 def remaining_time_coverage_gap_75(context: PreparedPrefix) -> float:
@@ -88,7 +88,6 @@ def remaining_time_coverage_gap_75(context: PreparedPrefix) -> float:
     'remaining_time_coverage_gap_95',
     label='Remaining time coverage gap 95%',
     group=MetricGroup.TIME,
-    unit=Unit.SCORE,
     direction=Direction.ZERO,
 )
 def remaining_time_coverage_gap_95(context: PreparedPrefix) -> float:
@@ -108,7 +107,6 @@ def remaining_time_coverage_gap_95(context: PreparedPrefix) -> float:
     'inter_event_time_coverage_gap_50',
     label='Inter-event time coverage gap 50%',
     group=MetricGroup.TIME,
-    unit=Unit.SCORE,
     direction=Direction.ZERO,
 )
 def inter_event_time_coverage_gap_50(context: PreparedPrefix) -> float:
@@ -128,7 +126,6 @@ def inter_event_time_coverage_gap_50(context: PreparedPrefix) -> float:
     'inter_event_time_coverage_gap_75',
     label='Inter-event time coverage gap 75%',
     group=MetricGroup.TIME,
-    unit=Unit.SCORE,
     direction=Direction.ZERO,
 )
 def inter_event_time_coverage_gap_75(context: PreparedPrefix) -> float:
@@ -148,7 +145,6 @@ def inter_event_time_coverage_gap_75(context: PreparedPrefix) -> float:
     'inter_event_time_coverage_gap_95',
     label='Inter-event time coverage gap 95%',
     group=MetricGroup.TIME,
-    unit=Unit.SCORE,
     direction=Direction.ZERO,
 )
 def inter_event_time_coverage_gap_95(context: PreparedPrefix) -> float:

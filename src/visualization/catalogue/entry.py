@@ -35,7 +35,7 @@ class MetricEntry:
         Returns:
             Lower and upper bounds, if declared.
         """
-        return self.metric.unit.bounds
+        return self.metric.bounds
 
     @property
     def shares_scale(self) -> bool:
@@ -53,8 +53,7 @@ class MetricEntry:
         Returns:
             Unit suffix or an empty string.
         """
-        symbol = self.metric.unit.symbol
-        return f' [{symbol}]' if symbol else ''
+        return f' [{self.metric.unit}]' if self.metric.unit else ''
 
     @property
     def axis_label(self) -> str:

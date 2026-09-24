@@ -6,7 +6,6 @@ from src.evaluation.metrics.metadata import (
     MetricCompute,
     MetricGroup,
     Owner,
-    Unit,
 )
 
 
@@ -22,7 +21,8 @@ class MetricRegistry:
         *,
         label: str,
         group: MetricGroup,
-        unit: Unit,
+        unit: str | None = None,
+        bounds: tuple[float | None, float | None] = (None, None),
         direction: Direction = Direction.NONE,
         owner: Owner = Owner.MODEL,
         diagnostic: bool = False,
@@ -33,7 +33,8 @@ class MetricRegistry:
             key: Unique identifier used in score mappings and artifact columns.
             label: Human-readable metric name.
             group: Evaluation question used to group scores.
-            unit: Physical unit and display bounds.
+            unit: Unit label displayed after the metric name, if any.
+            bounds: Optional lower and upper plot limits.
             direction: Preferred value when comparing models.
             owner: Whether the value belongs to a model or the observed log.
             diagnostic: Whether to exclude the metric from final reports and score files.
@@ -53,6 +54,7 @@ class MetricRegistry:
                 label=label,
                 group=group,
                 unit=unit,
+                bounds=bounds,
                 direction=direction,
                 owner=owner,
                 diagnostic=diagnostic,
