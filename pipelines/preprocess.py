@@ -6,8 +6,10 @@ import pandas as pd
 from omegaconf import DictConfig
 from pandas.api.types import is_numeric_dtype
 
-from pipelines.console import banner, step
+from pipelines.helpers.console import banner, step
+from pipelines.helpers.invocation import start_stage
 from src import artifacts
+from src.config_validation import validate_preprocess_config
 from src.datasets.codec import DatasetCodec
 from src.logs import (
     CASE_ELAPSED_KEY,
@@ -38,8 +40,6 @@ from src.logs.preprocessing import (
     out_of_time_split,
     sort_log,
 )
-from src.runs.hydra import start_stage
-from src.validation import validate_preprocess
 
 
 def case_length_cutoff(log: pd.DataFrame, *, data_config: DictConfig) -> int:
@@ -270,7 +270,7 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
 @hydra.main(version_base='1.3', config_path='../config', config_name='preprocess')
 def main(cfg: DictConfig) -> None:
     start_stage(cfg)
-    validate_preprocess(cfg)
+    validate_preprocess_config(cfg)
     run(data_config=cfg.data, declare_config=cfg.declare, run_id=cfg.run_id)
 
 

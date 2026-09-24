@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.artifacts.identity import RunIdentity, validate_dataset, validate_model, validate_run_id
 from src.logs.keys import Split
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -8,6 +9,22 @@ CONFIG_DIR = ROOT / 'config'
 DATA_DIR = ROOT / 'data'
 OUTPUTS_DIR = ROOT / 'outputs'
 PRETRAINED_DIR = ROOT / 'pretrained'
+
+
+def dataset_output_dir(stage: str, dataset: str, invocation_id: str) -> Path:
+    """Locate one dataset-stage invocation under the output root."""
+    validate_dataset(dataset)
+    validate_run_id(invocation_id)
+    return Path('outputs') / stage / dataset / invocation_id
+
+
+def model_output_dir(stage: str, run: RunIdentity, invocation_id: str | None = None) -> Path:
+    """Locate a model-stage invocation under its training run."""
+    path = Path('outputs') / stage / str(run)
+    if invocation_id is not None:
+        validate_run_id(invocation_id)
+        path /= invocation_id
+    return path
 
 
 @dataclass(frozen=True)
@@ -35,6 +52,7 @@ class DatasetArtifact(Artifact):
     relative: str
 
     def path(self, dataset: str) -> Path:
+        validate_dataset(dataset)
         return DATA_DIR / dataset / self.relative
 
     def require(self, dataset: str) -> Path:
@@ -52,6 +70,7 @@ class SplitArtifact(Artifact):
     suffix: str
 
     def directory(self, dataset: str) -> Path:
+        validate_dataset(dataset)
         return DATA_DIR / dataset / self.subdirectory
 
     def path(self, dataset: str, split: Split) -> Path:
@@ -74,6 +93,8 @@ class PublishedArtifact(Artifact):
     suffix: str
 
     def path(self, dataset: str, model: str) -> Path:
+        validate_dataset(dataset)
+        validate_model(model)
         return self.directory / dataset / f'{model}{self.suffix}'
 
     def require(self, dataset: str, model: str) -> Path:

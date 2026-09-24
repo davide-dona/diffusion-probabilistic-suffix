@@ -5,7 +5,7 @@ from src.artifacts.dataset import (
     require_dataset_bundle,
 )
 from src.artifacts.hashes import sha256, validate_sha256
-from src.artifacts.identity import RunIdentity, validate_dataset, validate_run_id
+from src.artifacts.identity import RunIdentity, validate_dataset, validate_model, validate_run_id
 from src.artifacts.parquet import (
     read_activity_vocabulary,
     read_provenance_metadata,
@@ -28,6 +28,8 @@ from src.artifacts.paths import (
     DatasetArtifact,
     PublishedArtifact,
     SplitArtifact,
+    dataset_output_dir,
+    model_output_dir,
 )
 from src.artifacts.provenance import ArtifactProvenance
 
@@ -52,11 +54,14 @@ __all__ = [
     'PublishedArtifact',
     'RunIdentity',
     'SplitArtifact',
+    'dataset_output_dir',
+    'model_output_dir',
     'read_activity_vocabulary',
     'read_provenance_metadata',
     'require_dataset_bundle',
     'sha256',
     'validate_dataset',
+    'validate_model',
     'validate_run_id',
     'validate_sha256',
     'with_activity_vocabulary',

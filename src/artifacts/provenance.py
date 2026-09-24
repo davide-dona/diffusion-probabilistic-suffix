@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Self
 
-from src.artifacts.hashes import validate_sha256
+from src.artifacts.dataset import DatasetManifest
+from src.artifacts.hashes import sha256, validate_sha256
 from src.artifacts.identity import RunIdentity
 
 
@@ -23,6 +25,16 @@ class ArtifactProvenance:
             'dataset_fingerprint': self.dataset_fingerprint,
             'checkpoint_sha256': self.checkpoint_sha256,
         }
+
+    def require_dataset(self, manifest: DatasetManifest) -> None:
+        """Require the installed dataset bundle to match this artifact's source."""
+        if self.run.dataset != manifest.dataset or self.dataset_fingerprint != manifest.fingerprint:
+            raise ValueError('Artifact provenance does not match the dataset bundle')
+
+    def require_checkpoint(self, path: Path) -> None:
+        """Require the source checkpoint bytes to match this artifact's source."""
+        if self.checkpoint_sha256 != sha256(path):
+            raise ValueError('Artifact provenance does not match the source checkpoint')
 
     @classmethod
     def from_metadata(cls, metadata: object) -> Self:

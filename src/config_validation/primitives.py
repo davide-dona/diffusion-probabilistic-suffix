@@ -1,5 +1,4 @@
 import math
-import re
 from collections.abc import Sequence
 
 
@@ -31,12 +30,6 @@ def validate_number(
         relation = '>=' if inclusive else '>'
         kind = 'integer' if integer else 'number'
         raise ValueError(f'{name} must be a finite {kind} {relation} {minimum}, got {value!r}')
-
-
-def validate_identifier(value: object, name: str, pattern: str, description: str) -> None:
-    """Require a string identifier matching a documented regular-expression pattern."""
-    if not isinstance(value, str) or not re.fullmatch(pattern, value):
-        raise ValueError(f'{name} must contain only {description}')
 
 
 def validate_string_list(value: object, name: str) -> None:

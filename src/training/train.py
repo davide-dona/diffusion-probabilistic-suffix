@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
@@ -12,7 +13,6 @@ from torch.utils.data import DataLoader
 from src.artifacts import RunIdentity
 from src.datasets.codec import DatasetCodec
 from src.logs.declare import ConformanceChecker
-from src.runs.hydra import output_path
 from src.selection import SELECTION_METRIC, selection_score
 from src.training.early_stopping import EarlyStopper
 from src.training.loss import Loss
@@ -48,6 +48,7 @@ def train(
     codec: DatasetCodec,
     run: RunIdentity,
     dataset_fingerprint: str,
+    checkpoint_path: Path,
     experiment_config: dict,
     optimizer_config: DictConfig,
     training: DictConfig,
@@ -72,6 +73,7 @@ def train(
             generation pass so its remaining times are scored in minutes.
         run: The stable identity shared by the checkpoint and its downstream artifacts.
         dataset_fingerprint: Exact preprocessing bundle used by every dataset reader in this run.
+        checkpoint_path: Destination for the selected checkpoint.
         experiment_config: The whole `DictConfig`, dumped to plain data, written into the
             checkpoint so the model can be rebuilt from the file alone.
         optimizer_config: The optimizer hyperparameters, including step-relative warmup and decay.
@@ -190,7 +192,7 @@ def train(
                     wandb_id=tracking.id,
                     run=run,
                     dataset_fingerprint=dataset_fingerprint,
-                    path=output_path('best.pt'),
+                    path=checkpoint_path,
                 )
                 print(f'New best model (step {step}, score {score:.4f}) saved at {path}')
 
@@ -228,7 +230,7 @@ def train(
                 'dataset_fingerprint': dataset_fingerprint,
             },
         )
-        artifact.add_file(str(output_path('best.pt')), name='model.pt')
+        artifact.add_file(str(checkpoint_path), name='model.pt')
         wandb.log_artifact(artifact, aliases=['best', run.run_id])
 
         # The alert is the one nobody has to be watching a terminal to get.

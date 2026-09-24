@@ -24,6 +24,11 @@ def validate_run_id(value: object) -> str:
     return _validated(value, _RUN_ID, 'run_id')
 
 
+def validate_model(value: object) -> str:
+    """Require a model name that can safely form one path component."""
+    return _validated(value, _MODEL, 'model')
+
+
 @dataclass(frozen=True)
 class RunIdentity:
     """The dataset, model, and invocation that identify one training run."""
@@ -34,7 +39,7 @@ class RunIdentity:
 
     def __post_init__(self) -> None:
         validate_dataset(self.dataset)
-        _validated(self.model, _MODEL, 'model')
+        validate_model(self.model)
         validate_run_id(self.run_id)
 
     def __str__(self) -> str:

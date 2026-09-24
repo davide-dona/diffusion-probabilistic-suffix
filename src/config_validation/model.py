@@ -2,7 +2,8 @@ import math
 
 from omegaconf import DictConfig
 
-from src.validation.primitives import validate_identifier, validate_number
+from src.artifacts.identity import validate_model as validate_model_name
+from src.config_validation.primitives import validate_number
 
 
 def validate_sampling(config: DictConfig) -> None:
@@ -28,12 +29,7 @@ def validate_model(model: DictConfig) -> None:
         ValueError: If a dimension, probability, transformer layout, or model-kind-specific
             section is invalid.
     """
-    validate_identifier(
-        model.name,
-        'model.name',
-        r'[a-z0-9][a-z0-9_]*',
-        'lowercase letters, digits, and underscores',
-    )
+    validate_model_name(model.name)
     if model.kind not in {'head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran'}:
         raise ValueError(f'Unknown model kind: {model.kind}')
 

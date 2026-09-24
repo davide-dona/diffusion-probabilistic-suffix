@@ -6,8 +6,10 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from pipelines.console import banner, step
+from pipelines.helpers.console import banner, step
+from pipelines.helpers.invocation import output_path, save_config, start_stage
 from src import artifacts
+from src.config_validation import validate_experiment_config
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset
 from src.inference.generate import generate_batch, generation_batch_size
@@ -19,8 +21,6 @@ from src.models import (
     model_from_checkpoint,
     require_generation_ready,
 )
-from src.runs.hydra import output_path, save_config, start_stage
-from src.validation import validate_generation
 
 
 def run(
@@ -63,7 +63,7 @@ def run(
         config.inference.evaluation_samples = num_samples
     if num_workers is not None:
         config.dataloader.num_workers = num_workers
-    validate_generation(config)
+    validate_experiment_config(config)
     # Record the exact settings used for this generation run.
     save_config(
         OmegaConf.create(
@@ -78,9 +78,7 @@ def run(
         )
     )
 
-    artifacts.require_dataset_bundle(
-        config.data.name, expected_fingerprint=metadata['dataset_fingerprint']
-    )
+    provenance.require_dataset(artifacts.require_dataset_bundle(config.data.name))
     torch.manual_seed(config.seed)
 
     path = output_path('generations.parquet')

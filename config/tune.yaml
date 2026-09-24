@@ -2,6 +2,7 @@ defaults:
 - output/default
 - _self_
 checkpoint: ???
+invocation_id: ${now:%Y%m%d-%H%M%S-%f}
 device: null
 pairs: null
 samples: null
@@ -20,7 +21,7 @@ top_ps:
 - 1.0
 hydra:
   run:
-    dir: ${checkpoint_output:tune,${checkpoint}}
+    dir: ${source_output:tune,checkpoint,${checkpoint},${invocation_id}}
   sweep:
     dir: outputs/tune
-    subdir: ${checkpoint_subdir:tune,${checkpoint}}
+    subdir: ${source_subdir:tune,checkpoint,${checkpoint},${invocation_id}}

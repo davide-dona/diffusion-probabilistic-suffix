@@ -57,7 +57,7 @@ uv run python -m pipelines.evaluate --multirun \
   generations=/path/to/first/generations.parquet,/path/to/second/generations.parquet workers=4
 ```
 
-Each multirun job receives its own dataset, model, and run ID directory. Batch runs do not
+Each multirun job receives its own output directory. Batch runs do not
 transfer artifacts between stages automatically, so supply each stage's input artifact
 explicitly.
 
@@ -109,8 +109,8 @@ uv run python -m pipelines.tune checkpoint=/path/to/best.pt device=cpu
 ```
 
 The selected sampler and full search are written to
-`outputs/tune/<dataset>/<model>/<run-id>/tuning.json`. The same directory contains `tuned.pt`, a
-self-contained checkpoint required for Head-sampling Transformer generation.
+`outputs/tune/<dataset>/<model>/<training-run-id>/<invocation-id>/tuning.json`. The same directory
+contains `tuned.pt`, a self-contained checkpoint required for Head-sampling Transformer generation.
 
 U-ED-SuTraN samples its learned distribution directly. It does not support temperature or top-p
 tuning, and its `best.pt` can be used for generation without this stage.
@@ -130,7 +130,7 @@ uv run python -m pipelines.generate checkpoint=/path/to/tuned.pt device=cpu num_
 ```
 
 The generations are written to
-`outputs/generate/<dataset>/<model>/<run-id>/generations.parquet`.
+`outputs/generate/<dataset>/<model>/<training-run-id>/<invocation-id>/generations.parquet`.
 
 ### 5. Evaluation
 
@@ -141,7 +141,7 @@ uv run python -m pipelines.evaluate generations=/path/to/generations.parquet wor
 ```
 
 The report and its per-prefix scores are written under
-`outputs/evaluate/<dataset>/<model>/<run-id>/` as `evaluation.json` and
+`outputs/evaluate/<dataset>/<model>/<training-run-id>/<invocation-id>/` as `evaluation.json` and
 `prefix_scores.parquet`. The JSON summary groups scores under `scores.activity`,
 `scores.suffix_length`, `scores.time`, and `scores.conformance`, both overall and within
 each length bucket.

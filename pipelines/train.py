@@ -3,16 +3,16 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from pipelines.console import banner, step
+from pipelines.helpers.console import banner, step
+from pipelines.helpers.invocation import output_path, start_stage
 from src import artifacts
+from src.config_validation import validate_experiment_config
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset, fixed_subset
 from src.inference.generate import generation_batch_size
 from src.logs import Split
 from src.models import build_model
-from src.runs.hydra import output_path, start_stage
 from src.training import train
-from src.validation import validate_training
 
 
 def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
@@ -122,6 +122,7 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
         codec=codec,
         run=run,
         dataset_fingerprint=dataset_manifest.fingerprint,
+        checkpoint_path=output_path('best.pt'),
         optimizer_config=config.optimizer,
         training=config.training,
         early_stopping_config=config.early_stopping,
@@ -131,7 +132,7 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
 @hydra.main(version_base='1.3', config_path='../config', config_name='train')
 def main(cfg: DictConfig) -> None:
     start_stage(cfg)
-    validate_training(cfg)
+    validate_experiment_config(cfg)
     run(
         cfg,
         artifacts.RunIdentity(dataset=cfg.data.name, model=cfg.model.name, run_id=cfg.run_id),
