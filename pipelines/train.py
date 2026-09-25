@@ -54,11 +54,11 @@ class _TrainingReporter:
         generation = report.generation_metrics
         values = generation.scores.flatten()
         model_values = {
-            f'generation/{metric.group}/{key}': values[key]
+            f'generation_{metric.group}/{key}': values[key]
             for key, metric in METRICS.report.items()
             if metric.owner is Owner.MODEL
         } | {
-            f'diagnostic/{metric.group}/{key}': generation.diagnostics[key]
+            f'diagnostic_{metric.group}/{key}': generation.diagnostics[key]
             for key, metric in METRICS.diagnostics.items()
             if metric.owner is Owner.MODEL
         }
@@ -254,7 +254,9 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
         config=experiment_config,
     )
     print(f'Logging to {tracking.url or experiment_config["wandb"]["mode"]}')
-    tracking.define_metric(f'generation/activity/{SELECTION_METRIC.key}', summary='min')
+    tracking.define_metric(
+        f'generation_{SELECTION_METRIC.group}/{SELECTION_METRIC.key}', summary='min'
+    )
     reporter = _TrainingReporter(
         tracking=tracking,
         provenance=provenance,
