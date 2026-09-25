@@ -22,6 +22,9 @@ class DiffusionDenoiser(nn.Module):
         self.event_embedding = EventContentEmbedding(
             config=config.embeddings, codec=codec, d_model=d_model
         )
+        self.suffix_activity_embedding = nn.Embedding(
+            num_embeddings=num_activities + 1, embedding_dim=config.embeddings.activity_dim
+        )
         self.suffix_projection = nn.Linear(
             in_features=config.embeddings.activity_dim + 1, out_features=d_model
         )
@@ -62,8 +65,6 @@ class DiffusionDenoiser(nn.Module):
         activities: torch.Tensor,
         times: torch.Tensor,
         timestep: torch.Tensor,
-        *,
-        diffusion_to_codec: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Predict activity logits `[B, T, K]` and time noise `[B, T]`."""
         prefix_hidden = self._embed_prefix(prefix)  # [B, P, D]
@@ -71,7 +72,6 @@ class DiffusionDenoiser(nn.Module):
             activities=activities,
             times=times,
             timestep=timestep,
-            diffusion_to_codec=diffusion_to_codec,
         )  # [B, T, D]
         hidden = torch.cat(tensors=(prefix_hidden, suffix_hidden), dim=1)  # [B, P + T, D]
         mask = torch.cat(
@@ -96,12 +96,9 @@ class DiffusionDenoiser(nn.Module):
         activities: torch.Tensor,
         times: torch.Tensor,
         timestep: torch.Tensor,
-        *,
-        diffusion_to_codec: torch.Tensor,
     ) -> torch.Tensor:
         """Combine noisy suffix content, positions, segment, and timestep."""
-        codec_activities = diffusion_to_codec[activities]  # [B, T]
-        activity = self.event_embedding.activity_embedding(codec_activities)  # [B, T, A]
+        activity = self.suffix_activity_embedding(activities)  # [B, T, A]
         features = torch.cat(tensors=(activity, times.unsqueeze(dim=-1)), dim=-1)  # [B, T, A + 1]
         hidden = self.suffix_projection(features)  # [B, T, A + 1] -> [B, T, D]
         positions = self.position_encoding[: hidden.size(dim=1)]  # [T, D]

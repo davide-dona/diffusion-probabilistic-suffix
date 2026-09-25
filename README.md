@@ -98,8 +98,11 @@ decoder, adding MC dropout and learned activity-logit and time variances. Its de
 categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
 `model.uncertainty`. Both SuTraN models train on complete suffixes with activity-only decoder inputs.
 Validation uses isolated seeded draws and selects checkpoints by the existing generation metric.
-Training
-writes the best validation checkpoint to
+The diffusion model uses absorbing MASK activity corruption and Gaussian time noise. Its default
+configuration has 100 noise levels and 50 DDIM sampling calls. The activity loss supervises real
+events and all EOT positions in the fixed suffix canvas. Change `model.diffusion.sampler.calls`
+and `model.diffusion.sampler.eta` for validation comparisons before final test generation.
+Training writes the best validation checkpoint to
 `outputs/train/<dataset>/<model>/<run-id>/best.pt`. Runs cannot be resumed, but an interrupted run
 retains its last successfully saved best checkpoint.
 

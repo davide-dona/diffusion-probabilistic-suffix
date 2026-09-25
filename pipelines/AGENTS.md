@@ -48,6 +48,8 @@ directory, but Hydra does not pass artifacts to the next stage. Supply every dow
 - Keep split responsibilities separate. Tuning reads validation only; generation reads test only.
 - Protect replacement of the best checkpoint atomically. Remove directly streamed Parquet outputs
   after handled write failures.
+- For diffusion generation, store the noise levels, both cosine schedules, call count, and DDIM
+  stochasticity in the generations file sampling metadata alongside the resolved stage config.
 - Preserve the shared provenance record through tuning, generation, and evaluation.
 - Give each tune, generate, and evaluate invocation a separate output directory below the training
   run. The source artifact still determines the training run identity.

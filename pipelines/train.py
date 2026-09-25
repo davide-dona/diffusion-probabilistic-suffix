@@ -41,6 +41,9 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
             f'{config.training.val_every_n_steps:,}',
             'batch': f'{config.dataloader.batch_size} pairs, '
             f'{config.dataloader.num_workers} loader workers',
+            'validation': f'{config.training.validation_pairs:,} loss pairs, '
+            f'{config.training.generation_pairs:,} generation prefixes with '
+            f'{config.inference.validation_samples} draws each',
             'optimizer': f'AdamW, lr {config.optimizer.lr} after '
             f'{config.optimizer.warmup_steps:,} warmup steps, cosine decay, '
             f'weight decay {config.optimizer.weight_decay}',

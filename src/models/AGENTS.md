@@ -18,8 +18,9 @@ generation depend on this interface rather than on architecture internals.
 events before EOT, or the generated canvas length when no EOT appears.
 
 `DecoderOutput` holds activity logits `[B, T, V]` and standardized time predictions `[B, T]`.
-`DiffusionOutput` also carries the clean and noisy states, sampled timesteps, noise, and loss masks
-needed to evaluate one stochastic diffusion pass.
+`DiffusionOutput` also carries the clean and noisy states, sampled timesteps, Gaussian noise, and
+the real-event time mask needed to evaluate one stochastic diffusion pass. Its activity loss spans
+the full fixed canvas, including trailing EOT targets.
 `UncertaintyAwareDecoderOutput` carries Gaussian activity-logit means and log-variances `[B, T, V]`
 and standardized time means and log-variances `[B, T]`.
 

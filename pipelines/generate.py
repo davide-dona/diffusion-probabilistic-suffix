@@ -1,4 +1,5 @@
 from pathlib import Path
+from time import perf_counter
 
 import hydra
 import torch
@@ -91,6 +92,8 @@ def run(
     # A checkpoint that has been trimmed for publishing still carries both of these.
     trained_step, score = checkpoint.get('step'), checkpoint.get('selection_score')
     drawn_with = config.model.get('sampling')
+    if config.model.kind == 'diffusion_transformer':
+        drawn_with = config.model.diffusion
 
     banner(
         'Generating suffixes',
@@ -103,9 +106,14 @@ def run(
             else config.model.name,
             'device': device,
             'samples': f'{config.inference.evaluation_samples} suffixes per prefix',
-            'sampling': f'temperature {drawn_with.temperature}, top_p {drawn_with.top_p}'
-            if drawn_with is not None
-            else 'not configured',
+            'sampling': (
+                f'{drawn_with.sampler.calls} {drawn_with.sampler.method} calls, '
+                f'eta {drawn_with.sampler.eta}'
+                if config.model.kind == 'diffusion_transformer'
+                else f'temperature {drawn_with.temperature}, top_p {drawn_with.top_p}'
+                if drawn_with is not None
+                else 'not configured'
+            ),
             'batch': f'{batch_size} prefixes, {config.dataloader.num_workers} loader workers',
             'generations': path,
         },
@@ -141,23 +149,36 @@ def run(
 
     # Write the generation while it is being produced, avoiding a huge in-memory DataFrame.
     sentinel_required = 0
+    excess_total_length = 0
     generated_samples = 0
+    generation_seconds = 0.0
+    if device.type == 'cuda':
+        torch.cuda.reset_peak_memory_stats(device)
     with GenerationWriter(
         path, provenance, vocabulary=codec.activity_codes.vocabulary, sampling=drawn_with
     ) as writer:
         for batch in tqdm(iterable=test_loader, desc='Generating', unit='batch'):
+            started = perf_counter()
             generations = generate_batch(
                 model=model,
                 batch=batch.to(device),
                 num_samples=config.inference.evaluation_samples,
                 codec=codec,
             )
+            if device.type == 'cuda':
+                torch.cuda.synchronize(device)
+            generation_seconds += perf_counter() - started
             sentinel_required += sum(
                 event.used_eot_sentinel
                 for generation in generations
                 for event in generation.samples.events
             )
             generated_samples += sum(len(generation.samples) for generation in generations)
+            excess_total_length += sum(
+                generation.prefix_len + len(event.activities) > codec.max_trace_length
+                for generation in generations
+                for event in generation.samples.events
+            )
             # Write the generations to the Parquet file in a single block, one row per prefix.
             writer.write(generations)
 
@@ -166,6 +187,10 @@ def run(
         f'EOT sentinel required for {sentinel_required / generated_samples:.2%} of '
         f'{generated_samples:,} generated suffixes'
     )
+    print(f'Prefix plus suffix exceeded the codec limit in {excess_total_length:,} samples')
+    print(f'Generation time per suffix: {generation_seconds / generated_samples:.4f} seconds')
+    if device.type == 'cuda':
+        print(f'Peak CUDA memory: {torch.cuda.max_memory_allocated(device) / 1024**2:.1f} MiB')
 
 
 @hydra.main(version_base='1.3', config_path='../config', config_name='generate')

@@ -1,142 +1,65 @@
 # Joint Diffusion Transformer
 
-## Purpose and Notation
+## Contract
 
-The model approximates the joint conditional distribution
+The model learns the distribution of future activities and standardized inter-event times given an
+observed prefix. Its fixed suffix canvas width is `codec.max_trace_length - 1`. The first generated
+EOT determines the length. Dataset cuts always retain at least one real future event, so EOT is
+forbidden at position zero in both training predictions and sampling. PAD and SOS are structural;
+UNK and EOT are clean activity targets. MASK is a separate noisy suffix state and is never emitted.
 
-\[
-p_\theta(a_{1:L}, \tau_{1:L} \mid c),
-\]
+`generate` may read `TraceCut.prefix` only. No sampling bound, denoiser input, or stopping decision
+may use a true suffix field. The denoiser uses full bidirectional attention over clean prefix rows
+and its own noisy or revealed suffix canvas.
 
-where `c` is an observed process prefix, `a` are future activities, `tau` are standardized
-inter-event times, and the first EOT token determines the effective suffix length. The fixed canvas
-width is `L = codec.max_trace_length - 1`.
+## Clean Canvas and Forward Processes
 
-This is a repository-specific joint model built from categorical diffusion in the style of
-[D3PM](https://papers.neurips.cc/paper/2021/hash/958c530554f78bcd8e97125b70e6973d-Abstract.html)
-and Gaussian diffusion with the cosine schedule from
-[Improved DDPM](https://proceedings.mlr.press/v139/nichol21a.html). Those works explain the base
-processes; this file defines the implemented combination and is authoritative for code changes.
+For `n = suffix.length - 1` real events, clean activities contain the `n` real activities followed
+by EOT through the end of the canvas. All positions receive activity supervision. Clean times
+contain standardized inter-event times for real events and standardized zero afterward. Time loss
+applies to real events only.
 
-Use `B` for batch size, `T` for canvas width, `K` for the compact diffusion activity vocabulary,
-`P` for padded prefix width, and `D` for model width.
+Training draws one level `t` uniformly from `1..diffusion.steps` per row. The activity process uses
+an absorbing MASK state. At level `t`, each clean activity remains visible with probability
+`alpha_t`, the cumulative cosine signal, or becomes MASK. At the terminal level `alpha_t = 0`, so
+all activities are MASK. Do not force masking when a row happens to remain entirely visible.
+The Gaussian channel corrupts time with the same sampled level and its own cosine schedule:
+`y_t = sqrt(alpha_t) y_0 + sqrt(1 - alpha_t) epsilon`.
 
-## Clean Representation
+The suffix activity embedding has one row for each clean compact activity and a separate MASK row.
+The activity prediction head has only clean compact activities. Prefix events use the shared event
+content embedding.
 
-The categorical process contains EOT, UNK, and observed activity rows. It excludes PAD and SOS.
-`CategoricalDiffusion` owns stable maps between codec indices and this compact vocabulary.
+## Loss
 
-For a suffix with `n` real future events:
+At a MASK position, a reverse jump from level `t` to level `s` reveals the clean activity with
+probability `(alpha_s - alpha_t) / (1 - alpha_t)`. The activity loss uses that adjacent-step reveal
+probability times clean-token cross entropy at MASK positions, multiplied by `diffusion.steps` for
+uniform timestep sampling. Each row averages over the entire canvas, including trailing EOT
+positions. A row with no MASK has zero activity loss. The Gaussian noise-prediction squared error
+averages real event positions only. The batch loss averages row losses, and `Loss` fields store row
+sums. There is no auxiliary categorical loss or uniform categorical posterior.
 
-- `clean_activity[:, :n]` contains the real activities.
-- `clean_activity[:, n:]` contains EOT, not PAD.
-- `clean_time[:, :n]` contains standardized inter-event times.
-- `clean_time[:, n:]` contains the standardized value corresponding to zero minutes.
-- `activity_mask` is true through the first EOT, at positions `0..n`.
-- `time_mask` is true only for real events, at positions `0..n-1`.
+## Sampling
 
-The dataset suffix itself includes EOT, so `n = suffix.length - 1`. Activity loss includes one
-termination target while time loss never charges an EOT or padded position.
+`diffusion.sampler.method` is `ddim`. `diffusion.sampler.calls` selects a descending grid from the
+terminal level to level one and a
+final jump to level zero. The default is 50 calls across 100 noise levels. Activities start as all
+MASK. At each jump, still-masked positions reveal with the cumulative probability above and
+already revealed positions stay fixed. The final jump reveals every MASK. The Gaussian channel
+uses a DDIM jump based on the cumulative signal at both endpoints. `diffusion.sampler.eta` controls
+its stochasticity, with zero as the deterministic default.
 
-## Forward Processes
+Initial EOT is forbidden when a masked activity is sampled. After sampling, the first EOT sets the
+length; positions from EOT onward become PAD and standardized zero time. If no EOT appears,
+`used_sentinel` is true and the length is the full canvas. Remaining time is derived from decoded,
+nonnegative inter-event times. A residual MASK is an error. Generation metadata stores the
+sampling and noise schedule configuration together with checkpoint provenance.
 
-A training row samples one timestep `t` uniformly from `1..S`, shared by all positions and both
-channels. Let `beta_t` be the cosine schedule and
-`alpha_bar_t = product_{s=1}^t (1 - beta_s)`.
+## Validation
 
-For activities, uniform categorical corruption is
-
-\[
-q(x_t = j \mid x_0 = i) = \bar\alpha_t [j=i] + (1-\bar\alpha_t)/K.
-\]
-
-The final categorical beta is forced to one, so `x_S` is uniform and matches the generation prior.
-`CategoricalDiffusion.posterior` computes the exact
-`q(x_{t-1} | x_t, x_0)` for this transition process.
-
-For standardized times,
-
-\[
-y_t = \sqrt{\bar\alpha_t} y_0 + \sqrt{1-\bar\alpha_t}\,\epsilon,
-\qquad \epsilon \sim \mathcal N(0,I).
-\]
-
-The time schedule keeps the ordinary clipped cosine endpoint. `GaussianDiffusion.sample_reverse`
-uses the fixed posterior variance implied by that schedule.
-
-## Conditional Denoiser
-
-`DiffusionDenoiser` concatenates two segments and applies bidirectional Transformer encoder layers:
-
-1. Clean prefix rows `[B, P, D]` embed activity, resource, standardized inter-event time,
-   categorical attributes, numeric values, numeric-presence indicators, position, and prefix
-   segment.
-2. Noisy suffix rows `[B, T, D]` embed the compact activity through the shared activity table,
-   noisy time through a linear projection, suffix position, suffix segment, and projected sinusoidal
-   timestep.
-
-Only padded prefix positions are masked. Every non-padded prefix and suffix position may attend to
-every other non-padded position. Heads over the suffix rows predict clean-activity logits
-`[B, T, K]` and Gaussian noise `[B, T]`.
-
-## Objective
-
-Let `pi_theta(x_0 | x_t, y_t, c, t)` be the activity softmax after removing EOT probability at
-position zero. The reverse distribution marginalizes the exact categorical posterior over the
-predicted clean state:
-
-\[
-p_\theta(x_{t-1}\mid x_t,c) =
-\sum_{\hat x_0} q(x_{t-1}\mid x_t,\hat x_0)\,
-\pi_\theta(\hat x_0\mid x_t,y_t,c,t).
-\]
-
-At `t = 1`, categorical loss is clean-state cross entropy. At later timesteps it is
-`KL(q(x_{t-1}|x_t,x_0) || p_theta(x_{t-1}|x_t,c))`. The auxiliary term is clean-state cross
-entropy at every timestep. Time loss is squared error between sampled and predicted noise.
-
-For each trace, after the masks above average positions separately,
-
-\[
-L = S L_{cat} + L_{aux} + L_{time}.
-\]
-
-`compute_loss` averages this trace loss across the batch. The logged reconstruction loss equals the
-full loss; logged activity loss is `S L_cat + L_aux`; logged inter-event-time loss is `L_time`.
-
-## Generation
-
-Generation repeats each prefix `num_samples` times, initializes activities uniformly over `K` and
-times from `N(0,I)`, then iterates `t = S..1`:
-
-1. Predict clean-activity probabilities and time noise jointly.
-2. Sample the exact categorical reverse transition, using the predicted clean distribution
-   directly at `t = 1`.
-3. Sample the Gaussian reverse transition, using its mean directly at `t = 1`.
-
-At the final categorical step, EOT is prohibited at position zero, so every generated suffix has at
-least one event. The first EOT gives the generated length. If no EOT appears, length is `T` and
-`used_sentinel` is true. Positions from EOT onward become PAD activities and standardized zero
-times. Remaining time is derived through `remaining_time_from_inter_event_times`.
-
-Generation may read `TraceCut.prefix` only. Do not use the clean suffix to initialize, clamp, guide,
-or score the reverse process.
-
-## Configuration and Tests
-
-`config/model/diffusion_transformer.yaml` defines `d_model`, event embedding widths, Transformer
-depth, attention heads, feedforward width, dropout, diffusion steps, and separate cosine offsets.
-`d_model` must be divisible by the number of attention heads. Both schedules must use the configured
-number of steps.
-
-Run these focused CPU tests after changes:
-
-```sh
-uv run pytest tests/models/test_diffusion_transformer.py
-uv run pytest tests/models/test_contracts.py -k diffusion_transformer
-uv run pytest tests/models/test_configuration.py -k diffusion_transformer
-```
-
-Keep tests for normalized posterior and reverse probabilities, initial EOT exclusion, exact activity
-and time masks, finite loss and gradients, output shapes, event-feature use, and prefix-only
-generation. Use reduced diffusion steps in tests and never launch training locally.
+Use focused CPU tests for terminal masking, reveal probabilities, fixed visible states, EOT canvas
+and loss masks, finite gradients, timestep grids, Gaussian endpoints, EOT truncation, sentinel
+behavior, shape and length bounds, and prefix-only generation. Run `uv run pytest tests/models`,
+`uv run ruff check .`, and `uv run ruff format --check .`. Do not run training, sampler tuning, full
+generation, or full evaluation locally. Select later sampling settings on validation data only.

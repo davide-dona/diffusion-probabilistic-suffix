@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 import torch
@@ -17,7 +18,12 @@ from src.selection import SELECTION_METRIC, selection_score
 from src.training.early_stopping import EarlyStopper
 from src.training.loss import Loss
 from src.training.records import log_records
-from src.training.validation import ACTIVITY_LOG_NAMESPACE, validate, validate_generation
+from src.training.validation import (
+    ACTIVITY_LOG_NAMESPACE,
+    synchronize_device,
+    validate,
+    validate_generation,
+)
 
 if TYPE_CHECKING:
     from src.models import SuffixModel
@@ -67,7 +73,7 @@ def train(
         train_loader: Batches to learn from.
         val_loader: Batches to score teacher-forced every `training.val_every_n_steps` steps.
         generation_loader: Prefixes to generate suffixes for on the same cadence. A far smaller
-            slice than `val_loader`, since a suffix costs one decoder pass per event.
+            slice than `val_loader`, since a suffix may require many denoiser passes.
         generation_samples: Suffixes to draw per prefix on the validation pass.
         codec: The codec the splits were encoded through, passed on to the
             generation pass so its remaining times are scored in minutes.
@@ -157,9 +163,13 @@ def train(
                 continue
 
             train_metrics = interval_totals / seen
+            synchronize_device(device)
+            validation_start = perf_counter()
             val_metrics = validate(
                 model=model, loader=val_loader, device=device, seed=experiment_config['seed']
             )
+            synchronize_device(device)
+            validation_seconds = perf_counter() - validation_start
             log_records({'val': val_metrics}, step=step)
             gen_metrics = validate_generation(
                 model=model,
@@ -170,13 +180,23 @@ def train(
                 device=device,
                 seed=experiment_config['seed'],
             )
+            wandb.log(
+                {
+                    'validation/loss_seconds': validation_seconds,
+                    'validation/generation_seconds': gen_metrics.generation_seconds,
+                    'validation/scoring_seconds': gen_metrics.scoring_seconds,
+                },
+                step=step,
+            )
             gen_metrics.log(step)
             print(
                 f'Step {step:>{len(str(training.max_steps))}}/{training.max_steps}  '
                 f'train {train_metrics.loss:.4f}  '
                 f'val {val_metrics.loss:.4f}  '
                 f'gen_dls {gen_metrics.diagnostics["dls_sample_mean"]:.4f} mean / '
-                f'energy {gen_metrics.scores.activity["energy_score_dls"]:.4f}',
+                f'energy {gen_metrics.scores.activity["energy_score_dls"]:.4f}  '
+                f'generation {gen_metrics.generation_seconds:.1f}s  '
+                f'scoring {gen_metrics.scoring_seconds:.1f}s',
                 flush=True,
             )
             score = selection_score(gen_metrics.scores.flatten())

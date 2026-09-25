@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
@@ -8,6 +9,7 @@ from src.models.architectures.diffusion_transformer.components.denoiser import D
 from src.models.architectures.diffusion_transformer.components.process import (
     CategoricalDiffusion,
     GaussianDiffusion,
+    reverse_grid,
 )
 from src.models.contracts import DiffusionOutput, GeneratedSuffix
 from src.models.models import SuffixModel
@@ -24,6 +26,8 @@ class DiffusionTransformer(SuffixModel):
         self.codec = codec
         self.canvas_length = codec.max_trace_length - 1
         self.steps = config.diffusion.steps
+        self.sampling_calls = config.diffusion.sampler.calls
+        self.sampling_eta = config.diffusion.sampler.eta
         self.activities = CategoricalDiffusion(
             codec=codec,
             steps=self.steps,
@@ -40,7 +44,7 @@ class DiffusionTransformer(SuffixModel):
 
     def forward(self, item: TraceCut) -> DiffusionOutput:
         """Corrupt a clean suffix and predict its activities and time noise."""
-        clean_activity, clean_time, activity_mask, time_mask = self._clean_canvas(item)
+        clean_activity, clean_time, time_mask = self._clean_canvas(item)
         batch_size = clean_activity.size(dim=0)
         timestep = torch.randint(
             low=1, high=self.steps + 1, size=(batch_size,), device=clean_activity.device
@@ -60,43 +64,26 @@ class DiffusionTransformer(SuffixModel):
             noise=noise,
             noisy_activity=noisy_activity,
             timestep=timestep,
-            activity_mask=activity_mask,
             time_mask=time_mask,
         )
 
     def compute_loss(self, output: DiffusionOutput, batch: TraceCut) -> tuple[torch.Tensor, Loss]:
-        """Combine categorical variational loss and Gaussian noise prediction loss."""
-        probabilities = self.activities.prohibit_initial_eot(
-            output.activity_logits.softmax(dim=-1)
-        )  # [B, T, K]
-        clean_probability = probabilities.gather(
-            dim=2, index=output.clean_activity.unsqueeze(dim=-1)
-        ).squeeze(dim=-1)  # [B, T, K] -> [B, T]
-        cross_entropy = -clean_probability.clamp_min(
-            torch.finfo(probabilities.dtype).tiny
-        ).log()  # [B, T]
-        reverse = self.activities.reverse_probabilities(
-            noisy=output.noisy_activity, predicted=probabilities, timestep=output.timestep
-        )  # [B, T, K]
-        posterior = self.activities.posterior(
-            noisy=output.noisy_activity, clean=output.clean_activity, timestep=output.timestep
-        )  # [B, T, K]
-        kl = (posterior * (posterior.clamp_min(1e-12).log() - reverse.clamp_min(1e-12).log())).sum(
-            dim=-1
-        )  # [B, T, K] -> [B, T]
-        categorical = torch.where(
-            output.timestep.unsqueeze(dim=1) == 1, cross_entropy, kl
+        """Combine weighted MASK reveal cross entropy and Gaussian noise prediction loss."""
+        logits = self.activities.constrain_logits(output.activity_logits)
+        cross_entropy = F.cross_entropy(
+            logits.transpose(1, 2), output.clean_activity, reduction='none'
         )  # [B, T]
-        activity = self._masked_mean(values=categorical, mask=output.activity_mask)  # [B]
-        auxiliary = self._masked_mean(values=cross_entropy, mask=output.activity_mask)  # [B]
+        masked = output.noisy_activity.eq(self.activities.mask_index)
+        reveal = self.activities.adjacent_reveal_probability(output.timestep)  # [B]
+        activity = (cross_entropy * masked).mean(dim=1) * reveal * self.steps  # [B]
         time = self._masked_mean(
             values=(output.noise - output.predicted_noise).square(), mask=output.time_mask
         )  # [B]
-        per_example = self.steps * activity + auxiliary + time  # [B]
+        per_example = activity + time  # [B]
         metrics = Loss(
             loss=per_example.sum().item(),
             reconstruction_loss=per_example.sum().item(),
-            activity_loss=(self.steps * activity + auxiliary).sum().item(),
+            activity_loss=activity.sum().item(),
             inter_event_time_loss=time.sum().item(),
         )
         return per_example.mean(), metrics
@@ -107,30 +94,39 @@ class DiffusionTransformer(SuffixModel):
         batch_size = item.prefix.activities.size(dim=0)
         prefix = self._repeat_events(events=item.prefix, repeats=num_samples)
         rows = batch_size * num_samples
-        activities = torch.randint(
-            high=self.activities.num_activities,
+        activities = torch.full(
             size=(rows, self.canvas_length),
+            fill_value=self.activities.mask_index,
+            dtype=torch.long,
             device=prefix.activities.device,
         )  # [B * S, T]
         times = torch.randn(
             size=(rows, self.canvas_length), device=prefix.activities.device
         )  # [B * S, T]
-        for step in range(self.steps, 0, -1):
+        for step, previous_step in reverse_grid(self.steps, self.sampling_calls):
             timestep = torch.full(
                 size=(rows,), fill_value=step, dtype=torch.long, device=activities.device
             )  # [B * S]
             logits, noise = self._denoise(
                 prefix=prefix, activities=activities, times=times, timestep=timestep
             )
-            probabilities = logits.softmax(dim=-1)  # [B * S, T, K]
-            if step == 1:
-                probabilities = self.activities.prohibit_initial_eot(probabilities)  # [B * S, T, K]
+            probabilities = self.activities.constrain_logits(logits).softmax(dim=-1)
             activities = self.activities.sample_reverse(
-                noisy=activities, predicted=probabilities, timestep=timestep
+                noisy=activities,
+                predicted=probabilities,
+                step=step,
+                previous_step=previous_step,
             )  # [B * S, T]
             times = self.times.sample_reverse(
-                times=times, noise=noise, timestep=timestep
+                times=times,
+                noise=noise,
+                step=step,
+                previous_step=previous_step,
+                eta=self.sampling_eta,
             )  # [B * S, T]
+
+        if activities.eq(self.activities.mask_index).any():
+            raise RuntimeError('The final diffusion step left MASK positions unrevealed')
 
         codec_activities = self.activities.diffusion_to_codec[activities]  # [B * S, T]
         first_eot = codec_activities.eq(self.eot_activity_index)  # [B * S, T]
@@ -141,7 +137,9 @@ class DiffusionTransformer(SuffixModel):
             torch.cat(tensors=(first_eot, sentinel), dim=1).float().argmax(dim=1).long()
         )  # [B * S, T] + [B * S, 1] -> [B * S]
         used_sentinel = eot_positions.eq(self.canvas_length)  # [B * S]
-        lengths = eot_positions.clamp_min(1)  # [B * S]
+        if eot_positions.eq(0).any():
+            raise RuntimeError('Diffusion sampling emitted EOT at the first suffix position')
+        lengths = eot_positions  # [B * S]
         positions = torch.arange(end=self.canvas_length, device=activities.device).unsqueeze(
             dim=0
         )  # [T] -> [1, T]
@@ -160,16 +158,13 @@ class DiffusionTransformer(SuffixModel):
         )
         return self._per_sample(generated=generated, batch_size=batch_size)
 
-    def _clean_canvas(
-        self, batch: TraceCut
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _clean_canvas(self, batch: TraceCut) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Build fixed width clean activity and time canvases with their masks."""
         lengths = batch.suffix.length - 1  # [B]
         positions = torch.arange(end=self.canvas_length, device=lengths.device).unsqueeze(
             dim=0
         )  # [T] -> [1, T]
         real = positions < lengths.unsqueeze(dim=1)  # [1, T] < [B, 1] -> [B, T]
-        activity_mask = positions <= lengths.unsqueeze(dim=1)  # [B, T]
         codec_activity = batch.suffix.activities[:, : self.canvas_length]  # [B, T]
         compact = self.activities.codec_to_diffusion[codec_activity]  # [B, T]
         clean_activity = torch.where(
@@ -182,7 +177,7 @@ class DiffusionTransformer(SuffixModel):
             input=batch.inter_event_times[:, : self.canvas_length],
             other=self.standardized_zero,
         )  # [B, T]
-        return clean_activity, clean_time, activity_mask, real
+        return clean_activity, clean_time, real
 
     def _denoise(
         self, prefix: Events, activities: torch.Tensor, times: torch.Tensor, timestep: torch.Tensor
@@ -193,7 +188,6 @@ class DiffusionTransformer(SuffixModel):
             activities=activities,
             times=times,
             timestep=timestep,
-            diffusion_to_codec=self.activities.diffusion_to_codec,
         )
 
     @staticmethod

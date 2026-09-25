@@ -17,7 +17,8 @@ training:
       lr: 0.0003
       warmup_steps: 150
       max_steps: 6000
-      val_every_n_steps: 60
+      val_every_n_steps: 120
+      patience_validations: 10
       validation_pairs: 10000
       generation_pairs: 2000
     bpic12:
@@ -42,7 +43,7 @@ training:
       validation_pairs: 50000
       generation_pairs: 4096
 early_stopping:
-  patience_validations: 20
+  patience_validations: ${oc.select:training.regimes.${data.name}.patience_validations,20}
   min_delta_perc: 0.005
 inference:
   validation_samples: 32

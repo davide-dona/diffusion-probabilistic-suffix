@@ -18,8 +18,8 @@ from src.inference.generation import DecodedEvents, Draws, Generation
 # a case and a length, and the pair is unique within a file.
 type PrefixKey = tuple[str, int]
 
-# How the activity head was sampled. The checkpoint hash does not settle this because the sampler
-# is chosen after training and can be changed without the weights moving.
+# The sampler configuration used for generation. The checkpoint hash does not alone describe
+# inference settings when a sampler is selected after training.
 _SAMPLING = b'sampling'
 _ACTIVITIES = b'activities'
 
@@ -125,8 +125,8 @@ class GenerationWriter:
             vocabulary: The activity names the suffixes are spelled on, in code order, from
                 `ActivityCodec.vocabulary`. Written into the file so it says what its own
                 characters mean.
-            sampling: How the activity head was sampled. Written so the checkpoint hash alone does
-                not need to identify the inference setting.
+            sampling: The activity-head controls or diffusion schedules and sampler settings.
+                Written so the checkpoint hash alone need not identify inference settings.
         """
         provenance.require_checkpoint_source()
         schema = with_activity_vocabulary(_SCHEMA, vocabulary)

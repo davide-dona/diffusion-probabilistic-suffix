@@ -13,7 +13,11 @@ transformer:
   feedforward_dim: 168
   dropout: 0.1
 diffusion:
-  steps: 1000
+  steps: 100
+  sampler:
+    method: ddim
+    calls: 50
+    eta: 0.0
   activity_schedule:
     cosine_offset: 0.008
   time_schedule:
