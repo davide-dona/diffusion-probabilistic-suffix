@@ -29,8 +29,8 @@ and standardized time means and log-variances `[B, T]`.
 - `build_model` is the only architecture selection point. A new `model.kind` requires a factory
   branch, Hydra model configuration, validation, visualization label, and shared contract tests.
 - Checkpoints contain the resolved run configuration, provenance, state dictionary, optimizer
-  step, selection score, selection metric, and direction. `load_checkpoint` uses safe globals,
-  loads on CPU, validates required keys, and checks identity against configuration.
+  step, selection score, selection metric, and direction. `load_checkpoint` loads plain data and
+  tensors on CPU, validates required keys, and checks identity against configuration.
 - `model_from_checkpoint` rebuilds from the stored model configuration, loads weights, moves to the
   requested device, and returns evaluation mode. Do not reconstruct from a current YAML file.
 - Save the repeatedly replaced best checkpoint through a temporary `.pt.tmp` file. Checkpoints

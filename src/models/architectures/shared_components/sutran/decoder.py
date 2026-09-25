@@ -8,7 +8,6 @@ from src.datasets.dataset import Events
 from src.models.architectures.shared_components.sutran.cache import LayerCache
 from src.models.architectures.shared_components.sutran.decoder_layer import DecoderLayer
 from src.models.architectures.shared_components.sutran.embeddings import EventEmbeddings
-from src.models.architectures.shared_components.sutran.generation import generate_autoregressive
 from src.models.contracts import GeneratedSuffix
 
 
@@ -227,6 +226,10 @@ class CausalDecoder[OutputT](nn.Module, ABC):
         max_steps: int,
     ) -> GeneratedSuffix:
         """Decode independent rows until EOT or the generation cap."""
+        from src.models.architectures.shared_components.sutran.generation import (
+            generate_autoregressive,
+        )
+
         return generate_autoregressive(
             decoder=self,
             prefix_encoded=prefix_encoded,

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
-from src.datasets.dataset import Events, TraceCut
+from src.datasets.dataset import TraceCut
 from src.models.architectures.diffusion_transformer.components.denoiser import DiffusionDenoiser
 from src.models.architectures.diffusion_transformer.components.process import (
     CategoricalDiffusion,
@@ -14,7 +14,7 @@ from src.models.architectures.diffusion_transformer.components.process import (
 from src.models.contracts import DiffusionOutput, GeneratedSuffix
 from src.models.models import SuffixModel
 from src.models.time import remaining_time_from_inter_event_times
-from src.training import Loss
+from src.training.loss import Loss
 
 
 class DiffusionTransformer(SuffixModel):
@@ -51,7 +51,7 @@ class DiffusionTransformer(SuffixModel):
         )  # [B]
         noisy_activity = self.activities.corrupt(clean=clean_activity, timestep=timestep)  # [B, T]
         noisy_time, noise = self.times.corrupt(clean=clean_time, timestep=timestep)  # [B, T]
-        logits, predicted_noise = self._denoise(
+        logits, predicted_noise = self.denoiser(
             prefix=item.prefix,
             activities=noisy_activity,
             times=noisy_time,
@@ -82,7 +82,6 @@ class DiffusionTransformer(SuffixModel):
         per_example = activity + time  # [B]
         metrics = Loss(
             loss=per_example.sum().item(),
-            reconstruction_loss=per_example.sum().item(),
             activity_loss=activity.sum().item(),
             inter_event_time_loss=time.sum().item(),
         )
@@ -92,7 +91,7 @@ class DiffusionTransformer(SuffixModel):
     def generate(self, item: TraceCut, *, num_samples: int) -> GeneratedSuffix:
         """Draw `num_samples` complete suffixes for each prefix."""
         batch_size = item.prefix.activities.size(dim=0)
-        prefix = self._repeat_events(events=item.prefix, repeats=num_samples)
+        prefix = self._repeat_prefix(prefix=item.prefix, num_samples=num_samples)
         rows = batch_size * num_samples
         activities = torch.full(
             size=(rows, self.canvas_length),
@@ -107,7 +106,7 @@ class DiffusionTransformer(SuffixModel):
             timestep = torch.full(
                 size=(rows,), fill_value=step, dtype=torch.long, device=activities.device
             )  # [B * S]
-            logits, noise = self._denoise(
+            logits, noise = self.denoiser(
                 prefix=prefix, activities=activities, times=times, timestep=timestep
             )
             probabilities = self.activities.constrain_logits(logits).softmax(dim=-1)
@@ -179,25 +178,7 @@ class DiffusionTransformer(SuffixModel):
         )  # [B, T]
         return clean_activity, clean_time, real
 
-    def _denoise(
-        self, prefix: Events, activities: torch.Tensor, times: torch.Tensor, timestep: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Predict activity logits and time noise from a noisy suffix canvas."""
-        return self.denoiser(
-            prefix=prefix,
-            activities=activities,
-            times=times,
-            timestep=timestep,
-        )
-
     @staticmethod
     def _masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Average valid suffix positions within each batch row."""
         return (values * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1)  # [B, T] -> [B]
-
-    @staticmethod
-    def _repeat_events(events: Events, repeats: int) -> Events:
-        """Repeat each prefix row for independent suffix draws."""
-        return Events(
-            *(field.repeat_interleave(repeats, dim=0) for field in events)
-        )  # [B, ...] -> [B * S, ...]

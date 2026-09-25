@@ -1,16 +1,10 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 import numpy as np
 from omegaconf import DictConfig
 
 from src.datasets.codec import ActivityCodec, DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.inference.generation import DecodedEvents, Draws, Generation
-
-if TYPE_CHECKING:
-    from src.models import SuffixModel
+from src.models import SuffixModel
 
 
 def generation_batch_size(

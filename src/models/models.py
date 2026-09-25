@@ -4,9 +4,9 @@ import torch
 from torch import nn
 
 from src.datasets.codec import DatasetCodec
-from src.datasets.dataset import TraceCut
+from src.datasets.dataset import Events, TraceCut
 from src.models.contracts import GeneratedSuffix, ModelOutput
-from src.training import Loss
+from src.training.loss import Loss
 
 
 class SuffixModel(nn.Module, ABC):
@@ -72,3 +72,8 @@ class SuffixModel(nn.Module, ABC):
                 else None
             ),
         )
+
+    @staticmethod
+    def _repeat_prefix(prefix: Events, *, num_samples: int) -> Events:
+        """Expand every prefix channel into independent generation rows."""
+        return Events(*(field.repeat_interleave(num_samples, dim=0) for field in prefix))

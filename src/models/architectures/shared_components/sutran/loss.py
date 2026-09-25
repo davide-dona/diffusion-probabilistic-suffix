@@ -1,7 +1,7 @@
 import torch
 
 from src.datasets.dataset import TraceCut
-from src.training import Loss
+from src.training.loss import Loss
 
 
 def timed_positions(batch: TraceCut) -> torch.Tensor:
@@ -22,7 +22,6 @@ def reconstruction_loss(
     normalized_total = (activity_loss + time_loss) / target_counts
     metrics = Loss(
         loss=normalized_total.sum().item(),
-        reconstruction_loss=normalized_total.sum().item(),
         activity_loss=normalized_activity.sum().item(),
         inter_event_time_loss=normalized_time.sum().item(),
     )

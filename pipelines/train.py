@@ -1,6 +1,6 @@
 import hydra
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
 from pipelines.helpers.console import banner, step
@@ -12,16 +12,15 @@ from src.datasets.dataset import TraceDataset, fixed_subset
 from src.inference.generate import generation_batch_size
 from src.logs import Split
 from src.models import build_model
-from src.training import train
+from src.training.train import TrainingLoaders, train
 
 
 def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
-    """
-    Train the model an experiment config describes, on the dataset it names.
-    The dataset must have been preprocessed already.
+    """Train the configured model using the prepared dataset bundle.
+
     Args:
-        config: The validated experiment config.
-        run: The stable identity assigned to this training invocation.
+        config: Validated experiment configuration.
+        run: Training run identity.
     """
     dataset_manifest = artifacts.require_dataset_bundle(config.data.name)
 
@@ -111,29 +110,23 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
         f'generating for {len(generation_loader.dataset):,}'
     )
 
-    experiment_config = OmegaConf.to_container(config, resolve=True)
-    assert isinstance(experiment_config, dict)
-    experiment_config.pop('run_id')
-
     train(
         model=model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        generation_loader=generation_loader,
-        experiment_config=experiment_config,
-        generation_samples=config.inference.validation_samples,
+        loaders=TrainingLoaders(
+            train=train_loader,
+            validation=val_loader,
+            generation=generation_loader,
+        ),
         codec=codec,
-        run=run,
-        dataset_fingerprint=dataset_manifest.fingerprint,
+        provenance=artifacts.Provenance(run=run, dataset_fingerprint=dataset_manifest.fingerprint),
         checkpoint_path=output_path('best.pt'),
-        optimizer_config=config.optimizer,
-        training=config.training,
-        early_stopping_config=config.early_stopping,
+        config=config,
     )
 
 
 @hydra.main(version_base='1.3', config_path='../config', config_name='train')
 def main(cfg: DictConfig) -> None:
+    """Validate the Hydra invocation and start its training run."""
     start_stage(cfg)
     validate_experiment_config(cfg)
     run(

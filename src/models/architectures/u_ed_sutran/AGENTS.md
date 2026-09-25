@@ -34,8 +34,8 @@ uncertainty losses, and MC dropout belong in this package.
   widths, attention heads, feedforward sizes, dropout, and prediction-head widths.
 - Preserve the configuration test comparing structural fields. Capacity changes require a separate
   experiment rather than a silent change to the controlled comparison.
-- Preserve `HeadSamplingTransformer` behavior, state dictionary keys, checkpoint restoration,
-  sampler tuning, and tests when editing shared components.
+- Preserve `HeadSamplingTransformer` behavior, checkpoint restoration, sampler tuning, and tests
+  when editing shared components.
 - Keep model-specific prediction heads and generation policies attached to shared hidden states.
 - Only activities feed back into the decoder. Do not feed generated times, resources, or other
   attributes back into it. SOS opens decoding.
@@ -75,7 +75,7 @@ deviation `exp(0.5 * log_variance)` for both distributions.
 For activity loss, draw Gaussian logits, apply log-softmax, and gather each target activity's
 log probability. Compute the negative log of the Monte Carlo mean target probability using stable
 log-mean-exp across the configured likelihood draws. PAD and SOS remain output vocabulary classes
-for checkpoint compatibility but cannot be emitted during generation.
+for training but cannot be emitted during generation.
 
 For time loss, use heteroscedastic Gaussian negative log likelihood without the constant:
 

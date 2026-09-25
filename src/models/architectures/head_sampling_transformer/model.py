@@ -11,7 +11,7 @@ from src.models.architectures.shared_components.sutran.loss import (
 )
 from src.models.architectures.shared_components.sutran.model import SuTraNModel
 from src.models.contracts import DecoderOutput, GeneratedSuffix
-from src.training import Loss
+from src.training.loss import Loss
 
 
 class HeadSamplingTransformer(SuTraNModel[DecoderOutput]):
@@ -49,7 +49,7 @@ class HeadSamplingTransformer(SuTraNModel[DecoderOutput]):
 
         # The prefix is encoded once and repeated per sample, so the decoder writes every sample
         # of the batch in one pass.
-        prefix_events = prefix.events.repeat_interleave(
+        prefix_events = prefix.repeat_interleave(
             repeats=num_samples, dim=0
         )  # [B, P, D] -> [B * S, P, D]
         prefix_pad_mask = prefix_pad_mask.repeat_interleave(

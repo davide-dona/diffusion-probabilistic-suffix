@@ -3,19 +3,23 @@ import json
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import Protocol, Self
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-
-if TYPE_CHECKING:
-    from src.artifacts.dataset import DatasetManifest
 
 _DATASET = re.compile(r'[a-z0-9][a-z0-9-]*')
 _MODEL = re.compile(r'[a-z0-9][a-z0-9_]*')
 _RUN_ID = re.compile(r'\d{8}-\d{6}-\d{6}')
 _SHA256 = re.compile(r'[0-9a-f]{64}')
 _PARQUET_KEY = b'provenance'
+
+
+class _DatasetIdentity(Protocol):
+    """Dataset name and fingerprint needed to match an artifact to its source bundle."""
+
+    dataset: str
+    fingerprint: str
 
 
 def _validated(value: object, pattern: re.Pattern[str], field: str) -> str:
@@ -125,7 +129,7 @@ class Provenance:
             raise ValueError('Missing artifact provenance; regenerate this file.')
         return cls.from_dict(json.loads(raw))
 
-    def require_dataset(self, manifest: 'DatasetManifest') -> None:
+    def require_dataset(self, manifest: _DatasetIdentity) -> None:
         """Require the installed dataset bundle to match this artifact."""
         if self.run.dataset != manifest.dataset or self.dataset_fingerprint != manifest.fingerprint:
             raise ValueError('Artifact provenance does not match the dataset bundle')
