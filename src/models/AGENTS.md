@@ -27,7 +27,7 @@ and standardized time means and log-variances `[B, T]`.
 ## Construction and Persistence
 
 - `build_model` is the only architecture selection point. A new `model.kind` requires a factory
-  branch, Hydra model configuration, validation, visualization label, and shared contract tests.
+  branch, Hydra model configuration, validation, visualization label, and shared contract support.
 - Checkpoints contain the resolved run configuration, provenance, state dictionary, optimizer
   step, selection score, selection metric, and direction. `load_checkpoint` loads plain data and
   tensors on CPU, validates required keys, and checks identity against configuration.
@@ -38,8 +38,7 @@ and standardized time means and log-variances `[B, T]`.
 
 ## Shared Semantics
 
-- Generation must be invariant to every true suffix field. Keep
-  `test_generation_reads_prefix_only` passing for all architectures.
+- Generation must be invariant to every true suffix field for all architectures.
 - PAD and SOS are structural tokens and cannot be sampled as suffix activities. EOT determines
   generated length. UNK remains a valid modeled activity.
 - Inter-event times are modeled in the codec's standardized space. Remaining time is derived from
@@ -57,5 +56,5 @@ and standardized time means and log-variances `[B, T]`.
 | `head_sampling_transformer` | [`architectures/head_sampling_transformer/AGENTS.md`](architectures/head_sampling_transformer/AGENTS.md) | Implemented SuTraN-PH baseline |
 | `u_ed_sutran` | [`architectures/u_ed_sutran/AGENTS.md`](architectures/u_ed_sutran/AGENTS.md) | Implemented uncertainty-aware SuTraN |
 
-Run `uv run pytest tests/models` after model interface, architecture, checkpoint, or configuration
-changes. Use the small fixtures and reduced diffusion steps in the tests. Do not start training.
+For local verification, use small inputs and reduced diffusion steps under the root guide's
+disposable-check policy. Do not start training.

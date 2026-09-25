@@ -14,7 +14,8 @@ class ScoreGroups:
 
     activity: dict[str, float]
     suffix_length: dict[str, float]
-    time: dict[str, float]
+    remaining_time: dict[str, float]
+    inter_event_time: dict[str, float]
     conformance: dict[str, float]
 
     @classmethod
@@ -68,7 +69,8 @@ class ScoreGroups:
         groups = {
             MetricGroup.ACTIVITY: self.activity,
             MetricGroup.SUFFIX_LENGTH: self.suffix_length,
-            MetricGroup.TIME: self.time,
+            MetricGroup.REMAINING_TIME: self.remaining_time,
+            MetricGroup.INTER_EVENT_TIME: self.inter_event_time,
             MetricGroup.CONFORMANCE: self.conformance,
         }
         return {key: groups[metric.group][key] for key, metric in METRICS.report.items()}

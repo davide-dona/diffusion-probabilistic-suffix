@@ -19,7 +19,7 @@ groups. The result is validated at the stage boundary and stored with every dura
 - Keep `model.kind` aligned with `src.models.factory.build_model` and `model.name` aligned with
   `RunIdentity`, output paths, and visualization labels.
 - The diffusion model separates `diffusion.steps` noise levels from `diffusion.sampler.calls`
-  denoiser calls. The sampler method is `ddim`, calls must not exceed noise levels, and
+  denoiser calls. The sampler uses DDIM, calls must not exceed noise levels, and
   `diffusion.sampler.eta` lies in `[0, 1]`. The default is 100 levels, 50 calls, and zero Gaussian
   sampling stochasticity.
 - Add or change fields together with their checks in `src/config_validation/`. Reject invalid values before
@@ -34,7 +34,7 @@ groups. The result is validated at the stage boundary and stored with every dura
 - Preserve `_self_` placement when composition order matters and use `# @package _global_` for
   groups that populate the root configuration.
 
-## Safe Inspection and Tests
+## Safe Inspection
 
 ```sh
 uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer --cfg job --resolve
@@ -43,5 +43,5 @@ uv run python -m pipelines.preprocess dataset=sepsis --cfg job --resolve
 uv run ruff check config src/config_validation
 ```
 
-Run the focused tests for the consumer of any changed field. Do not launch training merely to
-validate configuration composition.
+Follow the root guide's disposable-check policy if a changed field needs further verification.
+Do not launch training merely to validate configuration composition.

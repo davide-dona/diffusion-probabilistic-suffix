@@ -10,7 +10,7 @@ remain the six entry points.
 ## Stages
 
 Commands in this table describe production execution. Do not run the heavy stages locally. Use
-the safe inspection and test commands below while developing.
+the safe inspection commands below while developing.
 
 | Stage | Command | Reads | Writes | Behavior |
 | --- | --- | --- | --- | --- |
@@ -67,10 +67,10 @@ uv run python -m pipelines.preprocess dataset=sepsis --cfg job --resolve
 Use focused CPU checks:
 
 ```sh
-uv run pytest tests/models
 uv run ruff check .
 uv run ruff format --check .
 ```
 
-When changing one stage, inspect small fixtures or existing artifact metadata. Tests must cover the
-input contract, output contract, split selection, and provenance fields affected by the change.
+When changing one stage, inspect small fixtures or existing artifact metadata. Follow the root
+guide's disposable-check policy when verifying input and output contracts, split selection, or
+provenance fields.

@@ -42,7 +42,8 @@ Preserve draw multiplicity when working with folded suffixes.
 | --- | --- | --- |
 | Activity | DLS, exact-match, and bigram energy scores | Higher similarity; lower energy |
 | Suffix length | CRPS, central interval coverage gaps at 50%, 75%, and 95% | Lower error and CRPS; gap closest to zero |
-| Time | Remaining-time and aligned inter-event-time CRPS in days; central interval coverage gaps at 50%, 75%, and 95% | Lower CRPS; gap closest to zero |
+| Remaining time | Remaining-time CRPS in days; central interval coverage gaps at 50%, 75%, and 95% | Lower CRPS; gap closest to zero |
+| Inter-event time | Aligned inter-event-time CRPS in days; central interval coverage gaps at 50%, 75%, and 95% | Lower CRPS; gap closest to zero |
 | Conformance | Mean satisfied-constraint share, full-conformance sample rate, and observed-log references | Higher model conformance |
 
 Energy scores combine distance to truth with a diversity correction between independent draws.
@@ -78,15 +79,15 @@ resample whole cases, use 10,000 paired bootstrap draws with seed 42, and apply 
 all model pairs for each dataset and ranked metric. Table emphasis means observed best or no detected
 difference from it; it does not establish equivalence.
 
-## Parallelism and Tests
+## Parallelism
 
 Evaluation assigns Parquet row groups to worker processes. Each worker opens its own file and
 Declare checker, returns compact `PrefixSummary` values, and preserves row-group order. Stream
 scores to Parquet while aggregating so full decoded generations never accumulate in the parent.
 
-Test metric formulas on small deterministic samples, folded-draw weighting, empty or degenerate
-cases, schema rejection, prefix alignment, aggregation buckets, and reproducible significance
-analysis. Do not run full evaluation locally.
+Metric formulas must handle folded-draw weighting, empty or degenerate cases, schema rejection,
+prefix alignment, and aggregation buckets. Significance analysis must be reproducible. Do not run
+full evaluation locally.
 
 ## Diagnostics
 

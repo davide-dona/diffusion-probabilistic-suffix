@@ -42,7 +42,7 @@ sums. There is no auxiliary categorical loss or uniform categorical posterior.
 
 ## Sampling
 
-`diffusion.sampler.method` is `ddim`. `diffusion.sampler.calls` selects a descending grid from the
+The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from the
 terminal level to level one and a
 final jump to level zero. The default is 50 calls across 100 noise levels. Activities start as all
 MASK. At each jump, still-masked positions reveal with the cumulative probability above and
@@ -58,8 +58,8 @@ sampling and noise schedule configuration together with checkpoint provenance.
 
 ## Validation
 
-Use focused CPU tests for terminal masking, reveal probabilities, fixed visible states, EOT canvas
+For local verification of terminal masking, reveal probabilities, fixed visible states, EOT canvas
 and loss masks, finite gradients, timestep grids, Gaussian endpoints, EOT truncation, sentinel
-behavior, shape and length bounds, and prefix-only generation. Run `uv run pytest tests/models`,
-`uv run ruff check .`, and `uv run ruff format --check .`. Do not run training, sampler tuning, full
-generation, or full evaluation locally. Select later sampling settings on validation data only.
+behavior, shape and length bounds, and prefix-only generation, follow the root guide's
+disposable-check policy. Do not run training, sampler tuning, full generation, or full evaluation
+locally. Select later sampling settings on validation data only.

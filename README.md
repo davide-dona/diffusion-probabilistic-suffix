@@ -152,8 +152,8 @@ uv run python -m pipelines.evaluate generations=/path/to/generations.parquet wor
 The report and its per-prefix scores are written under
 `outputs/evaluate/<dataset>/<model>/<training-run-id>/<invocation-id>/` as `evaluation.json` and
 `prefix_scores.parquet`. The JSON summary groups scores under `scores.activity`,
-`scores.suffix_length`, `scores.time`, and `scores.conformance`, both overall and within
-each length bucket.
+`scores.suffix_length`, `scores.remaining_time`, `scores.inter_event_time`, and
+`scores.conformance`, both overall and within each length bucket.
 
 DLS sample mean and suffix-length MAE are validation diagnostics, logged to W&B under
 `diagnostic_activity/dls_sample_mean` and `diagnostic_suffix_length/suffix_length_mae`.

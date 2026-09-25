@@ -9,7 +9,7 @@ MINUTES_PER_DAY = 1440.0
 @METRICS.register(
     'remaining_time_crps_days',
     label='Remaining-time CRPS',
-    group=MetricGroup.TIME,
+    group=MetricGroup.REMAINING_TIME,
     unit='days',
     bounds=(0.0, None),
     direction=Direction.LOWER,
@@ -29,7 +29,7 @@ def remaining_time_crps_days(context: PreparedPrefix) -> float:
 @METRICS.register(
     'inter_event_time_crps_days',
     label='Inter-event-time CRPS',
-    group=MetricGroup.TIME,
+    group=MetricGroup.INTER_EVENT_TIME,
     unit='days',
     bounds=(0.0, None),
     direction=Direction.LOWER,
@@ -49,7 +49,7 @@ def inter_event_time_crps_days(context: PreparedPrefix) -> float:
 @METRICS.register(
     'remaining_time_coverage_gap_50',
     label='Remaining time coverage gap 50%',
-    group=MetricGroup.TIME,
+    group=MetricGroup.REMAINING_TIME,
     direction=Direction.ZERO,
 )
 def remaining_time_coverage_gap_50(context: PreparedPrefix) -> float:
@@ -68,7 +68,7 @@ def remaining_time_coverage_gap_50(context: PreparedPrefix) -> float:
 @METRICS.register(
     'remaining_time_coverage_gap_75',
     label='Remaining time coverage gap 75%',
-    group=MetricGroup.TIME,
+    group=MetricGroup.REMAINING_TIME,
     direction=Direction.ZERO,
 )
 def remaining_time_coverage_gap_75(context: PreparedPrefix) -> float:
@@ -87,7 +87,7 @@ def remaining_time_coverage_gap_75(context: PreparedPrefix) -> float:
 @METRICS.register(
     'remaining_time_coverage_gap_95',
     label='Remaining time coverage gap 95%',
-    group=MetricGroup.TIME,
+    group=MetricGroup.REMAINING_TIME,
     direction=Direction.ZERO,
 )
 def remaining_time_coverage_gap_95(context: PreparedPrefix) -> float:
@@ -106,7 +106,7 @@ def remaining_time_coverage_gap_95(context: PreparedPrefix) -> float:
 @METRICS.register(
     'inter_event_time_coverage_gap_50',
     label='Inter-event time coverage gap 50%',
-    group=MetricGroup.TIME,
+    group=MetricGroup.INTER_EVENT_TIME,
     direction=Direction.ZERO,
 )
 def inter_event_time_coverage_gap_50(context: PreparedPrefix) -> float:
@@ -125,7 +125,7 @@ def inter_event_time_coverage_gap_50(context: PreparedPrefix) -> float:
 @METRICS.register(
     'inter_event_time_coverage_gap_75',
     label='Inter-event time coverage gap 75%',
-    group=MetricGroup.TIME,
+    group=MetricGroup.INTER_EVENT_TIME,
     direction=Direction.ZERO,
 )
 def inter_event_time_coverage_gap_75(context: PreparedPrefix) -> float:
@@ -144,7 +144,7 @@ def inter_event_time_coverage_gap_75(context: PreparedPrefix) -> float:
 @METRICS.register(
     'inter_event_time_coverage_gap_95',
     label='Inter-event time coverage gap 95%',
-    group=MetricGroup.TIME,
+    group=MetricGroup.INTER_EVENT_TIME,
     direction=Direction.ZERO,
 )
 def inter_event_time_coverage_gap_95(context: PreparedPrefix) -> float:

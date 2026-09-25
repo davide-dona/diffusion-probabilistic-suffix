@@ -107,8 +107,7 @@ def run(
             'device': device,
             'samples': f'{config.inference.evaluation_samples} suffixes per prefix',
             'sampling': (
-                f'{drawn_with.sampler.calls} {drawn_with.sampler.method} calls, '
-                f'eta {drawn_with.sampler.eta}'
+                f'{drawn_with.sampler.calls} DDIM calls, eta {drawn_with.sampler.eta}'
                 if config.model.kind == 'diffusion_transformer'
                 else f'temperature {drawn_with.temperature}, top_p {drawn_with.top_p}'
                 if drawn_with is not None

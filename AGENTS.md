@@ -13,7 +13,7 @@ baseline on Sepsis, BPIC12, BPIC17, and BPIC19.
 ## Safety and Correctness
 
 - Do not run training, sampler tuning, full test generation, or full evaluation locally. Inspect
-  Hydra configuration and use focused CPU smoke tests instead. Full pipeline commands in the
+  Hydra configuration and use small, disposable CPU checks instead. Full pipeline commands in the
   nested guide are execution references for suitable compute environments.
 - Never select checkpoints or tune inference settings on the test split. Training and model
   selection use train and validation data; final generation uses test prefixes.
@@ -25,8 +25,10 @@ baseline on Sepsis, BPIC12, BPIC17, and BPIC19.
 - Use four-space indentation, single quotes, 100-character lines, type hints, `snake_case` names,
   and `PascalCase` classes. Ruff is the formatting and linting authority. Never comments as the
   first line of a file.
-- Use `uv run pytest` for focused tests, `uv run ruff check .`, and
-  `uv run ruff format --check .`. Put disposable checks under `tmp/`.
+- Do not add or modify repository tests unless Davide explicitly requests them. When a change
+  needs verification, write your own disposable checks under `tmp/`, run only those checks, and
+  remove them afterward. Do not run existing test suites unless Davide explicitly requests it.
+- Use `uv run ruff check .` and `uv run ruff format --check .` for lint and format validation.
 
 ## Task Routing
 

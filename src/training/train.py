@@ -1,6 +1,5 @@
 import math
 from dataclasses import dataclass
-from time import perf_counter
 from typing import Protocol
 
 import torch
@@ -15,7 +14,6 @@ from src.selection import selection_score
 from src.training.loss import Loss
 from src.training.validation import (
     GenerationMetrics,
-    synchronize_device,
     validate,
     validate_generation,
 )
@@ -69,7 +67,6 @@ class ValidationReport:
     train_metrics: Loss
     val_metrics: Loss
     generation_metrics: GenerationMetrics
-    loss_seconds: float
 
 
 class TrainingObserver(Protocol):
@@ -208,16 +205,12 @@ def train(
             continue
 
         train_metrics = interval_totals / seen
-        synchronize_device(settings.device)
-        validation_start = perf_counter()
         val_metrics = validate(
             model=model,
             loader=loaders.validation,
             device=settings.device,
             seed=settings.seed,
         )
-        synchronize_device(settings.device)
-        validation_seconds = perf_counter() - validation_start
         gen_metrics = validate_generation(
             model=model,
             loader=loaders.generation,
@@ -233,7 +226,6 @@ def train(
                 train_metrics=train_metrics,
                 val_metrics=val_metrics,
                 generation_metrics=gen_metrics,
-                loss_seconds=validation_seconds,
             )
         )
         score = selection_score(gen_metrics.scores.flatten())

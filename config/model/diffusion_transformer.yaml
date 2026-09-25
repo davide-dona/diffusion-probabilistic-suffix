@@ -15,7 +15,6 @@ transformer:
 diffusion:
   steps: 100
   sampler:
-    method: ddim
     calls: 50
     eta: 0.0
   activity_schedule:

@@ -104,7 +104,7 @@ validation subset. Every point uses the same number of prefixes, samples, seed, 
 and Declare model. It selects the minimum activity DLS energy score. A tuning report is valid for
 generation only when both `RunIdentity` and checkpoint SHA-256 match.
 
-## Configuration and Tests
+## Configuration
 
 The encoder, embeddings, attention, causal decoder trunk, cache, and generation loop live in
 `shared_components/sutran` and are shared with U-ED-SuTraN. The local decoder owns baseline heads
@@ -114,14 +114,7 @@ and sampler controls.
 decoder depth, attention heads, feedforward sizes, dropout, teacher-forced activity dropout, shared
 head width, temperature, and top-p. Model width must be divisible by both attention head counts.
 
-Run:
-
-```sh
-uv run pytest tests/models/test_head_sampling_transformer.py
-uv run pytest tests/models/test_contracts.py -k head_sampling_transformer
-uv run pytest tests/models/test_configuration.py -k head_sampling_transformer
-```
-
-Keep tests for cached versus full decoding, finite loss and gradients, structural token masking,
+Preserve cached versus full decoding, finite loss and gradients, structural token masking,
 termination and sentinel behavior, output shapes, event-feature use, and prefix-only generation.
-Never launch training or a full tuning grid locally.
+Follow the root guide's disposable-check policy for local verification. Never launch training or a
+full tuning grid locally.

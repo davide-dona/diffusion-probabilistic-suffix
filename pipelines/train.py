@@ -63,12 +63,7 @@ class _TrainingReporter:
             if metric.owner is Owner.MODEL
         }
         wandb.log(
-            {
-                'validation/loss_seconds': report.loss_seconds,
-                'validation/generation_seconds': generation.generation_seconds,
-                'validation/scoring_seconds': generation.scoring_seconds,
-            }
-            | {f'val/{key}': value for key, value in asdict(report.val_metrics).items()}
+            {f'val/{key}': value for key, value in asdict(report.val_metrics).items()}
             | model_values,
             step=report.step,
         )

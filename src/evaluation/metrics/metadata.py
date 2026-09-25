@@ -28,7 +28,8 @@ class MetricGroup(StrEnum):
 
     ACTIVITY = 'activity'
     SUFFIX_LENGTH = 'suffix_length'
-    TIME = 'time'
+    REMAINING_TIME = 'remaining_time'
+    INTER_EVENT_TIME = 'inter_event_time'
     CONFORMANCE = 'conformance'
 
 
