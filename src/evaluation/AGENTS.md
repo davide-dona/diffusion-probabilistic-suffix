@@ -79,15 +79,15 @@ resample whole cases, use 10,000 paired bootstrap draws with seed 42, and apply 
 all model pairs for each dataset and ranked metric. Table emphasis means observed best or no detected
 difference from it; it does not establish equivalence.
 
-## Parallelism and Tests
+## Parallelism
 
 Evaluation assigns Parquet row groups to worker processes. Each worker opens its own file and
 Declare checker, returns compact `PrefixSummary` values, and preserves row-group order. Stream
 scores to Parquet while aggregating so full decoded generations never accumulate in the parent.
 
-Test metric formulas on small deterministic samples, folded-draw weighting, empty or degenerate
-cases, schema rejection, prefix alignment, aggregation buckets, and reproducible significance
-analysis. Do not run full evaluation locally.
+Metric formulas must handle folded-draw weighting, empty or degenerate cases, schema rejection,
+prefix alignment, and aggregation buckets. Significance analysis must be reproducible. Do not run
+full evaluation locally.
 
 ## Diagnostics
 

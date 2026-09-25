@@ -58,15 +58,14 @@ Numeric encoding replaces non-finite normalized values with zero and supplies a 
 channel. Decoding inter-event and remaining times must use the exact fitted column, including its
 log transform.
 
-## Changes and Tests
+## Changes
 
 - Preserve channel shapes and dtype conventions across padding, collation, and device moves.
 - Fit any new learned transform on train only, serialize it in `codec.json`, and use it unchanged
   for validation and test.
 - Update shared embeddings when adding a model-visible event channel.
-- Test empty or missing features, PAD masks, cut boundaries, special tokens, codec round trips, and
-  deterministic subsets as relevant.
-- Run model contract tests after changing `Events`, `TraceCut`, or `DatasetCodec` because every
-  architecture consumes them.
+- Preserve behavior for empty or missing features, PAD masks, cut boundaries, special tokens,
+  codec round trips, and deterministic subsets.
+- Changes to `Events`, `TraceCut`, or `DatasetCodec` affect every architecture that consumes them.
 
 See [`data/AGENTS.md`](../../data/AGENTS.md) for stored artifact ownership.

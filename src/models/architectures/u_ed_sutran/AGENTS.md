@@ -32,10 +32,10 @@ uncertainty losses, and MC dropout belong in this package.
 - Keep structural defaults in `config/model/u_ed_sutran.yaml` equal to those in
   `config/model/head_sampling_transformer.yaml`: embedding sizes, encoder and decoder topology,
   widths, attention heads, feedforward sizes, dropout, and prediction-head widths.
-- Preserve the configuration test comparing structural fields. Capacity changes require a separate
+- Preserve matching structural configuration fields. Capacity changes require a separate
   experiment rather than a silent change to the controlled comparison.
-- Preserve `HeadSamplingTransformer` behavior, checkpoint restoration, sampler tuning, and tests
-  when editing shared components.
+- Preserve `HeadSamplingTransformer` behavior, checkpoint restoration, and sampler tuning when
+  editing shared components.
 - Keep model-specific prediction heads and generation policies attached to shared hidden states.
 - Only activities feed back into the decoder. Do not feed generated times, resources, or other
   attributes back into it. SOS opens decoding.
@@ -130,7 +130,7 @@ comparisons use validation data only. Test prefixes are reserved for final gener
 
 ## Validation
 
-Maintain focused CPU coverage for:
+Preserve these behaviors:
 
 - Matching structural defaults and unchanged SuTraN-PH forward outputs, seeded generation, state
   dictionary keys, and checkpoint round trips after shared-component edits.
@@ -142,10 +142,9 @@ Maintain focused CPU coverage for:
 - Prefix-only generation, event-feature handling, output shapes, EOT termination, padding, sentinel
   behavior, remaining-time conversion, checkpoint reload, and mode restoration after failure.
 
-Run `uv run pytest tests/models/test_u_ed_sutran.py`, followed by `uv run pytest tests/models`,
-`uv run ruff check .`, and `uv run ruff format --check .` for implementation changes. Use focused
-CPU smoke tests and inspect Hydra configuration. Never launch training, sampler tuning, full test
-generation, or full evaluation locally.
+Follow the root guide's disposable-check policy for local verification and inspect Hydra
+configuration. Never launch training, sampler tuning, full test generation, or full evaluation
+locally.
 
 ## Explicit Departures from U-ED-LSTM
 

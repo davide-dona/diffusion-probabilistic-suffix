@@ -1,7 +1,7 @@
 # Source Guide
 
 `src/` contains reusable implementation code. `pipelines/` owns orchestration and Hydra entry
-points; source modules should expose typed operations that can be tested without starting a stage.
+points; source modules should expose typed operations that can be checked without starting a stage.
 
 ## Areas
 
@@ -46,6 +46,6 @@ Use Python 3.13 typing, four-space indentation, single quotes, and lines no long
 characters. Public operations and non-obvious private contracts need precise docstrings. Comments
 may explain current invariants or subtle algorithms, never the history of a change.
 
-Run the narrowest relevant pytest module first, then `uv run ruff check .` and
-`uv run ruff format --check .`. Model changes must also satisfy `tests/models`. Artifact changes
-must test both valid round trips and rejection of incompatible inputs.
+Run `uv run ruff check .` and `uv run ruff format --check .`. For changes that need behavioral
+verification, follow the disposable-check policy in the root guide. Artifact checks should cover
+valid round trips and rejection of incompatible inputs.

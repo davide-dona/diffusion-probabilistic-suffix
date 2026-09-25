@@ -58,8 +58,8 @@ sampling and noise schedule configuration together with checkpoint provenance.
 
 ## Validation
 
-Use focused CPU tests for terminal masking, reveal probabilities, fixed visible states, EOT canvas
+For local verification of terminal masking, reveal probabilities, fixed visible states, EOT canvas
 and loss masks, finite gradients, timestep grids, Gaussian endpoints, EOT truncation, sentinel
-behavior, shape and length bounds, and prefix-only generation. Run `uv run pytest tests/models`,
-`uv run ruff check .`, and `uv run ruff format --check .`. Do not run training, sampler tuning, full
-generation, or full evaluation locally. Select later sampling settings on validation data only.
+behavior, shape and length bounds, and prefix-only generation, follow the root guide's
+disposable-check policy. Do not run training, sampler tuning, full generation, or full evaluation
+locally. Select later sampling settings on validation data only.
