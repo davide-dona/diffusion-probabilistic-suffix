@@ -38,7 +38,9 @@ probability times clean-token cross entropy at MASK positions, multiplied by `di
 uniform timestep sampling. Each row averages over the entire canvas, including trailing EOT
 positions. A row with no MASK has zero activity loss. The Gaussian noise-prediction squared error
 averages real event positions only. The batch loss averages row losses, and `Loss` fields store row
-sums. There is no auxiliary categorical loss or uniform categorical posterior.
+sums. The masked real-event and EOT activity terms are separately logged contributions under the
+same full-canvas denominator, reveal weight, and batch averaging as the total activity loss. There
+is no auxiliary categorical loss or uniform categorical posterior.
 
 ## Sampling
 

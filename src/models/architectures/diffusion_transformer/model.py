@@ -76,7 +76,11 @@ class DiffusionTransformer(SuffixModel):
         )  # [B, T]
         masked = output.noisy_activity.eq(self.activities.mask_index)
         reveal = self.activities.adjacent_reveal_probability(output.timestep)  # [B]
-        activity = (cross_entropy * masked).mean(dim=1) * reveal * self.steps  # [B]
+        weighted = cross_entropy * masked  # [B, T]
+        factor = reveal * self.steps  # [B]
+        real_activity = weighted.masked_fill(~output.time_mask, 0.0).mean(dim=1) * factor  # [B]
+        eot_activity = weighted.masked_fill(output.time_mask, 0.0).mean(dim=1) * factor  # [B]
+        activity = real_activity + eot_activity  # [B]
         time = self._masked_mean(
             values=(output.noise - output.predicted_noise).square(), mask=output.time_mask
         )  # [B]
@@ -85,6 +89,8 @@ class DiffusionTransformer(SuffixModel):
             loss=per_example.sum().item(),
             activity_loss=activity.sum().item(),
             inter_event_time_loss=time.sum().item(),
+            masked_real_activity_loss=real_activity.sum().item(),
+            masked_eot_activity_loss=eot_activity.sum().item(),
         )
         return per_example.mean(), metrics
 

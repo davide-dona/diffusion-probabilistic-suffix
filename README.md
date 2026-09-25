@@ -118,6 +118,9 @@ retains its last successfully saved best checkpoint.
 
 Training curves are logged to the `diffusion-probabilistic-suffix` W&B project. On normal completion, the
 selected checkpoint is also uploaded to W&B.
+Diffusion runs also log `train/masked_real_activity_loss`, `train/masked_eot_activity_loss`, and
+their `val/` counterparts. Together they equal the logged activity loss; each uses the full-canvas
+denominator.
 
 ### 3. Sampler tuning
 

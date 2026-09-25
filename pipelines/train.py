@@ -45,7 +45,11 @@ class _TrainingReporter:
         """Log loss terms and the learning rate for one optimized batch."""
         wandb.log(
             {'train/lr': learning_rate}
-            | {f'train/{key}': value for key, value in asdict(metrics / batch_size).items()},
+            | {
+                f'train/{key}': value
+                for key, value in asdict(metrics / batch_size).items()
+                if value is not None
+            },
             step=step,
         )
 
@@ -63,7 +67,11 @@ class _TrainingReporter:
             if metric.owner is Owner.MODEL
         }
         wandb.log(
-            {f'val/{key}': value for key, value in asdict(report.val_metrics).items()}
+            {
+                f'val/{key}': value
+                for key, value in asdict(report.val_metrics).items()
+                if value is not None
+            }
             | model_values,
             step=report.step,
         )
