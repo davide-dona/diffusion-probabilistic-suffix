@@ -1,16 +1,14 @@
-from dataclasses import replace
-
 import torch
 from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
-from src.datasets.dataset import Events, TraceCut
+from src.datasets.dataset import TraceCut
 from src.models.architectures.shared_components.sutran.model import SuTraNModel
 from src.models.architectures.u_ed_sutran.decoder import UncertaintyAwareDecoder
 from src.models.architectures.u_ed_sutran.dropout import monte_carlo_dropout
 from src.models.architectures.u_ed_sutran.loss import uncertainty_loss
 from src.models.contracts import GeneratedSuffix, UncertaintyAwareDecoderOutput
-from src.training import Loss
+from src.training.loss import Loss
 
 
 class UEDSuTraN(SuTraNModel[UncertaintyAwareDecoderOutput]):
@@ -59,27 +57,17 @@ class UEDSuTraN(SuTraNModel[UncertaintyAwareDecoderOutput]):
     @torch.no_grad()
     def generate(self, item: TraceCut, *, num_samples: int) -> GeneratedSuffix:
         """Sample independent prefix encodings and cached suffixes using the prefix alone."""
-        prefix = Events(
-            *(field.repeat_interleave(repeats=num_samples, dim=0) for field in item.prefix)
-        )  # [B, ...] -> [B * S, ...] for every prefix channel
+        prefix = self._repeat_prefix(
+            prefix=item.prefix, num_samples=num_samples
+        )  # [B, ...] -> [B * S, ...]
         prefix_pad_mask = prefix.pad_mask()
         with monte_carlo_dropout(self):
             encoded = self.encoder(events=prefix, pad_mask=prefix_pad_mask)
             generated = self.decoder.generate(
-                prefix_encoded=encoded.events,
+                prefix_encoded=encoded,
                 prefix_pad_mask=prefix_pad_mask,
                 max_steps=prefix.activities.size(dim=1),
             )
-        positions = torch.arange(
-            end=generated.activities.size(dim=1), device=generated.activities.device
-        )
-        kept = positions.unsqueeze(dim=0) < generated.lengths.unsqueeze(dim=1)  # [B * S, T]
-        generated = replace(
-            generated,
-            activities=generated.activities.masked_fill(mask=~kept, value=self.pad_activity_index),
-            inter_event_times=generated.inter_event_times.masked_fill(mask=~kept, value=0.0),
-            used_sentinel=generated.lengths == prefix.activities.size(dim=1),
-        )
         return self._finish_generation(
             generated=generated, batch_size=item.prefix.length.size(dim=0)
         )

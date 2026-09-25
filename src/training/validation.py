@@ -1,26 +1,18 @@
-from __future__ import annotations
-
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from time import perf_counter
-from typing import TYPE_CHECKING
 
 import torch
-import wandb
 from torch.utils.data import DataLoader
 
 from src.datasets.codec import DatasetCodec
 from src.evaluation import PrefixSummary, ScoreGroups
 from src.evaluation.metrics import METRICS
-from src.evaluation.metrics.metadata import Owner
 from src.inference.generate import generate_batch
 from src.logs.declare import ConformanceChecker
+from src.models import SuffixModel
 from src.training.loss import Loss
-from src.training.randomness import validation_randomness
-
-if TYPE_CHECKING:
-    from src.models import SuffixModel
-
-ACTIVITY_LOG_NAMESPACE = 'generation-activity'
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,35 +24,6 @@ class GenerationMetrics:
     generation_seconds: float
     scoring_seconds: float
 
-    def log(self, step: int) -> None:
-        """Log model-owned report and diagnostic metrics under their evaluation groups.
-
-        Log-owned values remain in scores but are excluded from the W&B payload.
-
-        Args:
-            step: The training step this pass scores.
-        """
-        namespaces = {
-            'activity': ACTIVITY_LOG_NAMESPACE,
-            'suffix_length': 'generation-suffix-length',
-            'time': 'generation-time',
-            'conformance': 'generation-conformance',
-        }
-        values = self.scores.flatten()
-        wandb.log(
-            {
-                f'{namespaces[metric.group]}/{key}': values[key]
-                for key, metric in METRICS.report.items()
-                if metric.owner is Owner.MODEL
-            }
-            | {
-                f'diagnostic-{metric.group.value.replace("_", "-")}/{key}': self.diagnostics[key]
-                for key, metric in METRICS.diagnostics.items()
-                if metric.owner is Owner.MODEL
-            },
-            step=step,
-        )
-
 
 def synchronize_device(device: torch.device) -> None:
     """Wait for queued device work before reading a wall-clock timer."""
@@ -70,19 +33,45 @@ def synchronize_device(device: torch.device) -> None:
         torch.mps.synchronize()
 
 
+@contextmanager
+def validation_randomness(*, seed: int | None, device: torch.device) -> Iterator[None]:
+    """Isolate repeatable validation draws from the CPU and accelerator training streams."""
+    if seed is None:
+        yield
+        return
+    devices = (
+        [device.index if device.index is not None else torch.cuda.current_device()]
+        if (device.type == 'cuda')
+        else []
+    )
+    with torch.random.fork_rng(devices=devices):
+        mps_state = torch.mps.get_rng_state() if device.type == 'mps' else None
+        try:
+            torch.random.default_generator.manual_seed(seed)
+            for index in devices:
+                torch.cuda.default_generators[index].manual_seed(seed)
+            if mps_state is not None:
+                torch.mps.manual_seed(seed)
+            yield
+        finally:
+            if mps_state is not None:
+                torch.mps.set_rng_state(mps_state)
+
+
 @torch.no_grad()
 def validate(
     model: SuffixModel, loader: DataLoader, *, device: torch.device, seed: int | None = None
 ) -> Loss:
-    """
-    Run one pass over `loader` without learning from it.
+    """Average teacher-forced loss over validation traces with isolated random draws.
+
     Args:
-        model: The model to evaluate. Put in evaluation mode here, and left in it.
-        loader: The dataloader to iterate over. Its batches are `TraceCut`s.
-        device: The device to run the computations on.
-        seed: Optional isolated seed for reproducible validation draws.
+        model: Model to evaluate.
+        loader: Validation batches.
+        device: Computation device.
+        seed: Optional validation seed.
+
     Returns:
-        The loss terms of the pass, averaged over the traces of the split.
+        Loss terms averaged over traces.
     """
     with validation_randomness(seed=seed, device=device):
         model.eval()
@@ -109,60 +98,53 @@ def validate_generation(
     device: torch.device,
     seed: int | None = None,
 ) -> GenerationMetrics:
-    """
-    Generate suffixes from the prefixes in `loader` and compare them to the ground truth and the
-    declarative model.
-
-    Scored through the same families the final report is built from, and each prefix is answered
-    with the same number of suffixes. What differs is which split is read and how much of it, so a
-    training curve sits on a report's scale without being a report's number.
-
-    Energy score is measured against each example's observed suffix.
+    """Generate validation suffixes and average report scores over prefixes.
 
     Args:
-        model: The model to evaluate. Put in evaluation mode here, and left in it.
-        loader: The prefixes to generate for, from a `TraceDataset`.
-        num_samples: Suffixes to draw per prefix. `generate` puts `len(batch) * num_samples` rows
-            through the decoder at once, so it is also what the caller sizes its batches by.
-        codec: The codec the split was encoded through, read here to put the generations back into
-            the log's own units. Passed rather than read off
-            `loader.dataset`, which is a `Subset` wherever the split is bigger than the slice
-            validated on.
-        checker: The declarative model to check generated suffixes against.
-        device: The device to run the computations on.
-        seed: Optional isolated seed for reproducible validation draws.
+        model: Model to evaluate.
+        loader: Validation prefixes.
+        num_samples: Draws per prefix.
+        codec: Fitted dataset codec.
+        checker: Declarative conformance checker.
+        device: Computation device.
+        seed: Optional validation seed.
+
     Returns:
-        The metrics of the pass, averaged over prefixes.
+        Report scores, diagnostics, and elapsed times.
     """
     with validation_randomness(seed=seed, device=device):
         model.eval()
 
-        synchronize_device(device)
-        generation_start = perf_counter()
-        generations = []
+        generation_seconds = 0.0
+        scoring_seconds = 0.0
+        totals = dict.fromkeys(METRICS.report, 0.0)
+        diagnostic_totals = dict.fromkeys(METRICS.diagnostics, 0.0)
+        prefixes = 0
         for batch in loader:
-            generations.extend(
-                generate_batch(
-                    model=model,
-                    batch=batch.to(device),
-                    num_samples=num_samples,
-                    codec=codec,
-                )
+            synchronize_device(device)
+            started = perf_counter()
+            generations = generate_batch(
+                model=model,
+                batch=batch.to(device),
+                num_samples=num_samples,
+                codec=codec,
             )
-        synchronize_device(device)
-        generation_seconds = perf_counter() - generation_start
-        if not generations:
+            synchronize_device(device)
+            generation_seconds += perf_counter() - started
+            started = perf_counter()
+            for generation in generations:
+                summary = PrefixSummary.of(generation, checker=checker, include_diagnostics=True)
+                for key, value in summary.scores.flatten().items():
+                    totals[key] += value
+                for key, value in summary.diagnostics.items():
+                    diagnostic_totals[key] += value
+                prefixes += 1
+            scoring_seconds += perf_counter() - started
+        if prefixes == 0:
             raise ValueError('Validation generation subset is empty')
-        scoring_start = perf_counter()
-        summaries = [
-            PrefixSummary.of(one, checker=checker, include_diagnostics=True) for one in generations
-        ]
         return GenerationMetrics(
-            scores=ScoreGroups.mean([summary.scores for summary in summaries]),
-            diagnostics={
-                key: sum(summary.diagnostics[key] for summary in summaries) / len(summaries)
-                for key in METRICS.diagnostics
-            },
+            scores=ScoreGroups.of({key: value / prefixes for key, value in totals.items()}),
+            diagnostics={key: value / prefixes for key, value in diagnostic_totals.items()},
             generation_seconds=generation_seconds,
-            scoring_seconds=perf_counter() - scoring_start,
+            scoring_seconds=scoring_seconds,
         )

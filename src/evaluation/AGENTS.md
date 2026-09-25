@@ -29,8 +29,8 @@ and empty-input behavior where they affect the result; keep private documentatio
 ## Input and Preparation
 
 `GenerationWriter` stores one Parquet row per `(case_id, prefix_len)`. Repeated activity suffixes
-are folded into distinct strings plus draw indices; time sequences remain one per draw. The file
-schema also stores truth, activity vocabulary, sampler settings, and provenance.
+are folded into distinct strings plus draw records containing the suffix index, times, and sentinel
+flag. The file also stores truth, activity vocabulary, sampler settings, and provenance.
 
 `PreparedPrefix` expands shared values: suffix lengths, aligned inter-event times, remaining times,
 and Declare conformance. The validation-only DLS similarity is computed only when requested.
@@ -91,6 +91,6 @@ analysis. Do not run full evaluation locally.
 ## Diagnostics
 
 Register validation-only metrics with `diagnostic=True`. DLS sample mean and suffix-length MAE
-are diagnostics, logged as `diagnostic-<group>/<metric>` in W&B during training validation.
+are diagnostics, logged as `diagnostic/<group>/<metric>` in W&B during training validation.
 They are not computed during final evaluation and do not enter JSON reports, default Parquet
 views, publication figures or tables, or significance comparisons.

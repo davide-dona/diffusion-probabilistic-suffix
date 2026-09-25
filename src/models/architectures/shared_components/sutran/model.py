@@ -34,12 +34,12 @@ class SuTraNModel[OutputT](SuffixModel):
         prefix = self.encoder(events=item.prefix, pad_mask=prefix_pad_mask)
         return self.decoder(
             suffix_activities=item.suffix.activities,
-            prefix_encoded=prefix.events,
+            prefix_encoded=prefix,
             prefix_pad_mask=prefix_pad_mask,
         )
 
     def _finish_generation(self, generated: GeneratedSuffix, *, batch_size: int) -> GeneratedSuffix:
-        """Derive remaining time from retained events and group independent sample rows."""
+        """Pad terminated rows, derive remaining time, and group independent sample rows."""
         positions = torch.arange(
             end=generated.inter_event_times.size(dim=1), device=generated.activities.device
         )
@@ -48,5 +48,12 @@ class SuTraNModel[OutputT](SuffixModel):
             times=generated.inter_event_times, keep=kept, codec=self.codec
         )
         return self._per_sample(
-            generated=replace(generated, remaining_time=remaining), batch_size=batch_size
+            generated=replace(
+                generated,
+                activities=generated.activities.masked_fill(~kept, self.pad_activity_index),
+                inter_event_times=generated.inter_event_times.masked_fill(~kept, 0.0),
+                remaining_time=remaining,
+                used_sentinel=generated.lengths.eq(generated.activities.size(dim=1)),
+            ),
+            batch_size=batch_size,
         )

@@ -36,7 +36,18 @@ def read_activity_vocabulary(schema: pa.Schema) -> tuple[str, ...]:
     raw = (schema.metadata or {}).get(_ACTIVITIES)
     if raw is None:
         raise ValueError('Missing activity vocabulary; regenerate this file.')
-    return tuple(json.loads(raw))
+    try:
+        vocabulary = json.loads(raw)
+    except (TypeError, ValueError) as error:
+        raise ValueError('Invalid activity vocabulary') from error
+    if (
+        not isinstance(vocabulary, list)
+        or not vocabulary
+        or any(not isinstance(name, str) or not name for name in vocabulary)
+        or len(set(vocabulary)) != len(vocabulary)
+    ):
+        raise ValueError('Invalid activity vocabulary')
+    return tuple(vocabulary)
 
 
 # One sequence of activities, one character each. A suffix is a string rather than a list of
@@ -51,56 +62,93 @@ _INTER_EVENT_TIMES = pa.list_(pa.field(name='element', type=pa.float32()))
 
 # The schema of the Parquet file that holds a model's generations. One row per prefix: the samples
 # nest inside it, so nothing describing the prefix is written once per sample.
+_EVENTS = pa.struct(
+    [
+        ('activities', _SUFFIX),
+        ('inter_event_time_minutes', _INTER_EVENT_TIMES),
+        ('remaining_time_minutes', pa.float32()),
+    ]
+)
+_DRAW = pa.struct(
+    [
+        ('suffix_index', pa.int32()),
+        ('inter_event_time_minutes', _INTER_EVENT_TIMES),
+        ('remaining_time_minutes', pa.float32()),
+        ('used_eot_sentinel', pa.bool_()),
+    ]
+)
 _SCHEMA = pa.schema(
     [
         ('case_id', pa.large_string()),
         ('prefix_len', pa.int64()),
-        # The events before the cut, which a constraint over the whole trace is checked against.
         ('prefix_activities', _SUFFIX),
-        # The distinct suffixes drawn for this prefix, each written once however many draws landed
-        # on it, and which of them each draw took, in the order they were drawn. A mean over the
-        # draws is the weighted mean over the distinct suffixes.
         ('generated_suffixes', pa.list_(pa.field(name='element', type=_SUFFIX))),
-        ('generated_draws', pa.list_(pa.field(name='element', type=pa.int16()))),
-        # Still one entry per draw, in draw order. Times do not fold with activities because two
-        # draws of one activity suffix can still produce different time values.
-        (
-            'generated_inter_event_time_minutes',
-            pa.list_(pa.field(name='element', type=_INTER_EVENT_TIMES)),
-        ),
-        (
-            'generated_remaining_time_minutes',
-            pa.list_(pa.field(name='element', type=pa.float32())),
-        ),
-        (
-            'generated_used_eot_sentinel',
-            pa.list_(pa.field(name='element', type=pa.bool_())),
-        ),
-        ('true_activities', _SUFFIX),
-        ('true_inter_event_time_minutes', _INTER_EVENT_TIMES),
-        ('true_remaining_time_minutes', pa.float32()),
+        ('generated_draws', pa.list_(pa.field(name='element', type=_DRAW))),
+        ('truth', _EVENTS),
     ]
 )
 
 # The two columns that identify a prefix, which is all `prefix_keys` reads.
 _KEY_COLUMNS = ['case_id', 'prefix_len']
-
-_COMPRESSION = 'zstd'
-
-# Worth the write time: generation is GPU-bound over hours, where the whole file costs under a
-# minute more to compress at this level and comes out a tenth smaller than at the default.
-_COMPRESSION_LEVEL = 9
-
-# The float columns, named as Parquet names their leaves. Byte-stream-split splits a float into its
-# four byte planes before compressing, so the exponents of a column line up and zstd has something
-# repetitive to find; on the inter-event times, which are continuous and share nothing as whole
-# values, it is the difference between compressing and not.
 _FLOAT_LEAVES = [
-    'generated_inter_event_time_minutes.list.element.list.element',
-    'generated_remaining_time_minutes.list.element',
-    'true_inter_event_time_minutes.list.element',
-    'true_remaining_time_minutes',
+    'generated_draws.list.element.inter_event_time_minutes.list.element',
+    'generated_draws.list.element.remaining_time_minutes',
+    'truth.inter_event_time_minutes.list.element',
+    'truth.remaining_time_minutes',
 ]
+
+
+def _generation_row(generation: Generation) -> dict:
+    return {
+        'case_id': generation.case_id,
+        'prefix_len': generation.prefix_len,
+        'prefix_activities': generation.prefix_activities,
+        'generated_suffixes': list(generation.samples.suffixes),
+        'generated_draws': [
+            {
+                'suffix_index': index,
+                'inter_event_time_minutes': events.inter_event_time_minutes,
+                'remaining_time_minutes': events.remaining_time_minutes,
+                'used_eot_sentinel': events.used_eot_sentinel,
+            }
+            for index, events in zip(
+                generation.samples.taken, generation.samples.events, strict=True
+            )
+        ],
+        'truth': {
+            'activities': generation.truth.activities,
+            'inter_event_time_minutes': generation.truth.inter_event_time_minutes,
+            'remaining_time_minutes': generation.truth.remaining_time_minutes,
+        },
+    }
+
+
+def _generation_from_row(row: dict) -> Generation:
+    suffixes = tuple(row['generated_suffixes'])
+    draws = row['generated_draws']
+    taken = tuple(draw['suffix_index'] for draw in draws)
+    if any(index < 0 or index >= len(suffixes) for index in taken):
+        raise ValueError('Generation draw references an unknown suffix')
+    if row['prefix_len'] != len(row['prefix_activities']):
+        raise ValueError('Generation prefix length does not match its activities')
+    return Generation(
+        case_id=row['case_id'],
+        prefix_activities=row['prefix_activities'],
+        samples=Draws(
+            suffixes=suffixes,
+            taken=taken,
+            events=[
+                DecodedEvents(
+                    activities=suffixes[index],
+                    inter_event_time_minutes=draw['inter_event_time_minutes'],
+                    remaining_time_minutes=draw['remaining_time_minutes'],
+                    used_eot_sentinel=draw['used_eot_sentinel'],
+                )
+                for index, draw in zip(taken, draws, strict=True)
+            ],
+        ),
+        truth=DecodedEvents(**row['truth']),
+    )
 
 
 class GenerationWriter:
@@ -140,11 +188,8 @@ class GenerationWriter:
         self._writer = pq.ParquetWriter(
             where=self._path,
             schema=schema,
-            compression=_COMPRESSION,
-            compression_level=_COMPRESSION_LEVEL,
-            # Dictionary encoding takes precedence over byte-stream-split wherever it is left on,
-            # and a column of continuous inter-event times has no dictionary worth building, so
-            # the two are set together.
+            compression='zstd',
+            compression_level=9,
             use_dictionary=False,
             use_byte_stream_split=_FLOAT_LEAVES,
         )
@@ -172,30 +217,7 @@ class GenerationWriter:
         Args:
             generations: The model's answers, in the order `generate_batch` returned them.
         """
-        # Dicts here because they are what arrow's constructor takes, keyed by the schema's own
-        # names.
-        rows = [
-            {
-                'case_id': generation.case_id,
-                'prefix_len': generation.prefix_len,
-                'prefix_activities': generation.prefix_activities,
-                'generated_suffixes': list(generation.samples.suffixes),
-                'generated_draws': list(generation.samples.taken),
-                'generated_inter_event_time_minutes': [
-                    events.inter_event_time_minutes for events in generation.samples.events
-                ],
-                'generated_remaining_time_minutes': [
-                    events.remaining_time_minutes for events in generation.samples.events
-                ],
-                'generated_used_eot_sentinel': [
-                    events.used_eot_sentinel for events in generation.samples.events
-                ],
-                'true_activities': generation.truth.activities,
-                'true_inter_event_time_minutes': generation.truth.inter_event_time_minutes,
-                'true_remaining_time_minutes': generation.truth.remaining_time_minutes,
-            }
-            for generation in generations
-        ]
+        rows = [_generation_row(generation) for generation in generations]
         self._writer.write_table(table=pa.Table.from_pylist(mapping=rows, schema=_SCHEMA))
 
 
@@ -220,6 +242,13 @@ class Generations:
                 f'{path} uses an incompatible generations schema. Regenerate it with '
                 '`python -m pipelines.generate`.'
             )
+        try:
+            self._provenance = Provenance.from_parquet(self._parquet)
+            self._provenance.require_checkpoint_source()
+            self._vocabulary = read_activity_vocabulary(self._parquet.schema_arrow)
+        except Exception:
+            self._parquet.close()
+            raise
 
     def __enter__(self) -> Self:
         return self
@@ -235,9 +264,7 @@ class Generations:
     @property
     def provenance(self) -> Provenance:
         """Validated training run and checkpoint that produced this file."""
-        provenance = Provenance.from_parquet(self._parquet)
-        provenance.require_checkpoint_source()
-        return provenance
+        return self._provenance
 
     @property
     def run(self) -> RunIdentity:
@@ -255,7 +282,7 @@ class Generations:
         Raises:
             ValueError: If the file has no activity vocabulary.
         """
-        return read_activity_vocabulary(self._parquet.schema_arrow)
+        return self._vocabulary
 
     @property
     def blocks(self) -> int:
@@ -298,51 +325,8 @@ class Generations:
             block: Which block to decode, in `range(self.blocks)`.
         Returns:
             The generation for each prefix of the block, in the order they were written, exactly as
-            `generate_batch` produced them. Read a column at a time: Arrow converts a whole column
-            to Python in one call, and the lists that come back are the plain lists `DecodedEvents`
-            promises, so nothing is copied a second time and the block itself is dropped as soon as
-            this returns.
+            `generate_batch` produced them.
         """
-        table = self._parquet.read_row_group(block)
-        columns = {name: table.column(name).to_pylist() for name in table.schema.names}
-
-        generations = []
-        for position in range(table.num_rows):
-            suffixes = columns['generated_suffixes'][position]
-            taken = columns['generated_draws'][position]
-            generations.append(
-                Generation(
-                    case_id=columns['case_id'][position],
-                    prefix_activities=columns['prefix_activities'][position],
-                    samples=Draws(
-                        suffixes=tuple(suffixes),
-                        taken=tuple(taken),
-                        events=[
-                            DecodedEvents(
-                                activities=suffixes[index],
-                                inter_event_time_minutes=inter_event_time_minutes,
-                                remaining_time_minutes=remaining_time_minutes,
-                                used_eot_sentinel=used_eot_sentinel,
-                            )
-                            for (
-                                index,
-                                inter_event_time_minutes,
-                                remaining_time_minutes,
-                                used_eot_sentinel,
-                            ) in zip(
-                                taken,
-                                columns['generated_inter_event_time_minutes'][position],
-                                columns['generated_remaining_time_minutes'][position],
-                                columns['generated_used_eot_sentinel'][position],
-                                strict=True,
-                            )
-                        ],
-                    ),
-                    truth=DecodedEvents(
-                        activities=columns['true_activities'][position],
-                        inter_event_time_minutes=columns['true_inter_event_time_minutes'][position],
-                        remaining_time_minutes=columns['true_remaining_time_minutes'][position],
-                    ),
-                )
-            )
-        return generations
+        return [
+            _generation_from_row(row) for row in self._parquet.read_row_group(block).to_pylist()
+        ]

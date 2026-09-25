@@ -156,13 +156,11 @@ The report and its per-prefix scores are written under
 each length bucket.
 
 DLS sample mean and suffix-length MAE are validation diagnostics, logged to W&B under
-`diagnostic-activity/dls_sample_mean` and `diagnostic-suffix-length/suffix_length_mae`.
+`diagnostic/activity/dls_sample_mean` and `diagnostic/suffix_length/suffix_length_mae`.
 They are excluded from final reports, score files, and publication comparisons.
 
-Generation metrics use separate W&B sections: `generation-activity`, `generation-suffix-length`,
-`generation-time`, and `generation-conformance`, with one chart per metric. Each logged key uses
-`<section>/<metric>` so both first-prefix and last-prefix grouping keep these sections separate.
-These names apply to newly logged values; existing run history retains its original keys.
+Generation metrics are logged under `generation/<group>/<metric>`. Only model-owned metrics are
+logged during training validation; log-owned values remain in the evaluation report.
 
 ### 6. Visualization
 

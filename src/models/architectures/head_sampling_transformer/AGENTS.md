@@ -30,14 +30,8 @@ time, embedded categorical attributes, standardized numeric attributes, and nume
 indicators, then projects them to `D`. `EventEmbeddings` adds fixed sinusoidal positions. The same
 content and position modules are shared by encoder and decoder, with separate input layer norms.
 
-`TraceEncoder` prepends a learned CLS token and applies pre-norm Transformer encoder layers with
-full self-attention. PAD prefix positions are masked. It returns:
-
-- `summary`: the encoded CLS row `[B, D]`, currently not consumed by the decoder.
-- `events`: encoded prefix rows `[B, P, D]`, used as cross-attention memory.
-
-Do not silently start using the CLS summary or remove it without updating the architecture contract
-and checkpoint compatibility.
+`TraceEncoder` applies pre-norm Transformer encoder layers with full self-attention. PAD prefix
+positions are masked. It returns encoded prefix rows `[B, P, D]` as cross-attention memory.
 
 ## Autoregressive Decoder
 
@@ -91,11 +85,10 @@ and repeatedly:
 4. Samples the next activity from the resulting categorical distribution.
 5. Samples standardized time as `mean + epsilon`, with `epsilon ~ N(0,1)`.
 
-A row finishes when it samples EOT. Its length excludes EOT, and downstream decoding reads only
-positions before that length. Raw activity and time tensors retain EOT and subsequent sampled
-values; those durations do not contribute to remaining time. Unfinished rows stop at the maximum
-decoder steps, which equals the batch's padded prefix width. This baseline leaves `used_sentinel`
-unset. Preserve these raw tensor semantics for compatibility.
+A row finishes when it samples EOT. Its length excludes EOT. EOT and later positions are replaced
+with PAD and zero standardized durations. Unfinished rows stop at the maximum decoder steps, which
+equals the batch's padded prefix width, and set `used_sentinel`. Remaining time includes retained
+durations only.
 
 Generation may read `TraceCut.prefix` only. Never use the true suffix for teacher forcing or stopping
 during sampling.
@@ -115,7 +108,7 @@ generation only when both `RunIdentity` and checkpoint SHA-256 match.
 
 The encoder, embeddings, attention, causal decoder trunk, cache, and generation loop live in
 `shared_components/sutran` and are shared with U-ED-SuTraN. The local decoder owns baseline heads
-and sampler controls. Keep parameter registration paths and initialization order stable.
+and sampler controls.
 
 `config/model/head_sampling_transformer.yaml` defines model and embedding widths, encoder and
 decoder depth, attention heads, feedforward sizes, dropout, teacher-forced activity dropout, shared

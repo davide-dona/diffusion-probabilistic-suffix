@@ -1,14 +1,8 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 import torch
 
 from src.models.architectures.shared_components.sutran.cache import LayerCache
+from src.models.architectures.shared_components.sutran.decoder import CausalDecoder
 from src.models.contracts import GeneratedSuffix
-
-if TYPE_CHECKING:
-    from src.models.architectures.shared_components.sutran.decoder import CausalDecoder
 
 
 def generate_autoregressive(

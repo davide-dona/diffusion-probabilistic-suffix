@@ -9,7 +9,7 @@ from src.models.architectures.shared_components.sutran.loss import (
 )
 from src.models.architectures.u_ed_sutran.distributions import sample_gaussian
 from src.models.contracts import UncertaintyAwareDecoderOutput
-from src.training import Loss
+from src.training.loss import Loss
 
 
 def uncertainty_loss(
