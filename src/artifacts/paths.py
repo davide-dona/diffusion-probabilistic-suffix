@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.artifacts.identity import RunIdentity, validate_dataset, validate_model, validate_run_id
+from src.artifacts.provenance import RunIdentity, validate_dataset, validate_model, validate_run_id
 from src.logs.keys import Split
 
 ROOT = Path(__file__).resolve().parents[2]

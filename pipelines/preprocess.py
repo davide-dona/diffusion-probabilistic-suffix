@@ -1,5 +1,3 @@
-import subprocess
-
 import hydra
 import numpy as np
 import pandas as pd
@@ -146,7 +144,7 @@ def preprocess(log: pd.DataFrame, *, feature_columns: list[str]) -> pd.DataFrame
     return log
 
 
-def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> None:
+def run(data_config: DictConfig, declare_config: DictConfig) -> None:
     """
     Preprocess and split a dataset, writing outputs next to the input.
 
@@ -164,7 +162,6 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
     Args:
         data_config: The `data` section of this dataset's experiment config.
         declare_config: The `declare` section, driving the discovery of the declarative model.
-        run_id: The preprocessing invocation identifier recorded in the dataset manifest.
     """
     dataset = data_config.name
 
@@ -240,20 +237,7 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
     declare_summary = f'{constraints} declarative constraints'
 
     with step('Writing the dataset manifest'):
-        revision = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=False
-        ).stdout.strip()
-        dirty = bool(
-            subprocess.run(
-                ['git', 'status', '--porcelain'], capture_output=True, text=True, check=False
-            ).stdout.strip()
-        )
-        manifest = artifacts.DatasetManifest.create(
-            dataset=dataset,
-            data_config=data_config,
-            declare_config=declare_config,
-            producer=artifacts.DatasetProducer(run_id=run_id, revision=revision, dirty=dirty),
-        )
+        manifest = artifacts.DatasetManifest.create(dataset)
         manifest.write()
 
     print(
@@ -271,7 +255,7 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
 def main(cfg: DictConfig) -> None:
     start_stage(cfg)
     validate_preprocess_config(cfg)
-    run(data_config=cfg.data, declare_config=cfg.declare, run_id=cfg.run_id)
+    run(data_config=cfg.data, declare_config=cfg.declare)
 
 
 if __name__ == '__main__':

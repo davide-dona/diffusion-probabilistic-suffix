@@ -66,41 +66,41 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
     # Build the datasets and loaders
     with step('Reading and encoding the train split'):
         train_dataset = TraceDataset(codec=codec, split=Split.TRAIN)
-    train_loader = DataLoader(
-        dataset=train_dataset,
-        batch_size=config.dataloader.batch_size,
-        shuffle=True,
-        generator=generator,
-        num_workers=workers,
-        persistent_workers=persistent_workers,
-    )
+        train_loader = DataLoader(
+            dataset=train_dataset,
+            batch_size=config.dataloader.batch_size,
+            shuffle=True,
+            generator=generator,
+            num_workers=workers,
+            persistent_workers=persistent_workers,
+        )
 
     with step('Reading and encoding the validation split'):
         validation_dataset = TraceDataset(codec=codec, split=Split.VAL)
-    # Validation and generation loaders are fixed subsets of the validation split, so every run
-    # of a config reads the same traces and their curves can be laid over each other.
-    val_loader = DataLoader(
-        dataset=fixed_subset(
-            validation_dataset, size=config.training.validation_pairs, generator=generator
-        ),
-        batch_size=config.dataloader.batch_size,
-        shuffle=False,
-        num_workers=workers,
-        persistent_workers=persistent_workers,
-    )
-    generation_loader = DataLoader(
-        dataset=fixed_subset(
-            validation_dataset, size=config.training.generation_pairs, generator=generator
-        ),
-        batch_size=generation_batch_size(
-            inference=config.inference,
-            num_samples=config.inference.validation_samples,
-            prefixes_upper_bound=config.dataloader.batch_size,
-        ),
-        shuffle=False,
-        num_workers=workers,
-        persistent_workers=persistent_workers,
-    )
+        # Validation and generation loaders are fixed subsets of the validation split, so every run
+        # of a config reads the same traces and their curves can be laid over each other.
+        val_loader = DataLoader(
+            dataset=fixed_subset(
+                validation_dataset, size=config.training.validation_pairs, generator=generator
+            ),
+            batch_size=config.dataloader.batch_size,
+            shuffle=False,
+            num_workers=workers,
+            persistent_workers=persistent_workers,
+        )
+        generation_loader = DataLoader(
+            dataset=fixed_subset(
+                validation_dataset, size=config.training.generation_pairs, generator=generator
+            ),
+            batch_size=generation_batch_size(
+                inference=config.inference,
+                num_samples=config.inference.validation_samples,
+                prefixes_upper_bound=config.dataloader.batch_size,
+            ),
+            shuffle=False,
+            num_workers=workers,
+            persistent_workers=persistent_workers,
+        )
 
     print(
         f'Training on {len(train_loader.dataset):,} prefix/suffix pairs, scoring '

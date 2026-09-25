@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 from torch import optim
 from torch.utils.data import DataLoader
 
-from src.artifacts import RunIdentity
+from src.artifacts import Provenance, RunIdentity
 from src.datasets.codec import DatasetCodec
 from src.logs.declare import ConformanceChecker
 from src.selection import SELECTION_METRIC, selection_score
@@ -221,13 +221,14 @@ def train(
             name=f'{run.dataset}-{run.model}',
             type='model',
             metadata={
-                'run': run.as_dict(),
+                'provenance': Provenance(
+                    run=run, dataset_fingerprint=dataset_fingerprint
+                ).as_dict(),
                 'wandb_id': tracking.id,
                 'selection_metric': SELECTION_METRIC.key,
                 'selection_direction': 'min',
                 'step': best_step,
                 'selection_score': early_stopper.min_validation_score,
-                'dataset_fingerprint': dataset_fingerprint,
             },
         )
         artifact.add_file(str(checkpoint_path), name='model.pt')

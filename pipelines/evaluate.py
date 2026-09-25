@@ -115,20 +115,24 @@ def run(generations_file: Path, workers: int | None) -> None:
         workers: How many processes to score with, or `None` for one per available CPU.
     """
     with Generations(generations_file) as generations:
-        provenance = generations.provenance
-        metadata = provenance.as_metadata()
-        run = provenance.run
+        generation_provenance = generations.provenance
+        run = generation_provenance.run
         blocks, prefixes = generations.blocks, generations.prefixes
         # Which prefix each row answers, in the order the file holds them, which is the order the
         # pool scores them in. Two columns, so this is cheap even on a quarter of a million rows.
         keys = generations.prefix_keys()
 
-    metadata = metadata | {'source_sha256': artifacts.sha256(generations_file)}
+    provenance = artifacts.Provenance(
+        run=run,
+        dataset_fingerprint=generation_provenance.dataset_fingerprint,
+        checkpoint_sha256=generation_provenance.checkpoint_sha256,
+        source_sha256=artifacts.sha256(generations_file),
+    )
     if prefixes == 0:
         raise ValueError('Cannot evaluate an empty generations file')
 
     # Check that the dataset was preprocessed.
-    dataset = metadata['dataset']
+    dataset = run.dataset
     provenance.require_dataset(artifacts.require_dataset_bundle(dataset))
 
     # What the pool will actually start, which is what the wait before the first block is spent on.
@@ -143,7 +147,7 @@ def run(generations_file: Path, workers: int | None) -> None:
     banner(
         'Scoring generated suffixes',
         {
-            'source': metadata,
+            'source': provenance.as_dict(),
             'run': run,
             'dataset': dataset,
             'generations': f'{generations_file} ({prefixes:,} prefixes)',
@@ -177,11 +181,11 @@ def run(generations_file: Path, workers: int | None) -> None:
                 ),
                 keys,
                 path=scores_path,
-                metadata=metadata,
+                provenance=provenance,
             )
         )
 
-    report = EvaluationReport(metadata=metadata, summary=summary)
+    report = EvaluationReport(provenance=provenance, summary=summary)
     path = report.write(output_path('evaluation.json'))
     print(
         f'Scored {summary.prefixes:,} prefixes in {duration(time.perf_counter() - started)}, '

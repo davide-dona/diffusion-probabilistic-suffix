@@ -70,13 +70,19 @@ uv run python -m pipelines.preprocess dataset=sepsis
 ```
 
 The original log is read from `data/sepsis/original.csv`. The out-of-time splits, fitted codec,
-declarative model, and content-hashed dataset manifest are written under `data/sepsis/` and reused
-by later stages. Invocation records are written under `outputs/preprocess/sepsis/<timestamp>/`.
+declarative model, and dataset manifest are written under `data/sepsis/`. The manifest records the
+hash of each bundle file and one fingerprint for the complete bundle. Invocation records, including
+the resolved preprocessing configuration, are written under `outputs/preprocess/sepsis/<timestamp>/`.
 
 > [!WARNING]
 > Training, tuning, generation, and evaluation stop if the preprocessing manifest is missing or
-> any dataset artifact differs from its recorded hash. Existing datasets must be preprocessed
-> again, and checkpoints created before this contract must be retrained.
+> any dataset artifact differs from its recorded hash. Artifacts written before this format change
+> must be regenerated through their pipeline stages.
+
+Checkpoints, tuning reports, generations, and evaluation outputs carry the same `provenance`
+record: the training run, dataset fingerprint, checkpoint hash, and immediate source file hash.
+Hashes that do not yet apply are `null`. This lets each stage reject a dataset bundle different
+from the one used for training.
 
 ### 2. Training
 

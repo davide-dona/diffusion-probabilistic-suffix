@@ -1,6 +1,6 @@
 from omegaconf import DictConfig
 
-from src.artifacts.identity import validate_dataset
+from src.artifacts.provenance import validate_dataset
 from src.config_validation.primitives import validate_number
 from src.logs.keys import INTER_EVENT_TIME_KEY
 

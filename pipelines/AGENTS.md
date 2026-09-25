@@ -48,7 +48,7 @@ directory, but Hydra does not pass artifacts to the next stage. Supply every dow
 - Keep split responsibilities separate. Tuning reads validation only; generation reads test only.
 - Protect replacement of the best checkpoint atomically. Remove directly streamed Parquet outputs
   after handled write failures.
-- Preserve `RunIdentity` and the checkpoint SHA-256 through tuning, generation, and evaluation.
+- Preserve the shared provenance record through tuning, generation, and evaluation.
 - Give each tune, generate, and evaluate invocation a separate output directory below the training
   run. The source artifact still determines the training run identity.
 - Generation batches may be sorted for efficiency, but prefix keys must align results across runs.

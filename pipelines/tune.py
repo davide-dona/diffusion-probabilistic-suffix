@@ -25,6 +25,7 @@ from src.logs.declare import ConformanceChecker
 from src.models import (
     HeadSamplingTransformer,
     checkpoint_identity,
+    checkpoint_provenance,
     load_checkpoint,
     model_from_checkpoint,
     save_tuned_checkpoint,
@@ -120,8 +121,13 @@ def run(
         raise ValueError('Checkpoint has already been tuned')
     run = checkpoint_identity(checkpoint)
     checkpoint_hash = artifacts.sha256(checkpoint_path)
-    dataset_fingerprint = checkpoint['dataset_fingerprint']
-    provenance = artifacts.ArtifactProvenance(run, dataset_fingerprint, checkpoint_hash)
+    dataset_fingerprint = checkpoint_provenance(checkpoint).dataset_fingerprint
+    provenance = artifacts.Provenance(
+        run=run,
+        dataset_fingerprint=dataset_fingerprint,
+        checkpoint_sha256=checkpoint_hash,
+        source_sha256=checkpoint_hash,
+    )
     config = OmegaConf.create(checkpoint['config'])
     if device is not None:
         config.training.device = device
@@ -136,9 +142,7 @@ def run(
         OmegaConf.create(
             {
                 'checkpoint': str(checkpoint_path.resolve()),
-                'checkpoint_sha256': checkpoint_hash,
-                'dataset_fingerprint': dataset_fingerprint,
-                'run': run.as_dict(),
+                'provenance': provenance.as_dict(),
                 'effective': OmegaConf.to_container(config, resolve=True),
                 'temperatures': temperatures,
                 'top_ps': top_ps,
@@ -230,7 +234,7 @@ def run(
         search=SearchPass(pairs=len(subset), samples=samples, seed=config.seed),
         grid=points,
     )
-    provenance.require_checkpoint(checkpoint_path)
+    provenance.require_source(checkpoint_path)
     report.write(report_path)
     save_tuned_checkpoint(checkpoint, report, tuned_checkpoint_path)
     print(

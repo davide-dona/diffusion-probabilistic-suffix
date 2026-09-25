@@ -2,7 +2,7 @@ import math
 
 from omegaconf import DictConfig
 
-from src.artifacts.identity import validate_model as validate_model_name
+from src.artifacts.provenance import validate_model as validate_model_name
 from src.config_validation.primitives import validate_number
 
 

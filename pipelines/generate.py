@@ -17,6 +17,7 @@ from src.inference.generation_store import GenerationWriter
 from src.logs import Split
 from src.models import (
     checkpoint_identity,
+    checkpoint_provenance,
     load_checkpoint,
     model_from_checkpoint,
     require_generation_ready,
@@ -49,12 +50,13 @@ def run(
         checkpoint = load_checkpoint(checkpoint_path)
     run = checkpoint_identity(checkpoint)
     tuning = require_generation_ready(checkpoint)
-    provenance = artifacts.ArtifactProvenance(
+    checkpoint_hash = artifacts.sha256(checkpoint_path)
+    provenance = artifacts.Provenance(
         run=run,
-        dataset_fingerprint=checkpoint['dataset_fingerprint'],
-        checkpoint_sha256=artifacts.sha256(checkpoint_path),
+        dataset_fingerprint=checkpoint_provenance(checkpoint).dataset_fingerprint,
+        checkpoint_sha256=checkpoint_hash,
+        source_sha256=checkpoint_hash,
     )
-    metadata = provenance.as_metadata()
     # Start with the config stored in the checkpoint and apply runtime overrides.
     config = OmegaConf.create(checkpoint['config'])
     if device is not None:
@@ -69,9 +71,7 @@ def run(
         OmegaConf.create(
             {
                 'checkpoint': str(checkpoint_path.resolve()),
-                'checkpoint_sha256': metadata['checkpoint_sha256'],
-                'dataset_fingerprint': metadata['dataset_fingerprint'],
-                'run': run.as_dict(),
+                'provenance': provenance.as_dict(),
                 'effective': OmegaConf.to_container(config, resolve=True),
                 'tuning': tuning.as_dict() if tuning is not None else None,
             }
@@ -95,7 +95,7 @@ def run(
     banner(
         'Generating suffixes',
         {
-            'checkpoint_sha256': metadata['checkpoint_sha256'],
+            'checkpoint_sha256': checkpoint_hash,
             'run': run,
             'dataset': config.data.name,
             'model': f'{config.model.name} (step {trained_step}, selection score {score:.4f})'

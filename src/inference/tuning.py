@@ -7,7 +7,7 @@ from typing import Self
 
 from pydantic import TypeAdapter, ValidationError
 
-from src.artifacts import RunIdentity, validate_sha256
+from src.artifacts import Provenance, RunIdentity
 from src.selection import SELECTION_METRIC
 
 
@@ -27,9 +27,7 @@ class SearchPass:
 
 @dataclass(frozen=True)
 class TuningReport:
-    run: RunIdentity
-    dataset_fingerprint: str
-    source_checkpoint_sha256: str
+    provenance: Provenance
     search: SearchPass
     chosen: dict[str, float]
     grid: tuple[TuningPoint, ...]
@@ -37,8 +35,7 @@ class TuningReport:
     selection_direction: str = 'min'
 
     def __post_init__(self) -> None:
-        validate_sha256(self.dataset_fingerprint, 'tuning dataset fingerprint')
-        validate_sha256(self.source_checkpoint_sha256, 'tuning source checkpoint SHA-256')
+        self.provenance.require_checkpoint_source()
         if self.selection_metric != SELECTION_METRIC.key or self.selection_direction != 'min':
             raise ValueError('Tuning report uses an unsupported selection policy')
         if not self.grid or any(not math.isfinite(point.score) for point in self.grid):
@@ -66,13 +63,32 @@ class TuningReport:
         if not points:
             raise ValueError('Tuning requires a nonempty grid of finite energy scores')
         return cls(
-            run=run,
-            dataset_fingerprint=dataset_fingerprint,
-            source_checkpoint_sha256=source_checkpoint_sha256,
+            provenance=Provenance(
+                run=run,
+                dataset_fingerprint=dataset_fingerprint,
+                checkpoint_sha256=source_checkpoint_sha256,
+                source_sha256=source_checkpoint_sha256,
+            ),
             search=search,
             chosen=min(points, key=lambda point: point.score).sampling,
             grid=points,
         )
+
+    @property
+    def run(self) -> RunIdentity:
+        """The training run whose checkpoint was tuned."""
+        return self.provenance.run
+
+    @property
+    def dataset_fingerprint(self) -> str:
+        """The dataset bundle used by the source checkpoint."""
+        return self.provenance.dataset_fingerprint
+
+    @property
+    def source_checkpoint_sha256(self) -> str:
+        """The exact checkpoint used for tuning."""
+        assert self.provenance.checkpoint_sha256 is not None
+        return self.provenance.checkpoint_sha256
 
     @classmethod
     def read(cls, path: str | Path) -> Self:
