@@ -42,7 +42,8 @@ Preserve draw multiplicity when working with folded suffixes.
 | --- | --- | --- |
 | Activity | DLS, exact-match, and bigram energy scores | Higher similarity; lower energy |
 | Suffix length | CRPS, central interval coverage gaps at 50%, 75%, and 95% | Lower error and CRPS; gap closest to zero |
-| Time | Remaining-time and aligned inter-event-time CRPS in days; central interval coverage gaps at 50%, 75%, and 95% | Lower CRPS; gap closest to zero |
+| Remaining time | Remaining-time CRPS in days; central interval coverage gaps at 50%, 75%, and 95% | Lower CRPS; gap closest to zero |
+| Inter-event time | Aligned inter-event-time CRPS in days; central interval coverage gaps at 50%, 75%, and 95% | Lower CRPS; gap closest to zero |
 | Conformance | Mean satisfied-constraint share, full-conformance sample rate, and observed-log references | Higher model conformance |
 
 Energy scores combine distance to truth with a diversity correction between independent draws.
