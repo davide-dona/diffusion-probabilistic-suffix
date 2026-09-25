@@ -1,27 +1,34 @@
 import math
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from src.datasets.codec import DatasetCodec
 
 
-def cosine_betas(steps: int, *, offset: float, terminal_uniform: bool) -> torch.Tensor:
-    """Return the cosine schedule's per-step noise probabilities."""
-    positions = torch.arange(end=steps + 1, dtype=torch.float64) / steps  # [S + 1]
+def cosine_betas(steps: int, *, offset: float, terminal_mask: bool) -> torch.Tensor:
+    """Return cosine noise probabilities for each discrete level."""
+    positions = torch.arange(end=steps + 1, dtype=torch.float64) / steps
     cumulative = torch.cos((positions + offset) / (1 + offset) * math.pi / 2).square()
-    betas = (1 - cumulative[1:] / cumulative[:-1]).clamp(max=0.999)  # [S]
-    if terminal_uniform:
+    betas = (1 - cumulative[1:] / cumulative[:-1]).clamp(max=0.999)
+    if terminal_mask:
         betas[-1] = 1.0
     return betas.float()
 
 
+def reverse_grid(steps: int, calls: int) -> list[tuple[int, int]]:
+    """Return descending noise levels and their preceding endpoints, ending at zero."""
+    if not 1 <= calls <= steps:
+        raise ValueError('Sampling calls must be between one and the number of noise levels')
+    levels = torch.linspace(steps, 1, calls, dtype=torch.float64).round().long().tolist()
+    return list(zip(levels, levels[1:] + [0], strict=True))
+
+
 class CategoricalDiffusion(nn.Module):
-    """Diffuse valid activity tokens and map them to the dataset vocabulary."""
+    """Absorbing MASK diffusion over the clean suffix activity vocabulary."""
 
     def __init__(self, codec: DatasetCodec, *, steps: int, cosine_offset: float):
-        """Build vocabulary maps and a cosine noise schedule."""
+        """Build compact clean indices and cumulative visibility probabilities."""
         super().__init__()
         allowed = [codec.activity.eot_index, codec.activity.unk_index]
         allowed.extend(range(len(codec.activity.special_tokens), codec.activity.num_rows))
@@ -30,124 +37,105 @@ class CategoricalDiffusion(nn.Module):
         )
         codec_to_diffusion = torch.full(
             size=(codec.activity.num_rows,), fill_value=-1, dtype=torch.long
-        )  # [V]
+        )
         codec_to_diffusion[self.diffusion_to_codec] = torch.arange(end=len(allowed))
         self.register_buffer(name='codec_to_diffusion', tensor=codec_to_diffusion)
         self.eot_index = int((self.diffusion_to_codec == codec.activity.eot_index).nonzero()[0])
-        betas = cosine_betas(steps=steps, offset=cosine_offset, terminal_uniform=True)
-        self.register_buffer(name='betas', tensor=betas)
+        betas = cosine_betas(steps=steps, offset=cosine_offset, terminal_mask=True)
         self.register_buffer(name='alpha_bars', tensor=torch.cumprod(1 - betas, dim=0))
 
     @property
     def num_activities(self) -> int:
-        """Return the number of activities in the diffusion vocabulary."""
+        """Return the number of clean activities, excluding MASK."""
         return self.diffusion_to_codec.numel()
 
+    @property
+    def mask_index(self) -> int:
+        """Return the distinct noisy-state index for MASK."""
+        return self.num_activities
+
     def corrupt(self, clean: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
-        """Sample noisy activity indices at each row's timestep."""
-        alpha_bar = self.alpha_bars[timestep - 1].unsqueeze(dim=1)  # [B] -> [B, 1]
-        keep = torch.rand_like(clean, dtype=torch.float32) < alpha_bar  # [B, T]
-        random = torch.randint_like(input=clean, high=self.num_activities)  # [B, T]
-        return torch.where(condition=keep, input=clean, other=random)  # [B, T]
+        """Independently replace clean positions with MASK at each row's noise level."""
+        visible = torch.rand_like(clean, dtype=torch.float32) < self.alpha_bars[
+            timestep - 1
+        ].unsqueeze(dim=1)
+        return clean.masked_fill(~visible, self.mask_index)
 
-    def prohibit_initial_eot(self, probabilities: torch.Tensor) -> torch.Tensor:
-        """Remove EOT probability at the first suffix position and renormalize."""
-        allowed = torch.ones_like(probabilities[:, :1], dtype=torch.bool)  # [B, 1, K]
-        allowed[:, :, self.eot_index] = False
-        first = probabilities[:, :1] * allowed  # [B, 1, K]
-        return torch.cat(
-            tensors=(first / first.sum(dim=-1, keepdim=True), probabilities[:, 1:]), dim=1
-        )  # [B, T, K]
+    def constrain_logits(self, logits: torch.Tensor) -> torch.Tensor:
+        """Forbid first-position EOT when every cut has at least one real future event."""
+        constrained = logits.clone()
+        constrained[:, 0, self.eot_index] = -torch.inf
+        return constrained
 
-    def posterior(
-        self, noisy: torch.Tensor, clean: torch.Tensor, timestep: torch.Tensor
-    ) -> torch.Tensor:
-        """Compute the categorical posterior over the previous activity, `[B, T, K]`."""
+    def reveal_probability(self, step: int, previous_step: int) -> torch.Tensor:
+        """Probability that a MASK at `step` reveals at `previous_step`."""
+        current = self.alpha_bars[step - 1]
+        previous = self.alpha_bars[previous_step - 1] if previous_step else current.new_tensor(1.0)
+        return ((previous - current) / (1 - current)).clamp(0, 1)
+
+    def adjacent_reveal_probability(self, timestep: torch.Tensor) -> torch.Tensor:
+        """Return the masked posterior reveal weight for each training row."""
+        current = self.alpha_bars[timestep - 1]
         previous = torch.where(
-            condition=timestep > 1,
-            input=self.alpha_bars[timestep - 2],
-            other=torch.ones_like(timestep, dtype=torch.float32),
-        )  # [B]
-        current = self.alpha_bars[timestep - 1]  # [B]
-        beta = self.betas[timestep - 1]  # [B]
-        k = self.num_activities
-        prior = (1 - previous).view(-1, 1, 1) / k + previous.view(-1, 1, 1) * F.one_hot(
-            input=clean, num_classes=k
-        )  # [B, T, K]
-        likelihood = beta.view(-1, 1, 1) / k + (1 - beta).view(-1, 1, 1) * F.one_hot(
-            input=noisy, num_classes=k
-        )  # [B, T, K]
-        evidence = (1 - current).view(-1, 1) / k + current.view(-1, 1) * (clean == noisy)
-        return prior * likelihood / evidence.unsqueeze(dim=-1).clamp_min(1e-12)  # [B, T, K]
-
-    def reverse_probabilities(
-        self, noisy: torch.Tensor, predicted: torch.Tensor, timestep: torch.Tensor
-    ) -> torch.Tensor:
-        """Marginalize the reverse posterior over predicted clean activities."""
-        previous = torch.where(
-            condition=timestep > 1,
-            input=self.alpha_bars[timestep - 2],
-            other=torch.ones_like(timestep, dtype=torch.float32),
-        )  # [B]
-        current = self.alpha_bars[timestep - 1]  # [B]
-        beta = self.betas[timestep - 1]  # [B]
-        k = self.num_activities
-        observed = F.one_hot(input=noisy, num_classes=k)  # [B, T, K]
-        likelihood = beta.view(-1, 1, 1) / k + (1 - beta).view(-1, 1, 1) * observed
-        evidence = (1 - current).view(-1, 1, 1) / k + current.view(-1, 1, 1) * observed
-        weighted = predicted / evidence.clamp_min(1e-12)  # [B, T, K]
-        prior = (1 - previous).view(-1, 1, 1) / k * weighted.sum(
-            dim=-1, keepdim=True
-        ) + previous.view(-1, 1, 1) * weighted  # [B, T, K]
-        return prior * likelihood  # [B, T, K]
+            timestep > 1,
+            self.alpha_bars[(timestep - 2).clamp_min(0)],
+            torch.ones_like(current),
+        )
+        return ((previous - current) / (1 - current)).clamp(0, 1)
 
     def sample_reverse(
-        self,
-        noisy: torch.Tensor,
-        predicted: torch.Tensor,
-        timestep: torch.Tensor,
-        *,
-        final_step: bool,
+        self, noisy: torch.Tensor, predicted: torch.Tensor, *, step: int, previous_step: int
     ) -> torch.Tensor:
-        """Draw previous activities when every row has the same timestep."""
-        probabilities = (
-            predicted
-            if final_step
-            else self.reverse_probabilities(noisy=noisy, predicted=predicted, timestep=timestep)
-        )  # [B, T, K]
-        flat = probabilities.flatten(end_dim=1)  # [B, T, K] -> [B * T, K]
-        return torch.multinomial(input=flat, num_samples=1).view_as(noisy)  # [B, T]
+        """Reveal masked positions while preserving every already visible activity."""
+        reveal = (
+            torch.rand_like(noisy, dtype=torch.float32)
+            < self.reveal_probability(step, previous_step)
+        ) & noisy.eq(self.mask_index)
+        sampled = torch.multinomial(input=predicted.flatten(end_dim=1), num_samples=1).view_as(
+            noisy
+        )
+        return torch.where(reveal, sampled, noisy)
 
 
 class GaussianDiffusion(nn.Module):
-    """Diffuse standardized inter-event times with a Gaussian noise schedule."""
+    """Diffuse standardized inter-event times with a Gaussian cosine schedule."""
 
     def __init__(self, *, steps: int, cosine_offset: float):
-        """Build the cosine schedule for the time channel."""
+        """Build cumulative signal probabilities for the time channel."""
         super().__init__()
-        betas = cosine_betas(steps=steps, offset=cosine_offset, terminal_uniform=False)
-        self.register_buffer(name='betas', tensor=betas)
-        self.register_buffer(name='alphas', tensor=1 - betas)
+        betas = cosine_betas(steps=steps, offset=cosine_offset, terminal_mask=False)
         self.register_buffer(name='alpha_bars', tensor=torch.cumprod(1 - betas, dim=0))
 
     def corrupt(
         self, clean: torch.Tensor, timestep: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Return a noisy time canvas and the Gaussian noise used to make it."""
-        noise = torch.randn_like(clean)  # [B, T]
-        alpha_bar = self.alpha_bars[timestep - 1].unsqueeze(dim=1)  # [B] -> [B, 1]
-        noisy = alpha_bar.sqrt() * clean + (1 - alpha_bar).sqrt() * noise  # [B, T]
+        noise = torch.randn_like(clean)
+        alpha_bar = self.alpha_bars[timestep - 1].unsqueeze(dim=1)
+        noisy = alpha_bar.sqrt() * clean + (1 - alpha_bar).sqrt() * noise
         return noisy, noise
 
     def sample_reverse(
-        self, times: torch.Tensor, noise: torch.Tensor, *, step: int
+        self,
+        times: torch.Tensor,
+        noise: torch.Tensor,
+        *,
+        step: int,
+        previous_step: int,
+        eta: float,
     ) -> torch.Tensor:
-        """Draw previous times from predicted noise at a shared timestep."""
-        index = step - 1
-        alpha = self.alphas[index]
-        alpha_bar = self.alpha_bars[index]
-        mean = (times - self.betas[index] / (1 - alpha_bar).sqrt() * noise) / alpha.sqrt()
-        if step == 1:
-            return mean
-        variance = self.betas[index] * (1 - self.alpha_bars[index - 1]) / (1 - alpha_bar)
-        return mean + variance.sqrt() * torch.randn_like(times)  # [B, T]
+        """Take a DDIM jump between arbitrary noise levels with optional stochasticity."""
+        current = self.alpha_bars[step - 1]
+        previous = self.alpha_bars[previous_step - 1] if previous_step else current.new_tensor(1.0)
+        clean = (times - (1 - current).sqrt() * noise) / current.sqrt()
+        sigma = (
+            eta
+            * ((1 - previous) / (1 - current)).sqrt()
+            * (1 - current / previous).clamp_min(0).sqrt()
+        )
+        result = (
+            previous.sqrt() * clean + (1 - previous - sigma.square()).clamp_min(0).sqrt() * noise
+        )
+        if previous_step and eta:
+            result = result + sigma * torch.randn_like(times)
+        return result

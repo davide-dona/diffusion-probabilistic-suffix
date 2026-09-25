@@ -14,6 +14,10 @@ transformer:
   dropout: 0.1
 diffusion:
   steps: 100
+  sampler:
+    method: ddim
+    calls: 50
+    eta: 0.0
   activity_schedule:
     cosine_offset: 0.008
   time_schedule:

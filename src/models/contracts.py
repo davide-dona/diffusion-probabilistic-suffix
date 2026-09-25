@@ -21,7 +21,6 @@ class DiffusionOutput:
     noise: torch.Tensor  # [B, T]
     noisy_activity: torch.Tensor  # [B, T]
     timestep: torch.Tensor  # [B]
-    activity_mask: torch.Tensor  # [B, T]
     time_mask: torch.Tensor  # [B, T]
 
 

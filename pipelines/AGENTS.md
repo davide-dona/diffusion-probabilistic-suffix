@@ -46,6 +46,8 @@ directory, but Hydra does not pass artifacts to the next stage. Supply every dow
 - Protect replacement of the best checkpoint atomically. Remove directly streamed Parquet outputs
   after handled write failures.
 - Preserve `RunIdentity` and the checkpoint SHA-256 through tuning, generation, and evaluation.
+- For diffusion generation, store the noise levels, both cosine schedules, call count, and DDIM
+  stochasticity in the generations file sampling metadata alongside the resolved stage config.
 - Generation batches may be sorted for efficiency, but prefix keys must align results across runs.
 
 ## Safe Local Development
