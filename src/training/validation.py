@@ -9,7 +9,6 @@ from torch.utils.data import DataLoader
 from src.datasets.codec import DatasetCodec
 from src.evaluation import PrefixSummary, ScoreGroups
 from src.evaluation.metrics import METRICS
-from src.evaluation.metrics.metadata import Owner
 from src.inference.generate import generate_batch
 from src.logs.declare import ConformanceChecker
 from src.models import SuffixModel
@@ -24,19 +23,6 @@ class GenerationMetrics:
     diagnostics: dict[str, float]
     generation_seconds: float
     scoring_seconds: float
-
-    def model_values(self) -> dict[str, float]:
-        """Return model-owned report and diagnostic values grouped for training logs."""
-        values = self.scores.flatten()
-        return {
-            f'generation/{metric.group}/{key}': values[key]
-            for key, metric in METRICS.report.items()
-            if metric.owner is Owner.MODEL
-        } | {
-            f'diagnostic/{metric.group}/{key}': self.diagnostics[key]
-            for key, metric in METRICS.diagnostics.items()
-            if metric.owner is Owner.MODEL
-        }
 
 
 def synchronize_device(device: torch.device) -> None:
