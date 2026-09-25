@@ -102,6 +102,16 @@ def _validate_diffusion_transformer(model: DictConfig) -> None:
     validate_number(model.diffusion.sampler.calls, 'model.diffusion.sampler.calls', integer=True)
     if model.diffusion.sampler.calls > model.diffusion.steps:
         raise ValueError('model.diffusion.sampler.calls must not exceed model.diffusion.steps')
+    if 'start_level' in model.diffusion.sampler:
+        validate_number(
+            model.diffusion.sampler.start_level,
+            'model.diffusion.sampler.start_level',
+            integer=True,
+        )
+        if model.diffusion.sampler.start_level > model.diffusion.steps:
+            raise ValueError('model.diffusion.sampler.start_level must not exceed diffusion.steps')
+        if model.diffusion.sampler.calls > model.diffusion.sampler.start_level:
+            raise ValueError('model.diffusion.sampler.calls must not exceed sampler.start_level')
     validate_number(model.diffusion.sampler.eta, 'model.diffusion.sampler.eta', inclusive=True)
     if model.diffusion.sampler.eta > 1:
         raise ValueError('model.diffusion.sampler.eta must not exceed 1')

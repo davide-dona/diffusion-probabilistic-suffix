@@ -16,11 +16,14 @@ def cosine_betas(steps: int, *, offset: float, terminal_mask: bool) -> torch.Ten
     return betas.float()
 
 
-def reverse_grid(steps: int, calls: int) -> list[tuple[int, int]]:
+def reverse_grid(
+    steps: int, calls: int, *, start_level: int | None = None
+) -> list[tuple[int, int]]:
     """Return descending noise levels and their preceding endpoints, ending at zero."""
-    if not 1 <= calls <= steps:
-        raise ValueError('Sampling calls must be between one and the number of noise levels')
-    levels = torch.linspace(steps, 1, calls, dtype=torch.float64).round().long().tolist()
+    start = steps if start_level is None else start_level
+    if not 1 <= calls <= start <= steps:
+        raise ValueError('Sampling calls and start level must fit within the noise levels')
+    levels = torch.linspace(start, 1, calls, dtype=torch.float64).round().long().tolist()
     return list(zip(levels, levels[1:] + [0], strict=True))
 
 

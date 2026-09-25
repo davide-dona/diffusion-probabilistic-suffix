@@ -16,6 +16,7 @@ diffusion:
   steps: 100
   sampler:
     calls: 50
+    start_level: 99
     eta: 0.0
   activity_schedule:
     cosine_offset: 0.008

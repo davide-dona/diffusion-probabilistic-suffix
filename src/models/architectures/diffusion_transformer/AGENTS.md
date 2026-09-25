@@ -42,13 +42,15 @@ sums. There is no auxiliary categorical loss or uniform categorical posterior.
 
 ## Sampling
 
-The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from the
-terminal level to level one and a
-final jump to level zero. The default is 50 calls across 100 noise levels. Activities start as all
-MASK. At each jump, still-masked positions reveal with the cumulative probability above and
-already revealed positions stay fixed. The final jump reveals every MASK. The Gaussian channel
-uses a DDIM jump based on the cumulative signal at both endpoints. `diffusion.sampler.eta` controls
-its stochasticity, with zero as the deterministic default.
+The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from
+`diffusion.sampler.start_level` to level one and a final jump to level zero. New runs use 50 calls
+from level 99 across 100 noise levels, avoiding the near-zero terminal time signal. Checkpoints
+without `start_level` start from the terminal level, preserving their original sampling behavior.
+Activities start as all MASK and times start as standard Gaussian noise. At each jump, still-masked
+positions reveal with the cumulative probability above and already revealed positions stay fixed.
+The final jump reveals every MASK. The Gaussian channel uses a DDIM jump based on the cumulative
+signal at both endpoints. `diffusion.sampler.eta` controls its stochasticity, with zero as the
+deterministic default.
 
 Initial EOT is forbidden when a masked activity is sampled. After sampling, the first EOT sets the
 length; positions from EOT onward become PAD and standardized zero time. If no EOT appears,

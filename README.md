@@ -92,16 +92,26 @@ Choose the dataset and architecture independently:
 uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
-Available architectures are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
-(U-ED-SuTraN), and `diffusion_transformer`. U-ED-SuTraN shares SuTraN-PH's encoder and causal
+Available model configs are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
+(U-ED-SuTraN), `diffusion_transformer`, and `diffusion_transformer_wide_shallow`.
+U-ED-SuTraN shares SuTraN-PH's encoder and causal
 decoder, adding MC dropout and learned activity-logit and time variances. Its defaults use 20
 categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
 `model.uncertainty`. Both SuTraN models train on complete suffixes with activity-only decoder inputs.
 Validation uses isolated seeded draws and selects checkpoints by the existing generation metric.
 The diffusion model uses absorbing MASK activity corruption and Gaussian time noise. Its default
-configuration has 100 noise levels and 50 DDIM sampling calls. The activity loss supervises real
-events and all EOT positions in the fixed suffix canvas. Change `model.diffusion.sampler.calls`
-and `model.diffusion.sampler.eta` for validation comparisons before final test generation.
+configuration has 100 noise levels and 50 DDIM sampling calls starting at level 99. The activity
+loss supervises real events and all EOT positions in the fixed suffix canvas. The
+`diffusion_transformer_wide_shallow` model config uses width 128 and four layers instead of width
+32 and eight layers. Compare sampler and model settings on validation data before final test
+generation. Older checkpoints without a sampler start level retain their original level-100 start.
+Train the stable width-32 baseline and the wider variant with the same dataset and seed:
+
+```bash
+uv run python -m pipelines.train dataset=sepsis model=diffusion_transformer
+uv run python -m pipelines.train dataset=sepsis model=diffusion_transformer_wide_shallow
+```
+
 Training writes the best validation checkpoint to
 `outputs/train/<dataset>/<model>/<run-id>/best.pt`. Runs cannot be resumed, but an interrupted run
 retains its last successfully saved best checkpoint.
@@ -195,8 +205,9 @@ Datasets, models, training defaults, and runtime profiles live in the correspond
 `config/`. Training duration, warmup, and validation cadence are expressed in optimizer steps;
 early stopping is expressed in validation checks. The CUDA profile selects a batch size and training
 regime for each dataset automatically.
-All three models use activity/resource/attribute embedding widths of 32/16/8, projected to
-model width 32. Checkpoints retain their own embedding configuration.
+All model configs use activity/resource/attribute embedding widths of 32/16/8. The wider
+diffusion variant projects these to width 128; the other configs project to width 32. Checkpoints
+retain their own embedding configuration.
 Override individual settings with dotted keys:
 
 ```bash

@@ -121,7 +121,7 @@ Do not add an independently generated remaining-time head or expose true suffix 
 ## Integration and Provenance
 
 Keep configuration validation, factory registration, exports, checkpoint restoration, visualization
-labels, README documentation, and shared model contract parametrization consistent with
+labels, README documentation, and the shared model contract consistent with
 `u_ed_sutran`. Preserve the existing `DecoderOutput` contract for other architectures.
 
 Preserve chronological splits, fitted codecs, seeds, resolved configurations, checkpoint hashes,
