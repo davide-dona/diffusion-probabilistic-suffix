@@ -12,6 +12,7 @@ from src.models.contracts import ModelOutput, UncertaintyAwareDecoderOutput
 from src.models.factory import (
     DiffusionTransformer,
     HeadSamplingTransformer,
+    MaskedDiffusionTransformer,
     UEDSuTraN,
     build_model,
     model_from_checkpoint,
@@ -24,6 +25,7 @@ __all__ = [
     'SuffixModel',
     'HeadSamplingTransformer',
     'DiffusionTransformer',
+    'MaskedDiffusionTransformer',
     'UEDSuTraN',
     'UncertaintyAwareDecoderOutput',
     'build_model',

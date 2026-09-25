@@ -25,6 +25,19 @@ class DiffusionOutput:
 
 
 @dataclass(frozen=True)
+class MaskedDiffusionOutput:
+    """Length and denoising predictions with targets for one masked diffusion pass."""
+
+    activity_logits: torch.Tensor  # [B, T, V]
+    predicted_noise: torch.Tensor  # [B, T]
+    length_logits: torch.Tensor  # [B, max_trace_length]
+    activity_targets: torch.Tensor  # [B, T]
+    activity_mask: torch.Tensor  # [B, T]
+    valid_positions: torch.Tensor  # [B, T]
+    inter_event_noise: torch.Tensor  # [B, T]
+
+
+@dataclass(frozen=True)
 class GeneratedSuffix:
     """Generated events, with leading dimensions identifying prefixes and samples."""
 
@@ -45,4 +58,6 @@ class UncertaintyAwareDecoderOutput:
     inter_event_time_log_variances: torch.Tensor  # [B, T]
 
 
-ModelOutput = DecoderOutput | DiffusionOutput | UncertaintyAwareDecoderOutput
+ModelOutput = (
+    DecoderOutput | DiffusionOutput | MaskedDiffusionOutput | UncertaintyAwareDecoderOutput
+)

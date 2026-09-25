@@ -3,6 +3,7 @@ from omegaconf import DictConfig, OmegaConf
 from src.datasets.codec import DatasetCodec
 from src.models.architectures.diffusion_transformer.model import DiffusionTransformer
 from src.models.architectures.head_sampling_transformer.model import HeadSamplingTransformer
+from src.models.architectures.masked_diffusion_transformer.model import MaskedDiffusionTransformer
 from src.models.architectures.u_ed_sutran.model import UEDSuTraN
 from src.models.checkpoint import MODEL_KEYS, require_keys
 from src.models.models import SuffixModel
@@ -14,6 +15,8 @@ def build_model(config: DictConfig, codec: DatasetCodec) -> SuffixModel:
         return HeadSamplingTransformer(config=config, codec=codec)
     if config.kind == 'diffusion_transformer':
         return DiffusionTransformer(config=config, codec=codec)
+    if config.kind == 'masked_diffusion_transformer':
+        return MaskedDiffusionTransformer(config=config, codec=codec)
     if config.kind == 'u_ed_sutran':
         return UEDSuTraN(config=config, codec=codec)
     raise ValueError(f'Unknown model kind: {config.kind}')

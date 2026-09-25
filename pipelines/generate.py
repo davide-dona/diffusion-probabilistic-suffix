@@ -95,7 +95,7 @@ def run(
     # A checkpoint that has been trimmed for publishing still carries both of these.
     trained_step, score = checkpoint.get('step'), checkpoint.get('selection_score')
     drawn_with = config.model.get('sampling')
-    if config.model.kind == 'diffusion_transformer':
+    if config.model.kind in {'diffusion_transformer', 'masked_diffusion_transformer'}:
         drawn_with = config.model.diffusion
 
     banner(
@@ -113,6 +113,9 @@ def run(
                 f'{drawn_with.sampler.calls} DDIM calls from level '
                 f'{drawn_with.sampler.start_level}, eta {drawn_with.sampler.eta}'
                 if config.model.kind == 'diffusion_transformer'
+                else f'{drawn_with.sample_steps} DDIM calls from level '
+                f'{drawn_with.train_steps}, eta {drawn_with.ddim_eta}'
+                if config.model.kind == 'masked_diffusion_transformer'
                 else f'temperature {drawn_with.temperature}, top_p {drawn_with.top_p}'
                 if drawn_with is not None
                 else 'not configured'

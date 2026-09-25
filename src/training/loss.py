@@ -18,6 +18,7 @@ class Loss:
     loss: float = 0.0
     activity_loss: float = 0.0
     inter_event_time_loss: float = 0.0
+    length_loss: float | None = None
     masked_real_activity_loss: float | None = None
     masked_eot_activity_loss: float | None = None
 
@@ -27,6 +28,7 @@ class Loss:
             loss=self.loss + other.loss,
             activity_loss=self.activity_loss + other.activity_loss,
             inter_event_time_loss=self.inter_event_time_loss + other.inter_event_time_loss,
+            length_loss=_add_optional(self.length_loss, other.length_loss),
             masked_real_activity_loss=_add_optional(
                 self.masked_real_activity_loss, other.masked_real_activity_loss
             ),
@@ -41,6 +43,7 @@ class Loss:
             loss=self.loss / divisor,
             activity_loss=self.activity_loss / divisor,
             inter_event_time_loss=self.inter_event_time_loss / divisor,
+            length_loss=self.length_loss / divisor if self.length_loss is not None else None,
             masked_real_activity_loss=(
                 self.masked_real_activity_loss / divisor
                 if self.masked_real_activity_loss is not None

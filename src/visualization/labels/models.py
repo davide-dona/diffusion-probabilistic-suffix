@@ -22,6 +22,9 @@ MODELS = {
     'diffusion_transformer': ModelStyle(
         label='Joint Diffusion Transformer', color='#2A7F9E', marker='^', linestyle='-'
     ),
+    'masked_diffusion_transformer': ModelStyle(
+        label='Masked Diffusion Transformer', color='#B27A2A', marker='X', linestyle='-.'
+    ),
     'diffusion_transformer_wide_shallow': ModelStyle(
         label='Joint Diffusion Transformer (wide, shallow)',
         color='#17617D',

@@ -30,7 +30,12 @@ def validate_model(model: DictConfig) -> None:
             section is invalid.
     """
     validate_model_name(model.name)
-    if model.kind not in {'head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran'}:
+    if model.kind not in {
+        'head_sampling_transformer',
+        'diffusion_transformer',
+        'masked_diffusion_transformer',
+        'u_ed_sutran',
+    }:
         raise ValueError(f'Unknown model kind: {model.kind}')
 
     validate_number(model.d_model, 'model.d_model', integer=True)
@@ -43,6 +48,8 @@ def validate_model(model: DictConfig) -> None:
             validate_sampling(model.sampling)
         else:
             _validate_uncertainty(model)
+    elif model.kind == 'masked_diffusion_transformer':
+        _validate_masked_diffusion_transformer(model)
     else:
         _validate_diffusion_transformer(model)
 
@@ -121,3 +128,34 @@ def _validate_diffusion_transformer(model: DictConfig) -> None:
             f'model.diffusion.{channel}.cosine_offset',
             inclusive=True,
         )
+
+
+def _validate_masked_diffusion_transformer(model: DictConfig) -> None:
+    """Validate the length-first architecture and its diffusion settings."""
+    for section_name in ('encoder', 'decoder'):
+        section = model[section_name]
+        for key in ('num_layers', 'num_heads', 'feedforward_dim'):
+            validate_number(section[key], f'model.{section_name}.{key}', integer=True)
+        if model.d_model % section.num_heads:
+            raise ValueError(f'model.{section_name}.num_heads must divide model.d_model')
+        validate_number(section.dropout, f'model.{section_name}.dropout', inclusive=True)
+        if section.dropout >= 1:
+            raise ValueError(f'model.{section_name}.dropout must be below 1')
+    validate_number(model.decoder.head_hidden_dim, 'model.decoder.head_hidden_dim', integer=True)
+    diffusion = model.diffusion
+    for key in ('train_steps', 'sample_steps'):
+        validate_number(diffusion[key], f'model.diffusion.{key}', integer=True)
+    if diffusion.sample_steps > diffusion.train_steps:
+        raise ValueError('model.diffusion.sample_steps must not exceed train_steps')
+    validate_number(diffusion.cosine_offset, 'model.diffusion.cosine_offset', inclusive=True)
+    validate_number(diffusion.ddim_eta, 'model.diffusion.ddim_eta', inclusive=True)
+    if diffusion.ddim_eta > 1:
+        raise ValueError('model.diffusion.ddim_eta must not exceed 1')
+    validate_number(diffusion.continuous_clip, 'model.diffusion.continuous_clip')
+    loss_keys = {'length_weight', 'activity_weight', 'inter_event_time_weight'}
+    if set(model.loss) != loss_keys:
+        raise ValueError(f'model.loss must contain exactly {sorted(loss_keys)}')
+    for key in loss_keys:
+        validate_number(model.loss[key], f'model.loss.{key}', inclusive=True)
+    if not any(model.loss[key] > 0 for key in loss_keys):
+        raise ValueError('model.loss must contain a positive weight')

@@ -15,12 +15,13 @@ generation depend on this interface rather than on architecture internals.
 
 `GeneratedSuffix.activities` and `inter_event_times` have shape `[B, S, T]`; `lengths`,
 `remaining_time`, and optional `used_sentinel` have shape `[B, S]`. Length counts real generated
-events before EOT, or the generated canvas length when no EOT appears.
+events before EOT for EOT-based models. The masked diffusion model predicts the length explicitly.
 
 `DecoderOutput` holds activity logits `[B, T, V]` and standardized time predictions `[B, T]`.
 `DiffusionOutput` also carries the clean and noisy states, sampled timesteps, Gaussian noise, and
 the real-event time mask needed to evaluate one stochastic diffusion pass. Its activity loss spans
 the full fixed canvas, including trailing EOT targets.
+`MaskedDiffusionOutput` carries length logits, masked activity targets, and Gaussian time noise.
 `UncertaintyAwareDecoderOutput` carries Gaussian activity-logit means and log-variances `[B, T, V]`
 and standardized time means and log-variances `[B, T]`.
 
@@ -40,7 +41,8 @@ and standardized time means and log-variances `[B, T]`.
 
 - Generation must be invariant to every true suffix field for all architectures.
 - PAD and SOS are structural tokens and cannot be sampled as suffix activities. EOT determines
-  generated length. UNK remains a valid modeled activity.
+  generated length for EOT-based models; masked diffusion predicts length first and does not emit
+  EOT. UNK remains a valid modeled activity.
 - Inter-event times are modeled in the codec's standardized space. Remaining time is derived from
   generated inter-event times after inverse scaling, nonnegative clamping, summation, and
   standardization through the remaining-time codec. It is not an independent generated head.
@@ -53,6 +55,7 @@ and standardized time means and log-variances `[B, T]`.
 | Model kind | Guide | Status |
 | --- | --- | --- |
 | `diffusion_transformer` | [`architectures/diffusion_transformer/AGENTS.md`](architectures/diffusion_transformer/AGENTS.md) | Implemented main model |
+| `masked_diffusion_transformer` | [`architectures/masked_diffusion_transformer/AGENTS.md`](architectures/masked_diffusion_transformer/AGENTS.md) | Implemented length-first diffusion model |
 | `head_sampling_transformer` | [`architectures/head_sampling_transformer/AGENTS.md`](architectures/head_sampling_transformer/AGENTS.md) | Implemented SuTraN-PH baseline |
 | `u_ed_sutran` | [`architectures/u_ed_sutran/AGENTS.md`](architectures/u_ed_sutran/AGENTS.md) | Implemented uncertainty-aware SuTraN |
 
