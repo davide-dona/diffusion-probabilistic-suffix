@@ -99,8 +99,6 @@ def _validate_diffusion_transformer(model: DictConfig) -> None:
     if model.transformer.dropout >= 1:
         raise ValueError('model.transformer.dropout must be below 1')
     validate_number(model.diffusion.steps, 'model.diffusion.steps', integer=True)
-    if model.diffusion.sampler.method != 'ddim':
-        raise ValueError('model.diffusion.sampler.method must be ddim')
     validate_number(model.diffusion.sampler.calls, 'model.diffusion.sampler.calls', integer=True)
     if model.diffusion.sampler.calls > model.diffusion.steps:
         raise ValueError('model.diffusion.sampler.calls must not exceed model.diffusion.steps')

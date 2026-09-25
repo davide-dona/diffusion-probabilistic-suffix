@@ -42,7 +42,7 @@ sums. There is no auxiliary categorical loss or uniform categorical posterior.
 
 ## Sampling
 
-`diffusion.sampler.method` is `ddim`. `diffusion.sampler.calls` selects a descending grid from the
+The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from the
 terminal level to level one and a
 final jump to level zero. The default is 50 calls across 100 noise levels. Activities start as all
 MASK. At each jump, still-masked positions reveal with the cumulative probability above and

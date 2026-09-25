@@ -19,7 +19,7 @@ groups. The result is validated at the stage boundary and stored with every dura
 - Keep `model.kind` aligned with `src.models.factory.build_model` and `model.name` aligned with
   `RunIdentity`, output paths, and visualization labels.
 - The diffusion model separates `diffusion.steps` noise levels from `diffusion.sampler.calls`
-  denoiser calls. The sampler method is `ddim`, calls must not exceed noise levels, and
+  denoiser calls. The sampler uses DDIM, calls must not exceed noise levels, and
   `diffusion.sampler.eta` lies in `[0, 1]`. The default is 100 levels, 50 calls, and zero Gaussian
   sampling stochasticity.
 - Add or change fields together with their checks in `src/config_validation/`. Reject invalid values before
