@@ -91,6 +91,6 @@ analysis. Do not run full evaluation locally.
 ## Diagnostics
 
 Register validation-only metrics with `diagnostic=True`. DLS sample mean and suffix-length MAE
-are diagnostics, logged as `diagnostic/<group>/<metric>` in W&B during training validation.
+are diagnostics, logged as `diagnostic_<group>/<metric>` in W&B during training validation.
 They are not computed during final evaluation and do not enter JSON reports, default Parquet
 views, publication figures or tables, or significance comparisons.
