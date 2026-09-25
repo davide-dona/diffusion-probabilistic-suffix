@@ -57,7 +57,7 @@ uv run python -m pipelines.evaluate --multirun \
   generations=/path/to/first/generations.parquet,/path/to/second/generations.parquet workers=4
 ```
 
-Each multirun job receives its own dataset, model, and run ID directory. Batch runs do not
+Each multirun job receives its own output directory. Batch runs do not
 transfer artifacts between stages automatically, so supply each stage's input artifact
 explicitly.
 
@@ -70,13 +70,19 @@ uv run python -m pipelines.preprocess dataset=sepsis
 ```
 
 The original log is read from `data/sepsis/original.csv`. The out-of-time splits, fitted codec,
-declarative model, and content-hashed dataset manifest are written under `data/sepsis/` and reused
-by later stages. Invocation records are written under `outputs/preprocess/sepsis/<timestamp>/`.
+declarative model, and dataset manifest are written under `data/sepsis/`. The manifest records the
+hash of each bundle file and one fingerprint for the complete bundle. Invocation records, including
+the resolved preprocessing configuration, are written under `outputs/preprocess/sepsis/<timestamp>/`.
 
 > [!WARNING]
 > Training, tuning, generation, and evaluation stop if the preprocessing manifest is missing or
-> any dataset artifact differs from its recorded hash. Existing datasets must be preprocessed
-> again, and checkpoints created before this contract must be retrained.
+> any dataset artifact differs from its recorded hash. Artifacts written before this format change
+> must be regenerated through their pipeline stages.
+
+Checkpoints, tuning reports, generations, and evaluation outputs carry the same `provenance`
+record: the training run, dataset fingerprint, checkpoint hash, and immediate source file hash.
+Hashes that do not yet apply are `null`. This lets each stage reject a dataset bundle different
+from the one used for training.
 
 ### 2. Training
 
@@ -112,8 +118,8 @@ uv run python -m pipelines.tune checkpoint=/path/to/best.pt device=cpu
 ```
 
 The selected sampler and full search are written to
-`outputs/tune/<dataset>/<model>/<run-id>/tuning.json`. The same directory contains `tuned.pt`, a
-self-contained checkpoint required for Head-sampling Transformer generation.
+`outputs/tune/<dataset>/<model>/<training-run-id>/<invocation-id>/tuning.json`. The same directory
+contains `tuned.pt`, a self-contained checkpoint required for Head-sampling Transformer generation.
 
 U-ED-SuTraN samples its learned distribution directly. It does not support temperature or top-p
 tuning, and its `best.pt` can be used for generation without this stage.
@@ -133,7 +139,7 @@ uv run python -m pipelines.generate checkpoint=/path/to/tuned.pt device=cpu num_
 ```
 
 The generations are written to
-`outputs/generate/<dataset>/<model>/<run-id>/generations.parquet`.
+`outputs/generate/<dataset>/<model>/<training-run-id>/<invocation-id>/generations.parquet`.
 
 ### 5. Evaluation
 
@@ -144,7 +150,7 @@ uv run python -m pipelines.evaluate generations=/path/to/generations.parquet wor
 ```
 
 The report and its per-prefix scores are written under
-`outputs/evaluate/<dataset>/<model>/<run-id>/` as `evaluation.json` and
+`outputs/evaluate/<dataset>/<model>/<training-run-id>/<invocation-id>/` as `evaluation.json` and
 `prefix_scores.parquet`. The JSON summary groups scores under `scores.activity`,
 `scores.suffix_length`, `scores.time`, and `scores.conformance`, both overall and within
 each length bucket.

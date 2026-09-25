@@ -23,7 +23,8 @@ baseline on Sepsis, BPIC12, BPIC17, and BPIC19.
   and run identity across artifact handoffs.
 - Do not hand edit source logs or generated dataset and run artifacts.
 - Use four-space indentation, single quotes, 100-character lines, type hints, `snake_case` names,
-  and `PascalCase` classes. Ruff is the formatting and linting authority.
+  and `PascalCase` classes. Ruff is the formatting and linting authority. Never comments as the
+  first line of a file.
 - Use `uv run pytest` for focused tests, `uv run ruff check .`, and
   `uv run ruff format --check .`. Put disposable checks under `tmp/`.
 

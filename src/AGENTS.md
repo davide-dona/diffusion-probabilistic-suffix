@@ -14,8 +14,7 @@ points; source modules should expose typed operations that can be tested without
 | `inference/` | Batch generation, tuning reports, decoded samples, and generations Parquet I/O. |
 | `evaluation/` | Metric registration, prefix scoring, aggregation, and evaluation reports. |
 | `logs/` | Event-log I/O, preprocessing transforms, Declare discovery, and conformance. |
-| `runs/` | Hydra invocation setup, effective configuration, and output directories. |
-| `validation/` | Configuration and stage-boundary validation. |
+| `config_validation/` | Effective configuration and command parameter validation. |
 | `visualization/` | Figure and table catalogues, labels, and rendering. |
 | `uncertainty/` | Case-level resampling and significance comparisons. |
 
@@ -38,6 +37,8 @@ Read the nested guides for [`datasets/`](datasets/AGENTS.md), [`models/`](models
 - Keep random selection reproducible through explicit seeds or generators. Do not depend on prior
   global random state.
 - Avoid importing orchestration code from `pipelines/` into `src/`.
+- Keep Hydra invocation setup in `pipelines/`; artifact path and provenance rules belong in
+  `artifacts/`.
 
 ## Coding and Validation
 

@@ -9,12 +9,8 @@ import pyarrow.parquet as pq
 from omegaconf import DictConfig, OmegaConf
 
 from src.artifacts import (
-    ArtifactProvenance,
+    Provenance,
     RunIdentity,
-    read_activity_vocabulary,
-    read_provenance_metadata,
-    with_activity_vocabulary,
-    with_provenance_metadata,
 )
 from src.inference.generation import DecodedEvents, Draws, Generation
 
@@ -25,6 +21,23 @@ type PrefixKey = tuple[str, int]
 # The sampler configuration used for generation. The checkpoint hash does not alone describe
 # inference settings when a sampler is selected after training.
 _SAMPLING = b'sampling'
+_ACTIVITIES = b'activities'
+
+
+def with_activity_vocabulary(schema: pa.Schema, vocabulary: Sequence[str]) -> pa.Schema:
+    """Attach the activity vocabulary used to encode generations."""
+    return schema.with_metadata(
+        (schema.metadata or {}) | {_ACTIVITIES: json.dumps(list(vocabulary)).encode()}
+    )
+
+
+def read_activity_vocabulary(schema: pa.Schema) -> tuple[str, ...]:
+    """Read the activity vocabulary from a generations schema."""
+    raw = (schema.metadata or {}).get(_ACTIVITIES)
+    if raw is None:
+        raise ValueError('Missing activity vocabulary; regenerate this file.')
+    return tuple(json.loads(raw))
+
 
 # One sequence of activities, one character each. A suffix is a string rather than a list of
 # names. Activity names live once in the vocabulary metadata; edit distance reads the string.
@@ -100,7 +113,7 @@ class GenerationWriter:
     def __init__(
         self,
         path: Path,
-        provenance: ArtifactProvenance,
+        provenance: Provenance,
         *,
         vocabulary: Sequence[str],
         sampling: DictConfig | None,
@@ -115,13 +128,14 @@ class GenerationWriter:
             sampling: The activity-head controls or diffusion schedules and sampler settings.
                 Written so the checkpoint hash alone need not identify inference settings.
         """
+        provenance.require_checkpoint_source()
         schema = with_activity_vocabulary(_SCHEMA, vocabulary)
         if sampling is not None:
             schema = schema.with_metadata(
                 (schema.metadata or {})
                 | {_SAMPLING: json.dumps(OmegaConf.to_container(sampling, resolve=True))}
             )
-        schema = with_provenance_metadata(schema, provenance.as_metadata())
+        schema = provenance.attach_to_schema(schema)
         self._path = path
         self._writer = pq.ParquetWriter(
             where=self._path,
@@ -219,18 +233,11 @@ class Generations:
         self._parquet.close()
 
     @property
-    def metadata(self) -> dict[str, str]:
-        """Stable run identity, dataset fingerprint, and source checkpoint hash.
-
-        Raises:
-            ValueError: If the file has no run identity.
-        """
-        return self.provenance.as_metadata()
-
-    @property
-    def provenance(self) -> ArtifactProvenance:
+    def provenance(self) -> Provenance:
         """Validated training run and checkpoint that produced this file."""
-        return ArtifactProvenance.from_metadata(read_provenance_metadata(self._parquet))
+        provenance = Provenance.from_parquet(self._parquet)
+        provenance.require_checkpoint_source()
+        return provenance
 
     @property
     def run(self) -> RunIdentity:

@@ -9,14 +9,14 @@ import hydra
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from pipelines.console import banner, duration, step
+from pipelines.helpers.console import banner, duration, step
+from pipelines.helpers.invocation import output_path, start_stage
 from src import artifacts
+from src.config_validation import validate_evaluation_config
 from src.datasets.codec import ActivityCodec
 from src.evaluation import EvaluationReport, EvaluationSummary, PrefixSummary, stream_prefix_scores
 from src.inference.generation_store import Generations
 from src.logs.declare import ConformanceChecker, discovery_settings
-from src.runs.hydra import output_path, start_stage
-from src.validation import validate_evaluation
 
 
 @dataclass(frozen=True)
@@ -115,20 +115,25 @@ def run(generations_file: Path, workers: int | None) -> None:
         workers: How many processes to score with, or `None` for one per available CPU.
     """
     with Generations(generations_file) as generations:
-        metadata = generations.metadata
-        run = generations.run
+        generation_provenance = generations.provenance
+        run = generation_provenance.run
         blocks, prefixes = generations.blocks, generations.prefixes
         # Which prefix each row answers, in the order the file holds them, which is the order the
         # pool scores them in. Two columns, so this is cheap even on a quarter of a million rows.
         keys = generations.prefix_keys()
 
-    metadata = metadata | {'source_sha256': artifacts.sha256(generations_file)}
+    provenance = artifacts.Provenance(
+        run=run,
+        dataset_fingerprint=generation_provenance.dataset_fingerprint,
+        checkpoint_sha256=generation_provenance.checkpoint_sha256,
+        source_sha256=artifacts.sha256(generations_file),
+    )
     if prefixes == 0:
         raise ValueError('Cannot evaluate an empty generations file')
 
     # Check that the dataset was preprocessed.
-    dataset = metadata['dataset']
-    artifacts.require_dataset_bundle(dataset, expected_fingerprint=metadata['dataset_fingerprint'])
+    dataset = run.dataset
+    provenance.require_dataset(artifacts.require_dataset_bundle(dataset))
 
     # What the pool will actually start, which is what the wait before the first block is spent on.
     processes = workers if workers is not None else os.cpu_count()
@@ -142,7 +147,7 @@ def run(generations_file: Path, workers: int | None) -> None:
     banner(
         'Scoring generated suffixes',
         {
-            'source': metadata,
+            'source': provenance.as_dict(),
             'run': run,
             'dataset': dataset,
             'generations': f'{generations_file} ({prefixes:,} prefixes)',
@@ -176,11 +181,11 @@ def run(generations_file: Path, workers: int | None) -> None:
                 ),
                 keys,
                 path=scores_path,
-                metadata=metadata,
+                provenance=provenance,
             )
         )
 
-    report = EvaluationReport(metadata=metadata, summary=summary)
+    report = EvaluationReport(provenance=provenance, summary=summary)
     path = report.write(output_path('evaluation.json'))
     print(
         f'Scored {summary.prefixes:,} prefixes in {duration(time.perf_counter() - started)}, '
@@ -191,7 +196,7 @@ def run(generations_file: Path, workers: int | None) -> None:
 @hydra.main(version_base='1.3', config_path='../config', config_name='evaluate')
 def main(cfg: DictConfig) -> None:
     start_stage(cfg)
-    validate_evaluation(workers=cfg.workers)
+    validate_evaluation_config(workers=cfg.workers)
     run(Path(cfg.generations), cfg.workers)
 
 

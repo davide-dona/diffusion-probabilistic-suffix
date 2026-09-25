@@ -5,9 +5,9 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from src.artifacts import read_provenance_metadata, with_provenance_metadata
+from src.artifacts import Provenance
 from src.evaluation.metrics import METRICS
-from src.evaluation.reports import _group_by_model
+from src.evaluation.reports import EvaluationReport, _group_by_model
 from src.evaluation.scoring import PrefixSummary
 from src.inference.generation_store import PrefixKey
 
@@ -28,7 +28,7 @@ def stream_prefix_scores(
     keys: Sequence[PrefixKey],
     *,
     path: Path,
-    metadata: dict[str, str],
+    provenance: Provenance,
 ) -> Iterator[PrefixSummary]:
     """Write per-prefix scores while yielding the original summaries.
 
@@ -36,7 +36,7 @@ def stream_prefix_scores(
         summaries: Scores in the same prefix order as keys, consumed once.
         keys: Case identifier and prefix length for each summary.
         path: Parquet destination in an existing directory, replacing any existing file.
-        metadata: Artifact provenance stored with the score schema.
+        provenance: Artifact provenance stored with the score schema.
 
     Yields:
         Each input summary unchanged. Consume the iterator fully to flush all buffered rows
@@ -57,7 +57,7 @@ def stream_prefix_scores(
 
     try:
         with pq.ParquetWriter(
-            where=path, schema=with_provenance_metadata(_PREFIX_SCORE_SCHEMA, metadata)
+            where=path, schema=provenance.attach_to_schema(_PREFIX_SCORE_SCHEMA)
         ) as writer:
             for summary, (case_id, prefix_len) in zip(summaries, keys, strict=True):
                 columns['case_id'].append(case_id)
@@ -132,12 +132,16 @@ def score_files(reports: Sequence[Path]) -> dict[str, dict[str, Path]]:
             + '\nScore them again with `python -m pipelines.evaluate`, which writes them beside '
             'the report.'
         )
-    runs: list[tuple[dict[str, str], Path]] = []
-    for _, scores in files:
+    runs: list[tuple[Provenance, Path]] = []
+    for report_path, scores in files:
         try:
             require_columns(scores, (*PREFIX_SCORE_KEYS, *METRICS.report))
             with pq.ParquetFile(scores) as parquet:
-                runs.append((read_provenance_metadata(parquet), scores))
+                provenance = Provenance.from_parquet(parquet)
+                provenance.require_generations_source()
+                if provenance != EvaluationReport.read(report_path).provenance:
+                    raise ValueError('Score provenance does not match its evaluation report')
+                runs.append((provenance, scores))
         except (ValueError, TypeError, KeyError) as error:
             raise ValueError(f'{scores} is not a per-prefix scores file: {error}') from error
     return _group_by_model(runs)

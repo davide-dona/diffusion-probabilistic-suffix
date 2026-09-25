@@ -7,8 +7,10 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from pipelines.console import banner, step
+from pipelines.helpers.console import banner, step
+from pipelines.helpers.invocation import output_path, save_config, start_stage
 from src import artifacts
+from src.config_validation import validate_tuning_config
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset, fixed_subset
 from src.evaluation import PrefixSummary
@@ -23,13 +25,12 @@ from src.logs.declare import ConformanceChecker
 from src.models import (
     HeadSamplingTransformer,
     checkpoint_identity,
+    checkpoint_provenance,
     load_checkpoint,
     model_from_checkpoint,
     save_tuned_checkpoint,
 )
-from src.runs.hydra import output_path, save_config, start_stage
 from src.selection import selection_score
-from src.validation import validate_tuning
 
 
 @torch.no_grad()
@@ -120,7 +121,13 @@ def run(
         raise ValueError('Checkpoint has already been tuned')
     run = checkpoint_identity(checkpoint)
     checkpoint_hash = artifacts.sha256(checkpoint_path)
-    dataset_fingerprint = checkpoint['dataset_fingerprint']
+    dataset_fingerprint = checkpoint_provenance(checkpoint).dataset_fingerprint
+    provenance = artifacts.Provenance(
+        run=run,
+        dataset_fingerprint=dataset_fingerprint,
+        checkpoint_sha256=checkpoint_hash,
+        source_sha256=checkpoint_hash,
+    )
     config = OmegaConf.create(checkpoint['config'])
     if device is not None:
         config.training.device = device
@@ -130,14 +137,12 @@ def run(
         config.training.generation_pairs = pairs
     if samples is not None:
         config.inference.validation_samples = samples
-    validate_tuning(config, temperatures=temperatures, top_ps=top_ps)
+    validate_tuning_config(config, temperatures=temperatures, top_ps=top_ps)
     save_config(
         OmegaConf.create(
             {
                 'checkpoint': str(checkpoint_path.resolve()),
-                'checkpoint_sha256': checkpoint_hash,
-                'dataset_fingerprint': dataset_fingerprint,
-                'run': run.as_dict(),
+                'provenance': provenance.as_dict(),
                 'effective': OmegaConf.to_container(config, resolve=True),
                 'temperatures': temperatures,
                 'top_ps': top_ps,
@@ -145,7 +150,7 @@ def run(
         )
     )
 
-    artifacts.require_dataset_bundle(config.data.name, expected_fingerprint=dataset_fingerprint)
+    provenance.require_dataset(artifacts.require_dataset_bundle(config.data.name))
     pairs = config.training.generation_pairs if pairs is None else pairs
     samples = config.inference.validation_samples if samples is None else samples
 
@@ -229,6 +234,7 @@ def run(
         search=SearchPass(pairs=len(subset), samples=samples, seed=config.seed),
         grid=points,
     )
+    provenance.require_source(checkpoint_path)
     report.write(report_path)
     save_tuned_checkpoint(checkpoint, report, tuned_checkpoint_path)
     print(

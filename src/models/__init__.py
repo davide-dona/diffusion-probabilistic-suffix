@@ -1,6 +1,7 @@
 from src.models.checkpoint import (
     CHECKPOINT_KEYS,
     checkpoint_identity,
+    checkpoint_provenance,
     load_checkpoint,
     require_generation_ready,
     require_keys,
@@ -27,6 +28,7 @@ __all__ = [
     'UncertaintyAwareDecoderOutput',
     'build_model',
     'checkpoint_identity',
+    'checkpoint_provenance',
     'load_checkpoint',
     'model_from_checkpoint',
     'require_generation_ready',

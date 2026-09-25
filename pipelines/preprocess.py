@@ -1,13 +1,13 @@
-import subprocess
-
 import hydra
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
 from pandas.api.types import is_numeric_dtype
 
-from pipelines.console import banner, step
+from pipelines.helpers.console import banner, step
+from pipelines.helpers.invocation import start_stage
 from src import artifacts
+from src.config_validation import validate_preprocess_config
 from src.datasets.codec import DatasetCodec
 from src.logs import (
     CASE_ELAPSED_KEY,
@@ -38,8 +38,6 @@ from src.logs.preprocessing import (
     out_of_time_split,
     sort_log,
 )
-from src.runs.hydra import start_stage
-from src.validation import validate_preprocess
 
 
 def case_length_cutoff(log: pd.DataFrame, *, data_config: DictConfig) -> int:
@@ -146,7 +144,7 @@ def preprocess(log: pd.DataFrame, *, feature_columns: list[str]) -> pd.DataFrame
     return log
 
 
-def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> None:
+def run(data_config: DictConfig, declare_config: DictConfig) -> None:
     """
     Preprocess and split a dataset, writing outputs next to the input.
 
@@ -164,7 +162,6 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
     Args:
         data_config: The `data` section of this dataset's experiment config.
         declare_config: The `declare` section, driving the discovery of the declarative model.
-        run_id: The preprocessing invocation identifier recorded in the dataset manifest.
     """
     dataset = data_config.name
 
@@ -240,20 +237,7 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
     declare_summary = f'{constraints} declarative constraints'
 
     with step('Writing the dataset manifest'):
-        revision = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=False
-        ).stdout.strip()
-        dirty = bool(
-            subprocess.run(
-                ['git', 'status', '--porcelain'], capture_output=True, text=True, check=False
-            ).stdout.strip()
-        )
-        manifest = artifacts.DatasetManifest.create(
-            dataset=dataset,
-            data_config=data_config,
-            declare_config=declare_config,
-            producer=artifacts.DatasetProducer(run_id=run_id, revision=revision, dirty=dirty),
-        )
+        manifest = artifacts.DatasetManifest.create(dataset)
         manifest.write()
 
     print(
@@ -270,8 +254,8 @@ def run(data_config: DictConfig, declare_config: DictConfig, *, run_id: str) -> 
 @hydra.main(version_base='1.3', config_path='../config', config_name='preprocess')
 def main(cfg: DictConfig) -> None:
     start_stage(cfg)
-    validate_preprocess(cfg)
-    run(data_config=cfg.data, declare_config=cfg.declare, run_id=cfg.run_id)
+    validate_preprocess_config(cfg)
+    run(data_config=cfg.data, declare_config=cfg.declare)
 
 
 if __name__ == '__main__':

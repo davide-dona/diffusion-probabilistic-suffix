@@ -22,7 +22,7 @@ groups. The result is validated at the stage boundary and stored with every dura
   denoiser calls. The sampler method is `ddim`, calls must not exceed noise levels, and
   `diffusion.sampler.eta` lies in `[0, 1]`. The default is 100 levels, 50 calls, and zero Gaussian
   sampling stochasticity.
-- Add or change fields together with their checks in `src/validation/`. Reject invalid values before
+- Add or change fields together with their checks in `src/config_validation/`. Reject invalid values before
   reading large artifacts or starting model work.
 - Keep dataset-specific training values under `training.regimes.<dataset>` and batch sizes under
   `dataloader.batch_sizes.<dataset>` so a dataset override selects a complete regime.
@@ -40,8 +40,7 @@ groups. The result is validated at the stage boundary and stored with every dura
 uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer --cfg job --resolve
 uv run python -m pipelines.train dataset=sepsis model=diffusion_transformer --cfg job --resolve
 uv run python -m pipelines.preprocess dataset=sepsis --cfg job --resolve
-uv run pytest tests/models/test_configuration.py
-uv run ruff check config src/validation tests/models/test_configuration.py
+uv run ruff check config src/config_validation
 ```
 
 Run the focused tests for the consumer of any changed field. Do not launch training merely to
