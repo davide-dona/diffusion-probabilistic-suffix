@@ -2,12 +2,13 @@ defaults:
 - output/default
 - _self_
 checkpoint: ???
+invocation_id: ${now:%Y%m%d-%H%M%S-%f}
 device: null
 num_samples: null
 num_workers: null
 hydra:
   run:
-    dir: ${checkpoint_output:generate,${checkpoint}}
+    dir: ${source_output:generate,checkpoint,${checkpoint},${invocation_id}}
   sweep:
     dir: outputs/generate
-    subdir: ${checkpoint_subdir:generate,${checkpoint}}
+    subdir: ${source_subdir:generate,checkpoint,${checkpoint},${invocation_id}}

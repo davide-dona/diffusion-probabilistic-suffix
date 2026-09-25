@@ -3,25 +3,25 @@ from collections.abc import Sequence
 
 from omegaconf import DictConfig, OmegaConf
 
-from src.validation.data import validate_data, validate_declare
-from src.validation.model import validate_model, validate_sampling
-from src.validation.primitives import validate_number, validate_string_list
+from src.config_validation.data import validate_data, validate_declare
+from src.config_validation.model import validate_model, validate_sampling
+from src.config_validation.primitives import validate_number, validate_string_list
 
 
-def validate_preprocess(config: DictConfig) -> None:
+def validate_preprocess_config(config: DictConfig) -> None:
     """Validate all static parameters accepted by the preprocessing stage."""
     validate_data(config.data)
     validate_declare(config.declare)
 
 
-def validate_training(config: DictConfig) -> None:
+def validate_experiment_config(config: DictConfig) -> None:
     """Validate the complete effective experiment configuration used by training.
 
     Raises:
         ValueError: If a data, model, optimizer, runtime, inference, or tracking setting is
             invalid or inconsistent with another setting.
     """
-    validate_preprocess(config)
+    validate_preprocess_config(config)
     validate_model(config.model)
 
     training = config.training
@@ -84,16 +84,11 @@ def validate_training(config: DictConfig) -> None:
         raise ValueError('wandb.mode must be online, offline, or disabled')
 
 
-def validate_generation(config: DictConfig) -> None:
-    """Validate the effective generation configuration after applying all overrides."""
-    validate_training(config)
-
-
-def validate_tuning(
+def validate_tuning_config(
     config: DictConfig, *, temperatures: Sequence[object], top_ps: Sequence[object]
 ) -> None:
     """Validate effective tuning configuration and the Cartesian sampler grid."""
-    validate_training(config)
+    validate_experiment_config(config)
     if config.model.kind != 'head_sampling_transformer':
         raise ValueError(f'{config.model.kind} does not support sampler tuning')
 
@@ -105,13 +100,13 @@ def validate_tuning(
             validate_sampling(OmegaConf.create({'temperature': temperature, 'top_p': top_p}))
 
 
-def validate_evaluation(*, workers: object) -> None:
+def validate_evaluation_config(*, workers: object) -> None:
     """Validate optional process-pool sizing for evaluation."""
     if workers is not None:
         validate_number(workers, 'workers', integer=True)
 
 
-def validate_visualization(*, evaluations: object, evaluations_dir: object) -> None:
+def validate_visualization_config(*, evaluations: object, evaluations_dir: object) -> None:
     """Validate the mutually exclusive report-source parameters for visualization."""
     validate_string_list(evaluations, 'evaluations')
     validate_string_list(evaluations_dir, 'evaluations_dir')

@@ -1,7 +1,8 @@
 from omegaconf import DictConfig
 
+from src.artifacts.provenance import validate_dataset
+from src.config_validation.primitives import validate_number
 from src.logs.keys import INTER_EVENT_TIME_KEY
-from src.validation.primitives import validate_identifier, validate_number
 
 
 def validate_data(data: DictConfig) -> None:
@@ -11,12 +12,7 @@ def validate_data(data: DictConfig) -> None:
         ValueError: If a split, percentile, feature relationship, separator, or dataset name is
             invalid.
     """
-    validate_identifier(
-        data.name,
-        'data.name',
-        r'[a-z0-9][a-z0-9-]*',
-        'lowercase letters, digits, and hyphens',
-    )
+    validate_dataset(data.name)
 
     splits = [data.train_split, data.val_split, data.test_split]
     for value in splits:

@@ -27,7 +27,7 @@ and standardized time means and log-variances `[B, T]`.
 
 - `build_model` is the only architecture selection point. A new `model.kind` requires a factory
   branch, Hydra model configuration, validation, visualization label, and shared contract tests.
-- Checkpoints contain the resolved run configuration, `RunIdentity`, state dictionary, optimizer
+- Checkpoints contain the resolved run configuration, provenance, state dictionary, optimizer
   step, selection score, selection metric, and direction. `load_checkpoint` uses safe globals,
   loads on CPU, validates required keys, and checks identity against configuration.
 - `model_from_checkpoint` rebuilds from the stored model configuration, loads weights, moves to the

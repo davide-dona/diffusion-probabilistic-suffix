@@ -6,19 +6,18 @@ import numpy as np
 import torch
 from torch import nn
 
-from src.artifacts import RunIdentity, validate_sha256
+from src.artifacts import Provenance, RunIdentity
 from src.inference.tuning import TuningReport
 from src.selection import SELECTION_METRIC
 
 MODEL_KEYS = ('config', 'model_state_dict')
 CHECKPOINT_KEYS = (
     *MODEL_KEYS,
-    'run',
+    'provenance',
     'step',
     'selection_score',
     'selection_metric',
     'selection_direction',
-    'dataset_fingerprint',
 )
 
 NUMPY_SAFE_GLOBALS = (
@@ -51,19 +50,18 @@ def save_checkpoint(
     path: Path,
 ) -> Path:
     """Atomically save model weights and run metadata to `path`."""
-    validate_sha256(dataset_fingerprint, 'checkpoint dataset fingerprint')
+    provenance = Provenance(run=run, dataset_fingerprint=dataset_fingerprint)
     temp = path.with_suffix('.pt.tmp')
     torch.save(
         obj={
             'config': config,
-            'run': run.as_dict(),
+            'provenance': provenance.as_dict(),
             'model_state_dict': model.state_dict(),
             'step': step,
             'selection_score': selection_score,
             'selection_metric': SELECTION_METRIC.key,
             'selection_direction': 'min',
             'wandb_id': wandb_id,
-            'dataset_fingerprint': dataset_fingerprint,
         },
         f=temp,
     )
@@ -79,10 +77,8 @@ def load_checkpoint(model_path: str | Path) -> dict:
     require_keys(checkpoint, CHECKPOINT_KEYS, purpose='loaded', remedy='Train a new checkpoint.')
     model = checkpoint.get('config', {}).get('model', {})
     data = checkpoint.get('config', {}).get('data', {})
-    run = RunIdentity.from_dict(checkpoint['run'])
-    dataset_fingerprint = validate_sha256(
-        checkpoint['dataset_fingerprint'], 'checkpoint dataset fingerprint'
-    )
+    provenance = checkpoint_provenance(checkpoint)
+    run = provenance.run
     if run.dataset != data.get('name') or run.model != model.get('name'):
         raise ValueError('Checkpoint run identity does not match its training configuration')
     tuning_payload = checkpoint.get('tuning')
@@ -92,16 +88,27 @@ def load_checkpoint(model_path: str | Path) -> dict:
             raise ValueError('Only head_sampling_transformer checkpoints can contain tuning')
         if tuning.run != run:
             raise ValueError('Checkpoint tuning belongs to a different training run')
-        if tuning.dataset_fingerprint != dataset_fingerprint:
+        if tuning.dataset_fingerprint != provenance.dataset_fingerprint:
             raise ValueError('Checkpoint tuning belongs to a different dataset bundle')
+        if provenance.source_sha256 != tuning.source_checkpoint_sha256:
+            raise ValueError('Checkpoint source does not match its tuning report')
         if tuning.chosen != model.get('sampling'):
             raise ValueError('Checkpoint sampler does not match its tuning report')
+    elif provenance.source_sha256 is not None:
+        raise ValueError('Untuned checkpoint cannot name a source checkpoint')
+    if provenance.checkpoint_sha256 is not None:
+        raise ValueError('Checkpoint cannot contain its own SHA-256')
     return checkpoint
+
+
+def checkpoint_provenance(checkpoint: dict) -> Provenance:
+    """Read the provenance embedded in a validated checkpoint."""
+    return Provenance.from_dict(checkpoint['provenance'])
 
 
 def checkpoint_identity(checkpoint: dict) -> RunIdentity:
     """Read the run identity embedded in a validated checkpoint."""
-    return RunIdentity.from_dict(checkpoint['run'])
+    return checkpoint_provenance(checkpoint).run
 
 
 def require_generation_ready(checkpoint: dict) -> TuningReport | None:
@@ -129,10 +136,16 @@ def save_tuned_checkpoint(checkpoint: dict, report: TuningReport, path: Path) ->
     run = checkpoint_identity(checkpoint)
     if report.run != run:
         raise ValueError('Tuning report belongs to a different training run')
-    if report.dataset_fingerprint != checkpoint['dataset_fingerprint']:
+    source = checkpoint_provenance(checkpoint)
+    if report.dataset_fingerprint != source.dataset_fingerprint:
         raise ValueError('Tuning report belongs to a different dataset bundle')
 
     tuned = copy.deepcopy(checkpoint)
+    tuned['provenance'] = Provenance(
+        run=run,
+        dataset_fingerprint=source.dataset_fingerprint,
+        source_sha256=report.source_checkpoint_sha256,
+    ).as_dict()
     tuned['config']['model']['sampling'] = report.chosen
     tuned['tuning'] = report.as_dict()
     torch.save(tuned, path)

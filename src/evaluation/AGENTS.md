@@ -30,7 +30,7 @@ and empty-input behavior where they affect the result; keep private documentatio
 
 `GenerationWriter` stores one Parquet row per `(case_id, prefix_len)`. Repeated activity suffixes
 are folded into distinct strings plus draw indices; time sequences remain one per draw. The file
-schema also stores truth, activity vocabulary, sampler settings, run identity, and checkpoint hash.
+schema also stores truth, activity vocabulary, sampler settings, and provenance.
 
 `PreparedPrefix` expands shared values: suffix lengths, aligned inter-event times, remaining times,
 and Declare conformance. The validation-only DLS similarity is computed only when requested.

@@ -2,10 +2,11 @@ defaults:
 - output/default
 - _self_
 generations: ???
+invocation_id: ${now:%Y%m%d-%H%M%S-%f}
 workers: null
 hydra:
   run:
-    dir: ${generations_output:evaluate,${generations}}
+    dir: ${source_output:evaluate,generations,${generations},${invocation_id}}
   sweep:
     dir: outputs/evaluate
-    subdir: ${generations_subdir:evaluate,${generations}}
+    subdir: ${source_subdir:evaluate,generations,${generations},${invocation_id}}
