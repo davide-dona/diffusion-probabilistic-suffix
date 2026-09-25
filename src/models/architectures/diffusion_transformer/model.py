@@ -27,6 +27,7 @@ class DiffusionTransformer(SuffixModel):
         self.canvas_length = codec.max_trace_length - 1
         self.steps = config.diffusion.steps
         self.sampling_calls = config.diffusion.sampler.calls
+        self.sampling_start_level = config.diffusion.sampler.get('start_level', self.steps)
         self.sampling_eta = config.diffusion.sampler.eta
         self.activities = CategoricalDiffusion(
             codec=codec,
@@ -102,7 +103,9 @@ class DiffusionTransformer(SuffixModel):
         times = torch.randn(
             size=(rows, self.canvas_length), device=prefix.activities.device
         )  # [B * S, T]
-        for step, previous_step in reverse_grid(self.steps, self.sampling_calls):
+        for step, previous_step in reverse_grid(
+            self.steps, self.sampling_calls, start_level=self.sampling_start_level
+        ):
             timestep = torch.full(
                 size=(rows,), fill_value=step, dtype=torch.long, device=activities.device
             )  # [B * S]
