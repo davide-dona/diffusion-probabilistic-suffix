@@ -26,14 +26,17 @@ and standardized time means and log-variances `[B, T]`.
 
 ## Construction and Persistence
 
-- `build_model` resolves `model._target_` from the Hydra configuration. A new `model.kind` requires
-  a model class path in its Hydra configuration, validation, visualization label, and shared
-  contract support. Stored configurations must contain the class path.
+- `SuffixModel.from_config` resolves `model._target_` from the Hydra configuration. A new
+  `model.kind` requires a model class path in its Hydra configuration, validation, visualization
+  label, and shared contract support. Stored configurations must contain the class path.
 - Checkpoints contain the resolved run configuration, provenance, state dictionary, optimizer
-  step, selection score, selection metric, and direction. `load_checkpoint` loads plain data and
-  tensors on CPU, validates required keys, and checks identity against configuration.
-- `model_from_checkpoint` rebuilds from the stored model configuration, loads weights, moves to the
-  requested device, and returns evaluation mode. Do not reconstruct from a current YAML file.
+  step, selection score, selection metric, and direction. `persistence.io.load_checkpoint` loads
+  plain data and tensors on CPU; `persistence.validation` checks the stored model configuration,
+  provenance, run identity, and tuning evidence.
+- `SuffixModel.from_checkpoint` rebuilds from the stored model configuration, loads weights, moves
+  to the requested device, and returns evaluation mode. Do not reconstruct from a current YAML file.
+- `src.artifacts` owns `RunIdentity` and `Provenance`. `src.inference.tuning` owns the sampler
+  readiness rule and the tuned checkpoint payload; persistence owns its file write.
 - Diffusion checkpoints require the current prefix encoder configuration and an explicit sampler
   start level.
 - Save the repeatedly replaced best checkpoint through a temporary `.pt.tmp` file. Checkpoints
@@ -46,7 +49,10 @@ and standardized time means and log-variances `[B, T]`.
   generated length. UNK remains a valid modeled activity.
 - Inter-event times are modeled in the codec's standardized space. Remaining time is derived from
   generated inter-event times after inverse scaling, nonnegative clamping, summation, and
-  standardization through the remaining-time codec. It is not an independent generated head.
+  standardization through the remaining-time codec by `SuffixModel._remaining_time`. It is not an
+  independent generated head.
+- Shared SuTraN encoder, decoder, attention, cache, and loss code lives in `src/models/sutran`.
+  Model-specific heads, losses, and sampling policies stay in their architecture packages.
 - Average position losses within each trace before averaging traces so long suffixes do not receive
   unintended batch weight.
 - Report finite losses and generations and keep gradients finite for every trainable model.

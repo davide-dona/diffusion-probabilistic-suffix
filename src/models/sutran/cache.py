@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import torch
 
-from src.models.architectures.shared_components.sutran.attention import ProjectedKeysValues
+from src.models.sutran.attention import ProjectedKeysValues
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from omegaconf import DictConfig
 from src.datasets.codec import ActivityCodec, DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.inference.generation import DecodedEvents, Draws, Generation
-from src.models import SuffixModel
+from src.models.base import SuffixModel
 
 
 def generation_batch_size(

@@ -1,3 +1,4 @@
+import copy
 import json
 import math
 from collections.abc import Sequence
@@ -119,3 +120,42 @@ class TuningReport:
 
 
 _ADAPTER = TypeAdapter(TuningReport)
+
+
+def require_generation_ready(checkpoint: dict) -> TuningReport | None:
+    """Require post-training sampler selection for architectures that need it."""
+    kind = checkpoint['config']['model']['kind']
+    tuning_payload = checkpoint.get('tuning')
+    if kind == 'head_sampling_transformer':
+        if tuning_payload is None:
+            raise ValueError(
+                'head_sampling_transformer generation requires a tuned checkpoint. '
+                'Run `python -m pipelines.tune checkpoint=/path/to/best.pt` first.'
+            )
+        return TuningReport.from_payload(tuning_payload)
+    if tuning_payload is not None:
+        raise ValueError(f'{kind} does not support sampler tuning')
+    return None
+
+
+def tuned_checkpoint_payload(checkpoint: dict, report: TuningReport) -> dict:
+    """Apply sampler selection and its provenance to a training checkpoint."""
+    if checkpoint['config']['model']['kind'] != 'head_sampling_transformer':
+        raise ValueError('Only head_sampling_transformer checkpoints can be tuned')
+    if checkpoint.get('tuning') is not None:
+        raise ValueError('Checkpoint has already been tuned')
+    source = Provenance.from_dict(checkpoint['provenance'])
+    if report.run != source.run:
+        raise ValueError('Tuning report belongs to a different training run')
+    if report.dataset_fingerprint != source.dataset_fingerprint:
+        raise ValueError('Tuning report belongs to a different dataset bundle')
+
+    tuned = copy.deepcopy(checkpoint)
+    tuned['provenance'] = Provenance(
+        run=source.run,
+        dataset_fingerprint=source.dataset_fingerprint,
+        source_sha256=report.source_checkpoint_sha256,
+    ).as_dict()
+    tuned['config']['model']['sampling'] = report.chosen
+    tuned['tuning'] = report.as_dict()
+    return tuned

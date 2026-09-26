@@ -2,9 +2,9 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 
-from src.models.architectures.shared_components.sutran.decoder import CausalDecoder
-from src.models.architectures.shared_components.sutran.embeddings import EventEmbeddings
 from src.models.contracts import DecoderOutput
+from src.models.sutran.decoder import CausalDecoder
+from src.models.sutran.embeddings import EventEmbeddings
 
 
 def _nucleus(probabilities: torch.Tensor, *, top_p: float) -> torch.Tensor:

@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
+from typing import Self
 
 import torch
+from omegaconf import DictConfig
 from torch import nn
 
 from src.datasets.codec import DatasetCodec
@@ -19,6 +21,7 @@ class SuffixModel(nn.Module, ABC):
     def __init__(self, codec: DatasetCodec):
         """Store activity tokens required by both suffix generators."""
         super().__init__()
+        self.codec = codec
         self.pad_activity_index = codec.activity.pad_index
         self.eot_activity_index = codec.activity.eot_index
 
@@ -73,3 +76,45 @@ class SuffixModel(nn.Module, ABC):
     def _repeat_prefix(prefix: Events, *, num_samples: int) -> Events:
         """Expand every prefix channel into independent generation rows."""
         return Events(*(field.repeat_interleave(num_samples, dim=0) for field in prefix))
+
+    def _remaining_time(self, times: torch.Tensor, keep: torch.Tensor) -> torch.Tensor:
+        """Sum retained standardized durations and return standardized remaining time."""
+        scaled = times * self.codec.inter_event_time.std + self.codec.inter_event_time.mean
+        minutes = scaled.expm1() if self.codec.inter_event_time.log else scaled
+        total = (minutes.clamp_min(0) * keep).sum(dim=1)
+        transformed = torch.log1p(total) if self.codec.remaining_time.log else total
+        return (transformed - self.codec.remaining_time.mean) / self.codec.remaining_time.std
+
+    @classmethod
+    def from_config(cls, config: DictConfig, codec: DatasetCodec) -> Self:
+        """Build the model class specified by its Hydra configuration."""
+        from hydra.utils import get_class
+
+        model_class = get_class(config._target_)
+        if not issubclass(model_class, cls):
+            raise TypeError(f'Model target must implement {cls.__name__}: {config._target_}')
+        return model_class(config=config, codec=codec)
+
+    @classmethod
+    def from_checkpoint(cls, checkpoint: dict, codec: DatasetCodec, *, device: str = 'cpu') -> Self:
+        """Restore the configured architecture and weights in evaluation mode."""
+        from omegaconf import OmegaConf
+
+        from src.config_validation.model import validate_model
+        from src.models.persistence.validation import CHECKPOINT_KEYS, require_keys
+
+        require_keys(
+            checkpoint, CHECKPOINT_KEYS, purpose='rebuilt', remedy='Train the model again.'
+        )
+        checkpoint_dataset = checkpoint['config']['data']['name']
+        if codec.dataset != checkpoint_dataset:
+            raise ValueError(
+                f'Checkpoint dataset {checkpoint_dataset!r} does not match codec dataset '
+                f'{codec.dataset!r}'
+            )
+        config = OmegaConf.create(checkpoint['config']['model'])
+        validate_model(config)
+        model = cls.from_config(config=config, codec=codec).to(device=device)
+        model.load_state_dict(state_dict=checkpoint['model_state_dict'])
+        model.eval()
+        return model

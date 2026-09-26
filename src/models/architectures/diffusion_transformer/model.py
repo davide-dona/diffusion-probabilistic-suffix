@@ -5,15 +5,14 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.models.architectures.diffusion_transformer.components.denoiser import DiffusionDenoiser
-from src.models.architectures.diffusion_transformer.components.process import (
+from src.models.architectures.diffusion_transformer.denoiser import DiffusionDenoiser
+from src.models.architectures.diffusion_transformer.process import (
     CategoricalDiffusion,
     GaussianDiffusion,
     reverse_grid,
 )
+from src.models.base import SuffixModel
 from src.models.contracts import DiffusionOutput, GeneratedSuffix
-from src.models.models import SuffixModel
-from src.models.time import remaining_time_from_inter_event_times
 from src.training.loss import Loss
 
 
@@ -25,7 +24,6 @@ class DiffusionTransformer(SuffixModel):
         super().__init__(codec=codec)
         if 'denoiser' in config:
             raise ValueError('model.denoiser is not supported')
-        self.codec = codec
         self.canvas_length = codec.max_trace_length - 1
         self.steps = config.diffusion.steps
         self.sampling_calls = config.diffusion.sampler.calls
@@ -159,9 +157,7 @@ class DiffusionTransformer(SuffixModel):
         keep = positions < lengths.unsqueeze(dim=1)  # [1, T] < [B * S, 1] -> [B * S, T]
         codec_activities = codec_activities.masked_fill(~keep, self.pad_activity_index)
         times = times.masked_fill(~keep, self.standardized_zero)
-        remaining = remaining_time_from_inter_event_times(
-            times=times, keep=keep, codec=self.codec
-        )  # [B * S]
+        remaining = self._remaining_time(times=times, keep=keep)  # [B * S]
         generated = GeneratedSuffix(
             activities=codec_activities,
             lengths=lengths,

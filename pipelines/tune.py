@@ -19,17 +19,13 @@ from src.inference.tuning import (
     SearchPass,
     TuningPoint,
     TuningReport,
+    tuned_checkpoint_payload,
 )
 from src.logs import Split
 from src.logs.declare import ConformanceChecker
-from src.models import (
-    HeadSamplingTransformer,
-    checkpoint_identity,
-    checkpoint_provenance,
-    load_checkpoint,
-    model_from_checkpoint,
-    save_tuned_checkpoint,
-)
+from src.models.architectures.head_sampling_transformer.model import HeadSamplingTransformer
+from src.models.base import SuffixModel
+from src.models.persistence.io import load_checkpoint, write_checkpoint
 from src.selection import selection_score
 
 
@@ -119,9 +115,10 @@ def run(
         checkpoint = load_checkpoint(checkpoint_path)
     if checkpoint.get('tuning') is not None:
         raise ValueError('Checkpoint has already been tuned')
-    run = checkpoint_identity(checkpoint)
+    checkpoint_provenance = artifacts.Provenance.from_dict(checkpoint['provenance'])
+    run = checkpoint_provenance.run
     checkpoint_hash = artifacts.sha256(checkpoint_path)
-    dataset_fingerprint = checkpoint_provenance(checkpoint).dataset_fingerprint
+    dataset_fingerprint = checkpoint_provenance.dataset_fingerprint
     provenance = artifacts.Provenance(
         run=run,
         dataset_fingerprint=dataset_fingerprint,
@@ -182,7 +179,7 @@ def run(
         codec = DatasetCodec.load(config.data)
 
     with step(f'Building the model and moving it onto {torch_device}'):
-        model = model_from_checkpoint(checkpoint, codec, device=config.training.device)
+        model = SuffixModel.from_checkpoint(checkpoint, codec, device=config.training.device)
         model.eval()
     if not isinstance(model, HeadSamplingTransformer):
         raise ValueError(f'{config.model.kind} does not support sampler tuning.')
@@ -236,7 +233,7 @@ def run(
     )
     provenance.require_source(checkpoint_path)
     report.write(report_path)
-    save_tuned_checkpoint(checkpoint, report, tuned_checkpoint_path)
+    write_checkpoint(tuned_checkpoint_payload(checkpoint, report), tuned_checkpoint_path)
     print(
         f'Chose temperature {report.chosen["temperature"]}, top_p {report.chosen["top_p"]}. '
         f'Wrote the search to {report_path} and tuned checkpoint to {tuned_checkpoint_path}'

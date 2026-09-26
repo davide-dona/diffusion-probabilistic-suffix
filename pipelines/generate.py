@@ -15,14 +15,10 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset
 from src.inference.generate import generate_batch, generation_batch_size
 from src.inference.generation_store import GenerationWriter
+from src.inference.tuning import require_generation_ready
 from src.logs import Split
-from src.models import (
-    checkpoint_identity,
-    checkpoint_provenance,
-    load_checkpoint,
-    model_from_checkpoint,
-    require_generation_ready,
-)
+from src.models.base import SuffixModel
+from src.models.persistence.io import load_checkpoint
 
 
 def run(
@@ -49,12 +45,13 @@ def run(
     # to read.
     with step(f'Reading the checkpoint at {checkpoint_path}'):
         checkpoint = load_checkpoint(checkpoint_path)
-    run = checkpoint_identity(checkpoint)
+    checkpoint_provenance = artifacts.Provenance.from_dict(checkpoint['provenance'])
+    run = checkpoint_provenance.run
     tuning = require_generation_ready(checkpoint)
     checkpoint_hash = artifacts.sha256(checkpoint_path)
     provenance = artifacts.Provenance(
         run=run,
-        dataset_fingerprint=checkpoint_provenance(checkpoint).dataset_fingerprint,
+        dataset_fingerprint=checkpoint_provenance.dataset_fingerprint,
         checkpoint_sha256=checkpoint_hash,
         source_sha256=checkpoint_hash,
     )
@@ -120,7 +117,7 @@ def run(
         codec = DatasetCodec.load(config.data)
 
     with step(f'Building the model and moving it onto {device}'):
-        model = model_from_checkpoint(checkpoint, codec, device=config.training.device)
+        model = SuffixModel.from_checkpoint(checkpoint, codec, device=config.training.device)
         model.eval()
 
     # Build the DataLoader for the test split

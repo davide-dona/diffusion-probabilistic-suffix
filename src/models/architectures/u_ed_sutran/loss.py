@@ -3,12 +3,12 @@ import math
 import torch
 
 from src.datasets.dataset import TraceCut
-from src.models.architectures.shared_components.sutran.loss import (
+from src.models.architectures.u_ed_sutran.distributions import sample_gaussian
+from src.models.contracts import UncertaintyAwareDecoderOutput
+from src.models.sutran.loss import (
     reconstruction_loss,
     timed_positions,
 )
-from src.models.architectures.u_ed_sutran.distributions import sample_gaussian
-from src.models.contracts import UncertaintyAwareDecoderOutput
 from src.training.loss import Loss
 
 

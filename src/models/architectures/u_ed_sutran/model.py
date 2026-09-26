@@ -3,11 +3,11 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.models.architectures.shared_components.sutran.model import SuTraNModel
 from src.models.architectures.u_ed_sutran.decoder import UncertaintyAwareDecoder
 from src.models.architectures.u_ed_sutran.dropout import monte_carlo_dropout
 from src.models.architectures.u_ed_sutran.loss import uncertainty_loss
 from src.models.contracts import GeneratedSuffix, UncertaintyAwareDecoderOutput
+from src.models.sutran.model import SuTraNModel
 from src.training.loss import Loss
 
 

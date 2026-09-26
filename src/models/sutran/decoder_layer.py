@@ -2,8 +2,8 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 
-from src.models.architectures.shared_components.sutran.attention import MultiHeadAttention
-from src.models.architectures.shared_components.sutran.cache import LayerCache, SuffixCache
+from src.models.sutran.attention import MultiHeadAttention
+from src.models.sutran.cache import LayerCache, SuffixCache
 
 
 class DecoderLayer(nn.Module):

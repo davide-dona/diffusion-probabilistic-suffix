@@ -3,7 +3,7 @@ from omegaconf import DictConfig
 from torch import nn
 
 from src.datasets.dataset import Events
-from src.models.architectures.shared_components.sutran.embeddings import (
+from src.models.sutran.embeddings import (
     EventEmbeddings,
 )
 

@@ -24,6 +24,7 @@ ideas/
 
 # Preprocessed datasets
 data/*
+!data/AGENTS.md
 !data/*/
 data/*/*
 !data/*/original.csv

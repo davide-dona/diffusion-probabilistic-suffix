@@ -107,7 +107,7 @@ generation only when both `RunIdentity` and checkpoint SHA-256 match.
 ## Configuration
 
 The encoder, embeddings, attention, causal decoder trunk, cache, and generation loop live in
-`shared_components/sutran` and are shared with U-ED-SuTraN. The local decoder owns baseline heads
+`src/models/sutran` and are shared with U-ED-SuTraN. The local decoder owns baseline heads
 and sampler controls.
 
 `config/model/head_sampling_transformer.yaml` defines model and embedding widths, encoder and

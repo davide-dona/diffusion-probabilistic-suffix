@@ -43,9 +43,10 @@ def _model_subdir(stage: str, dataset: str, model: str, run_id: str) -> str:
 def _source_identity(kind: str, path: str) -> RunIdentity:
     """Read the training identity from a validated checkpoint or generations file."""
     if kind == 'checkpoint':
-        from src.models import checkpoint_identity, load_checkpoint
+        from src.models.persistence.io import load_checkpoint
 
-        return checkpoint_identity(load_checkpoint(Path(path)))
+        checkpoint = load_checkpoint(Path(path))
+        return RunIdentity.from_dict(checkpoint['provenance']['run'])
     if kind == 'generations':
         from src.inference.generation_store import Generations
 

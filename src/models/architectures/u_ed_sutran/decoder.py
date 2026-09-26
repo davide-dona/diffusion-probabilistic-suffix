@@ -2,10 +2,10 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 
-from src.models.architectures.shared_components.sutran.decoder import CausalDecoder
-from src.models.architectures.shared_components.sutran.embeddings import EventEmbeddings
 from src.models.architectures.u_ed_sutran.distributions import sample_gaussian
 from src.models.contracts import UncertaintyAwareDecoderOutput
+from src.models.sutran.decoder import CausalDecoder
+from src.models.sutran.embeddings import EventEmbeddings
 
 
 class UncertaintyAwareDecoder(CausalDecoder[UncertaintyAwareDecoderOutput]):

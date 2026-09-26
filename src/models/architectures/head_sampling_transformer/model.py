@@ -4,13 +4,13 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.models.architectures.head_sampling_transformer.components.decoder import Decoder
-from src.models.architectures.shared_components.sutran.loss import (
+from src.models.architectures.head_sampling_transformer.decoder import Decoder
+from src.models.contracts import DecoderOutput, GeneratedSuffix
+from src.models.sutran.loss import (
     reconstruction_loss,
     timed_positions,
 )
-from src.models.architectures.shared_components.sutran.model import SuTraNModel
-from src.models.contracts import DecoderOutput, GeneratedSuffix
+from src.models.sutran.model import SuTraNModel
 from src.training.loss import Loss
 
 

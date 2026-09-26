@@ -5,12 +5,11 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.models.architectures.shared_components.sutran.decoder import CausalDecoder
-from src.models.architectures.shared_components.sutran.embeddings import EventEmbeddings
-from src.models.architectures.shared_components.sutran.trace_encoder import TraceEncoder
+from src.models.base import SuffixModel
 from src.models.contracts import GeneratedSuffix
-from src.models.models import SuffixModel
-from src.models.time import remaining_time_from_inter_event_times
+from src.models.sutran.decoder import CausalDecoder
+from src.models.sutran.embeddings import EventEmbeddings
+from src.models.sutran.trace_encoder import TraceEncoder
 
 
 class SuTraNModel[OutputT](SuffixModel):
@@ -20,7 +19,6 @@ class SuTraNModel[OutputT](SuffixModel):
 
     def __init__(self, config: DictConfig, codec: DatasetCodec) -> None:
         super().__init__(codec=codec)
-        self.codec = codec
         self.embeddings = EventEmbeddings(
             config=config.embeddings, codec=codec, d_model=config.d_model
         )
@@ -44,9 +42,7 @@ class SuTraNModel[OutputT](SuffixModel):
             end=generated.inter_event_times.size(dim=1), device=generated.activities.device
         )
         kept = positions.unsqueeze(dim=0) < generated.lengths.unsqueeze(dim=1)  # [B * S, T]
-        remaining = remaining_time_from_inter_event_times(
-            times=generated.inter_event_times, keep=kept, codec=self.codec
-        )
+        remaining = self._remaining_time(times=generated.inter_event_times, keep=kept)
         return self._per_sample(
             generated=replace(
                 generated,

@@ -39,7 +39,7 @@ def validate_model(model: DictConfig) -> None:
     module = f'src.models.architectures.{model.kind}.model'
     if not isinstance(target, str) or not target.startswith(f'{module}.'):
         raise ValueError(f'model._target_ must name a class in {module}')
-    from src.models.models import SuffixModel
+    from src.models.base import SuffixModel
 
     if not issubclass(get_class(target), SuffixModel):
         raise ValueError('model._target_ must implement SuffixModel')

@@ -11,7 +11,7 @@ from src.evaluation import PrefixSummary, ScoreGroups
 from src.evaluation.metrics import METRICS
 from src.inference.generate import generate_batch
 from src.logs.declare import ConformanceChecker
-from src.models import SuffixModel
+from src.models.base import SuffixModel
 from src.training.loss import Loss
 
 

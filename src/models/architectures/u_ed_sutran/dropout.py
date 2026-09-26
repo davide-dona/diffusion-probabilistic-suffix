@@ -3,7 +3,7 @@ from contextlib import contextmanager
 
 from torch import nn
 
-from src.models.architectures.shared_components.sutran.attention import MultiHeadAttention
+from src.models.sutran.attention import MultiHeadAttention
 
 
 @contextmanager
