@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 import hydra
@@ -45,7 +45,7 @@ class _TrainingReporter:
         """Log loss terms and the learning rate for one optimized batch."""
         wandb.log(
             {'train/lr': learning_rate}
-            | {f'train/{key}': value for key, value in asdict(metrics / batch_size).items()},
+            | {f'train/{key}': value for key, value in (metrics / batch_size).as_metrics().items()},
             step=step,
         )
 
@@ -63,7 +63,7 @@ class _TrainingReporter:
             if metric.owner is Owner.MODEL
         }
         wandb.log(
-            {f'val/{key}': value for key, value in asdict(report.val_metrics).items()}
+            {f'val/{key}': value for key, value in report.val_metrics.as_metrics().items()}
             | model_values,
             step=report.step,
         )
