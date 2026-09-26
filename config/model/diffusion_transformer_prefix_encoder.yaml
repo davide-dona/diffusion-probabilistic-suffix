@@ -1,0 +1,9 @@
+defaults:
+- diffusion_transformer
+- _self_
+name: diffusion_transformer_prefix_encoder
+denoiser: prefix_encoder
+prefix_encoder:
+  num_layers: 4
+transformer:
+  num_layers: 4

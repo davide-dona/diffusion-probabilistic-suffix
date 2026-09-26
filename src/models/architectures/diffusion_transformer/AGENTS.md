@@ -9,8 +9,10 @@ forbidden at position zero in both training predictions and sampling. PAD and SO
 UNK and EOT are clean activity targets. MASK is a separate noisy suffix state and is never emitted.
 
 `generate` may read `TraceCut.prefix` only. No sampling bound, denoiser input, or stopping decision
-may use a true suffix field. The denoiser uses full bidirectional attention over clean prefix rows
-and its own noisy or revealed suffix canvas.
+may use a true suffix field. The joint denoiser uses full bidirectional attention over clean prefix
+rows and its own noisy or revealed suffix canvas. The prefix encoder variant first encodes the
+observed event sequence, then uses a bidirectional suffix decoder with cross-attention to those
+states. Generation caches encoded prefix states across samples and diffusion calls.
 
 ## Clean Canvas and Forward Processes
 

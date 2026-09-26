@@ -2,6 +2,7 @@ defaults:
 - _self_
 kind: diffusion_transformer
 name: diffusion_transformer
+denoiser: joint
 d_model: 32
 embeddings:
   activity_dim: 32

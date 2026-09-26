@@ -93,7 +93,8 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
 Available model configs are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
-(U-ED-SuTraN), `diffusion_transformer`, and `diffusion_transformer_wide_shallow`.
+(U-ED-SuTraN), `diffusion_transformer`, `diffusion_transformer_wide_shallow`, and
+`diffusion_transformer_prefix_encoder`.
 U-ED-SuTraN shares SuTraN-PH's encoder and causal
 decoder, adding MC dropout and learned activity-logit and time variances. Its defaults use 20
 categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
@@ -106,11 +107,16 @@ loss supervises real events and all EOT positions in the fixed suffix canvas. Th
 32 and eight layers, keeping its parameter count close to the other models. Compare sampler and
 model settings on validation data before final test
 generation. Older checkpoints without a sampler start level retain their configured terminal start.
-Train the stable width-32 baseline and the wider variant with the same dataset and seed:
+The `diffusion_transformer_prefix_encoder` config uses four prefix encoder layers and four
+bidirectional suffix decoder layers. The decoder cross-attends to the encoded event sequence, which
+is cached across sampling calls and samples for each prefix. It retains the same activity and time
+corruption, losses, and sampler settings as the joint baseline.
+Train the stable width-32 baseline and both variants with the same dataset and seed:
 
 ```bash
 uv run python -m pipelines.train dataset=sepsis model=diffusion_transformer
 uv run python -m pipelines.train dataset=sepsis model=diffusion_transformer_wide_shallow
+uv run python -m pipelines.train dataset=sepsis model=diffusion_transformer_prefix_encoder
 ```
 
 Training writes the best validation checkpoint to

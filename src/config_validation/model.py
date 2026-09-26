@@ -91,6 +91,17 @@ def _validate_uncertainty(model: DictConfig) -> None:
 
 
 def _validate_diffusion_transformer(model: DictConfig) -> None:
+    denoiser = model.get('denoiser', 'joint')
+    if denoiser not in {'joint', 'prefix_encoder'}:
+        raise ValueError('model.denoiser must be joint or prefix_encoder')
+    if denoiser == 'prefix_encoder':
+        if 'prefix_encoder' not in model or set(model.prefix_encoder) != {'num_layers'}:
+            raise ValueError('model.prefix_encoder must contain exactly num_layers')
+        validate_number(
+            model.prefix_encoder.num_layers, 'model.prefix_encoder.num_layers', integer=True
+        )
+    elif 'prefix_encoder' in model:
+        raise ValueError('model.prefix_encoder requires the prefix_encoder denoiser')
     for key in ('num_layers', 'num_heads', 'feedforward_dim'):
         validate_number(model.transformer[key], f'model.transformer.{key}', integer=True)
     if model.d_model % model.transformer.num_heads:

@@ -6,6 +6,9 @@ from omegaconf import DictConfig
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.models.architectures.diffusion_transformer.components.denoiser import DiffusionDenoiser
+from src.models.architectures.diffusion_transformer.components.prefix_encoder_denoiser import (
+    PrefixEncoderDiffusionDenoiser,
+)
 from src.models.architectures.diffusion_transformer.components.process import (
     CategoricalDiffusion,
     GaussianDiffusion,
@@ -37,7 +40,12 @@ class DiffusionTransformer(SuffixModel):
         self.times = GaussianDiffusion(
             steps=self.steps, cosine_offset=config.diffusion.time_schedule.cosine_offset
         )
-        self.denoiser = DiffusionDenoiser(
+        denoiser_class = (
+            PrefixEncoderDiffusionDenoiser
+            if config.get('denoiser', 'joint') == 'prefix_encoder'
+            else DiffusionDenoiser
+        )
+        self.denoiser = denoiser_class(
             config=config, codec=codec, num_activities=self.activities.num_activities
         )
         zero = codec.inter_event_time.normalize(np.array([0.0]))[0]
@@ -52,8 +60,9 @@ class DiffusionTransformer(SuffixModel):
         )  # [B]
         noisy_activity = self.activities.corrupt(clean=clean_activity, timestep=timestep)  # [B, T]
         noisy_time, noise = self.times.corrupt(clean=clean_time, timestep=timestep)  # [B, T]
+        prefix = self.denoiser.encode_prefix(item.prefix)
         logits, predicted_noise = self.denoiser(
-            prefix=item.prefix,
+            prefix=prefix,
             activities=noisy_activity,
             times=noisy_time,
             timestep=timestep,
@@ -100,16 +109,16 @@ class DiffusionTransformer(SuffixModel):
     def generate(self, item: TraceCut, *, num_samples: int) -> GeneratedSuffix:
         """Draw `num_samples` complete suffixes for each prefix."""
         batch_size = item.prefix.activities.size(dim=0)
-        prefix = self._repeat_prefix(prefix=item.prefix, num_samples=num_samples)
+        prefix = self.denoiser.encode_prefix(item.prefix).repeat_interleave(num_samples)
         rows = batch_size * num_samples
         activities = torch.full(
             size=(rows, self.canvas_length),
             fill_value=self.activities.mask_index,
             dtype=torch.long,
-            device=prefix.activities.device,
+            device=prefix.hidden.device,
         )  # [B * S, T]
         times = torch.randn(
-            size=(rows, self.canvas_length), device=prefix.activities.device
+            size=(rows, self.canvas_length), device=prefix.hidden.device
         )  # [B * S, T]
         for step, previous_step in reverse_grid(
             self.steps, self.sampling_calls, start_level=self.sampling_start_level

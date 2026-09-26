@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 
 import torch
 from omegaconf import DictConfig
@@ -12,11 +13,26 @@ from src.models.architectures.shared_components.embeddings import (
 )
 
 
-class DiffusionDenoiser(nn.Module):
-    """Jointly read a clean prefix and noisy suffix with bidirectional attention."""
+@dataclass(frozen=True)
+class PrefixMemory:
+    """Prefix states and their padding mask, reusable across denoising calls."""
+
+    hidden: torch.Tensor
+    padding_mask: torch.Tensor
+
+    def repeat_interleave(self, repeats: int) -> 'PrefixMemory':
+        """Place each prefix's sample rows next to one another."""
+        return PrefixMemory(
+            hidden=self.hidden.repeat_interleave(repeats, dim=0),
+            padding_mask=self.padding_mask.repeat_interleave(repeats, dim=0),
+        )
+
+
+class DiffusionDenoiserBase(nn.Module):
+    """Embed prefix and suffix events and project both prediction channels."""
 
     def __init__(self, config: DictConfig, codec: DatasetCodec, *, num_activities: int):
-        """Build shared event content, suffix projection, and Transformer blocks."""
+        """Build shared event embeddings, suffix projection, and output heads."""
         super().__init__()
         d_model = config.d_model
         self.event_embedding = EventContentEmbedding(
@@ -41,48 +57,16 @@ class DiffusionDenoiser(nn.Module):
         )
         self.input_norm = nn.LayerNorm(normalized_shape=d_model)
         self.dropout = nn.Dropout(p=config.transformer.dropout)
-        layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=config.transformer.num_heads,
-            dim_feedforward=config.transformer.feedforward_dim,
-            dropout=config.transformer.dropout,
-            activation='gelu',
-            batch_first=True,
-            norm_first=True,
-        )
-        self.transformer = nn.TransformerEncoder(
-            encoder_layer=layer,
-            num_layers=config.transformer.num_layers,
-            norm=nn.LayerNorm(normalized_shape=d_model),
-            enable_nested_tensor=False,
-        )
         self.activity_head = nn.Linear(in_features=d_model, out_features=num_activities)
         self.time_head = nn.Linear(in_features=d_model, out_features=1)
 
-    def forward(
-        self,
-        prefix: Events,
-        activities: torch.Tensor,
-        times: torch.Tensor,
-        timestep: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Predict activity logits `[B, T, K]` and time noise `[B, T]`."""
-        prefix_hidden = self._embed_prefix(prefix)  # [B, P, D]
-        suffix_hidden = self._embed_suffix(
-            activities=activities,
-            times=times,
-            timestep=timestep,
-        )  # [B, T, D]
-        hidden = torch.cat(tensors=(prefix_hidden, suffix_hidden), dim=1)  # [B, P + T, D]
-        mask = torch.cat(
-            tensors=(prefix.pad_mask(), torch.zeros_like(activities, dtype=torch.bool)), dim=1
-        )  # [B, P + T]
-        hidden = self.transformer(src=hidden, src_key_padding_mask=mask)  # [B, P + T, D]
-        suffix_hidden = hidden[:, prefix_hidden.size(dim=1) :]  # [B, T, D]
-        return (
-            self.activity_head(suffix_hidden),  # [B, T, D] -> [B, T, K]
-            self.time_head(suffix_hidden).squeeze(dim=-1),  # [B, T, D] -> [B, T]
-        )
+    def encode_prefix(self, prefix: Events) -> PrefixMemory:
+        """Embed the observed prefix without reading any suffix fields."""
+        return PrefixMemory(hidden=self._embed_prefix(prefix), padding_mask=prefix.pad_mask())
+
+    def _predict(self, hidden: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Project suffix states to clean activity logits and Gaussian noise."""
+        return self.activity_head(hidden), self.time_head(hidden).squeeze(dim=-1)
 
     def _embed_prefix(self, events: Events) -> torch.Tensor:
         """Combine prefix event content, positions, and the prefix segment."""
@@ -121,3 +105,49 @@ class DiffusionDenoiser(nn.Module):
         embedding[:, 0::2] = angles.sin()
         embedding[:, 1::2] = angles.cos()[:, : width // 2]
         return self.timestep_projection(embedding).unsqueeze(dim=1)  # [B, D] -> [B, 1, D]
+
+
+class DiffusionDenoiser(DiffusionDenoiserBase):
+    """Jointly read a clean prefix and noisy suffix with bidirectional attention."""
+
+    def __init__(self, config: DictConfig, codec: DatasetCodec, *, num_activities: int):
+        """Build the joint Transformer over embedded prefix and suffix rows."""
+        super().__init__(config=config, codec=codec, num_activities=num_activities)
+        d_model = config.d_model
+        layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=config.transformer.num_heads,
+            dim_feedforward=config.transformer.feedforward_dim,
+            dropout=config.transformer.dropout,
+            activation='gelu',
+            batch_first=True,
+            norm_first=True,
+        )
+        self.transformer = nn.TransformerEncoder(
+            encoder_layer=layer,
+            num_layers=config.transformer.num_layers,
+            norm=nn.LayerNorm(normalized_shape=d_model),
+            enable_nested_tensor=False,
+        )
+
+    def forward(
+        self,
+        prefix: PrefixMemory,
+        activities: torch.Tensor,
+        times: torch.Tensor,
+        timestep: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Predict activity logits `[B, T, K]` and time noise `[B, T]`."""
+        prefix_hidden = prefix.hidden  # [B, P, D]
+        suffix_hidden = self._embed_suffix(
+            activities=activities,
+            times=times,
+            timestep=timestep,
+        )  # [B, T, D]
+        hidden = torch.cat(tensors=(prefix_hidden, suffix_hidden), dim=1)  # [B, P + T, D]
+        mask = torch.cat(
+            tensors=(prefix.padding_mask, torch.zeros_like(activities, dtype=torch.bool)), dim=1
+        )  # [B, P + T]
+        hidden = self.transformer(src=hidden, src_key_padding_mask=mask)  # [B, P + T, D]
+        suffix_hidden = hidden[:, prefix_hidden.size(dim=1) :]  # [B, T, D]
+        return self._predict(suffix_hidden)
