@@ -13,10 +13,10 @@ transformer:
   feedforward_dim: 168
   dropout: 0.1
 diffusion:
-  steps: 100
+  steps: 1000
   sampler:
     calls: 50
-    start_level: 99
+    start_level: 990
     eta: 0.0
   activity_schedule:
     cosine_offset: 0.008

@@ -46,7 +46,7 @@ is no auxiliary categorical loss or uniform categorical posterior.
 
 The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from
 `diffusion.sampler.start_level` to level one and a final jump to level zero. New runs use 50 calls
-from level 99 across 100 noise levels, avoiding the near-zero terminal time signal. Checkpoints
+from level 990 across 1000 noise levels, avoiding the near-zero terminal time signal. Checkpoints
 without `start_level` start from the terminal level, preserving their original sampling behavior.
 Activities start as all MASK and times start as standard Gaussian noise. At each jump, still-masked
 positions reveal with the cumulative probability above and already revealed positions stay fixed.

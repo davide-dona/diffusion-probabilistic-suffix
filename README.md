@@ -100,11 +100,11 @@ categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are c
 `model.uncertainty`. Both SuTraN models train on complete suffixes with activity-only decoder inputs.
 Validation uses isolated seeded draws and selects checkpoints by the existing generation metric.
 The diffusion model uses absorbing MASK activity corruption and Gaussian time noise. Its default
-configuration has 100 noise levels and 50 DDIM sampling calls starting at level 99. The activity
+configuration has 1000 noise levels and 50 DDIM sampling calls starting at level 990. The activity
 loss supervises real events and all EOT positions in the fixed suffix canvas. The
 `diffusion_transformer_wide_shallow` model config uses width 128 and four layers instead of width
 32 and eight layers. Compare sampler and model settings on validation data before final test
-generation. Older checkpoints without a sampler start level retain their original level-100 start.
+generation. Older checkpoints without a sampler start level retain their configured terminal start.
 Train the stable width-32 baseline and the wider variant with the same dataset and seed:
 
 ```bash
