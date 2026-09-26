@@ -16,8 +16,8 @@ groups. The result is validated at the stage boundary and stored with every dura
 
 ## Rules
 
-- Keep `model.kind` aligned with `src.models.factory.build_model` and `model.name` aligned with
-  `RunIdentity`, output paths, and visualization labels.
+- Keep `model._target_` aligned with `model.kind` and `model.name` aligned with `RunIdentity`,
+  output paths, and visualization labels.
 - The diffusion model separates `diffusion.steps` noise levels from `diffusion.sampler.calls`
   denoiser calls. The sampler uses DDIM, calls must not exceed `diffusion.sampler.start_level`,
   and the start level must not exceed the noise levels. `diffusion.sampler.eta` lies in `[0, 1]`.

@@ -20,13 +20,7 @@ MODELS = {
         label='SuTraN-PH', color='#A05A4B', marker='D', linestyle=':'
     ),
     'diffusion_transformer': ModelStyle(
-        label='Joint Diffusion Transformer', color='#2A7F9E', marker='^', linestyle='-'
-    ),
-    'diffusion_transformer_wide_shallow': ModelStyle(
-        label='Joint Diffusion Transformer (wide, shallow)',
-        color='#17617D',
-        marker='v',
-        linestyle='--',
+        label='Diffusion Transformer', color='#2A7F9E', marker='^', linestyle='-'
     ),
     'diffusion_transformer_prefix_encoder': ModelStyle(
         label='Diffusion Transformer with Prefix Encoder',

@@ -6,9 +6,6 @@ from omegaconf import DictConfig
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.models.architectures.diffusion_transformer.components.denoiser import DiffusionDenoiser
-from src.models.architectures.diffusion_transformer.components.prefix_encoder_denoiser import (
-    PrefixEncoderDiffusionDenoiser,
-)
 from src.models.architectures.diffusion_transformer.components.process import (
     CategoricalDiffusion,
     GaussianDiffusion,
@@ -26,6 +23,10 @@ class DiffusionTransformer(SuffixModel):
     def __init__(self, config: DictConfig, codec: DatasetCodec):
         """Build the denoiser, activity process, and time process."""
         super().__init__(codec=codec)
+        if config.get('denoiser', 'prefix_encoder') != 'prefix_encoder' or (
+            'prefix_encoder' not in config
+        ):
+            raise ValueError('Joint diffusion checkpoints are no longer supported')
         self.codec = codec
         self.canvas_length = codec.max_trace_length - 1
         self.steps = config.diffusion.steps
@@ -40,12 +41,7 @@ class DiffusionTransformer(SuffixModel):
         self.times = GaussianDiffusion(
             steps=self.steps, cosine_offset=config.diffusion.time_schedule.cosine_offset
         )
-        denoiser_class = (
-            PrefixEncoderDiffusionDenoiser
-            if config.get('denoiser', 'joint') == 'prefix_encoder'
-            else DiffusionDenoiser
-        )
-        self.denoiser = denoiser_class(
+        self.denoiser = DiffusionDenoiser(
             config=config, codec=codec, num_activities=self.activities.num_activities
         )
         zero = codec.inter_event_time.normalize(np.array([0.0]))[0]

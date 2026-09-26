@@ -1,4 +1,4 @@
-# Joint Diffusion Transformer
+# Diffusion Transformer with Prefix Encoder
 
 ## Contract
 
@@ -9,10 +9,22 @@ forbidden at position zero in both training predictions and sampling. PAD and SO
 UNK and EOT are clean activity targets. MASK is a separate noisy suffix state and is never emitted.
 
 `generate` may read `TraceCut.prefix` only. No sampling bound, denoiser input, or stopping decision
-may use a true suffix field. The joint denoiser uses full bidirectional attention over clean prefix
-rows and its own noisy or revealed suffix canvas. The prefix encoder variant first encodes the
-observed event sequence, then uses a bidirectional suffix decoder with cross-attention to those
-states. Generation caches encoded prefix states across samples and diffusion calls.
+may use a true suffix field. The denoiser encodes the observed event sequence once, then uses a
+bidirectional suffix decoder with cross-attention to those states. Generation caches encoded prefix
+states across samples and diffusion calls.
+
+## Observed Comparison
+
+As of 2026-09-26, the selected Sepsis validation activity energy score was 0.2966 for the prefix
+encoder model at step 4920 and 0.3065 for the former joint denoiser at step 3600; lower is better.
+Logged validation generation took 28.9 seconds and 85.5 seconds at those steps, respectively, under
+matching sampling settings. The prefix encoder was better and generation was faster in this
+comparison. BPIC12 shows a provisional improvement in selection score, while the unfinished BPIC17
+run currently trails its joint baseline. Do not describe these results as a demonstrated improvement
+across all datasets.
+
+The joint denoiser is no longer implemented, so its checkpoints cannot be restored. Encoder-decoder
+checkpoints with the former `denoiser: prefix_encoder` field remain loadable.
 
 ## Clean Canvas and Forward Processes
 

@@ -1,5 +1,6 @@
 defaults:
 - _self_
+_target_: src.models.architectures.u_ed_sutran.model.UEDSuTraN
 kind: u_ed_sutran
 name: u_ed_sutran
 d_model: 32

@@ -1,5 +1,6 @@
 import math
 
+from hydra.utils import get_class
 from omegaconf import DictConfig
 
 from src.artifacts.provenance import validate_model as validate_model_name
@@ -32,6 +33,15 @@ def validate_model(model: DictConfig) -> None:
     validate_model_name(model.name)
     if model.kind not in {'head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran'}:
         raise ValueError(f'Unknown model kind: {model.kind}')
+    if '_target_' in model:
+        target = model._target_
+        module = f'src.models.architectures.{model.kind}.model'
+        if not isinstance(target, str) or not target.startswith(f'{module}.'):
+            raise ValueError(f'model._target_ must name a class in {module}')
+        from src.models.models import SuffixModel
+
+        if not issubclass(get_class(target), SuffixModel):
+            raise ValueError('model._target_ must implement SuffixModel')
 
     validate_number(model.d_model, 'model.d_model', integer=True)
     for key, value in model.embeddings.items():
@@ -91,17 +101,13 @@ def _validate_uncertainty(model: DictConfig) -> None:
 
 
 def _validate_diffusion_transformer(model: DictConfig) -> None:
-    denoiser = model.get('denoiser', 'joint')
-    if denoiser not in {'joint', 'prefix_encoder'}:
-        raise ValueError('model.denoiser must be joint or prefix_encoder')
-    if denoiser == 'prefix_encoder':
-        if 'prefix_encoder' not in model or set(model.prefix_encoder) != {'num_layers'}:
-            raise ValueError('model.prefix_encoder must contain exactly num_layers')
-        validate_number(
-            model.prefix_encoder.num_layers, 'model.prefix_encoder.num_layers', integer=True
-        )
-    elif 'prefix_encoder' in model:
-        raise ValueError('model.prefix_encoder requires the prefix_encoder denoiser')
+    if model.get('denoiser', 'prefix_encoder') != 'prefix_encoder':
+        raise ValueError('Joint diffusion denoiser is no longer supported')
+    if 'prefix_encoder' not in model or set(model.prefix_encoder) != {'num_layers'}:
+        raise ValueError('model.prefix_encoder must contain exactly num_layers')
+    validate_number(
+        model.prefix_encoder.num_layers, 'model.prefix_encoder.num_layers', integer=True
+    )
     for key in ('num_layers', 'num_heads', 'feedforward_dim'):
         validate_number(model.transformer[key], f'model.transformer.{key}', integer=True)
     if model.d_model % model.transformer.num_heads:

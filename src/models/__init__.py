@@ -1,3 +1,6 @@
+from src.models.architectures.diffusion_transformer.model import DiffusionTransformer
+from src.models.architectures.head_sampling_transformer.model import HeadSamplingTransformer
+from src.models.architectures.u_ed_sutran.model import UEDSuTraN
 from src.models.checkpoint import (
     CHECKPOINT_KEYS,
     checkpoint_identity,
@@ -9,13 +12,7 @@ from src.models.checkpoint import (
     save_tuned_checkpoint,
 )
 from src.models.contracts import ModelOutput, UncertaintyAwareDecoderOutput
-from src.models.factory import (
-    DiffusionTransformer,
-    HeadSamplingTransformer,
-    UEDSuTraN,
-    build_model,
-    model_from_checkpoint,
-)
+from src.models.factory import build_model, model_from_checkpoint
 from src.models.models import SuffixModel
 
 __all__ = [

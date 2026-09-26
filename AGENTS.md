@@ -6,9 +6,13 @@ Given an observed process prefix, learn the conditional distribution of the rema
 sequence and its inter-event times. Evaluation draws several suffixes per prefix to measure
 accuracy, diversity, calibration, time prediction, and process conformance.
 
-The main model is a Joint Diffusion Transformer over categorical activities and continuous times.
-It is compared with the implemented probabilistic SuTraN-PH baseline and the uncertainty-aware U-ED-SuTraN
-baseline on Sepsis, BPIC12, BPIC17, and BPIC19.
+The main model is a diffusion Transformer with a cached prefix encoder and a bidirectional suffix
+decoder over categorical activities and continuous times. It is compared with the implemented
+probabilistic SuTraN-PH and uncertainty-aware U-ED-SuTraN baselines on Sepsis, BPIC12, BPIC17,
+and BPIC19. As of 2026-09-26, the Sepsis encoder-decoder run improved the selected activity energy
+score from 0.3065 to 0.2966 and reduced logged generation time from 85.5 to 28.9 seconds per
+validation check compared with the former joint denoiser. BPIC12 and BPIC17 comparisons are still
+provisional, so these results do not establish an improvement on every dataset.
 
 ## Safety and Correctness
 
@@ -40,7 +44,7 @@ Read the most specific guide before changing files in its scope.
 | Source layout and shared coding contracts | [`src/AGENTS.md`](src/AGENTS.md) |
 | Artifact locations, manifests, hashing, and provenance | [`src/AGENTS.md`](src/AGENTS.md) |
 | Model interface, checkpoints, architecture selection | [`src/models/AGENTS.md`](src/models/AGENTS.md) |
-| Joint Diffusion Transformer | [`src/models/architectures/diffusion_transformer/AGENTS.md`](src/models/architectures/diffusion_transformer/AGENTS.md) |
+| Diffusion Transformer | [`src/models/architectures/diffusion_transformer/AGENTS.md`](src/models/architectures/diffusion_transformer/AGENTS.md) |
 | SuTraN-PH | [`src/models/architectures/head_sampling_transformer/AGENTS.md`](src/models/architectures/head_sampling_transformer/AGENTS.md) |
 | U-ED-SuTraN | [`src/models/architectures/u_ed_sutran/AGENTS.md`](src/models/architectures/u_ed_sutran/AGENTS.md) |
 | Dataset tensors and codecs | [`src/datasets/AGENTS.md`](src/datasets/AGENTS.md) |

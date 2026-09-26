@@ -26,13 +26,16 @@ and standardized time means and log-variances `[B, T]`.
 
 ## Construction and Persistence
 
-- `build_model` is the only architecture selection point. A new `model.kind` requires a factory
-  branch, Hydra model configuration, validation, visualization label, and shared contract support.
+- `build_model` resolves `model._target_` from the Hydra configuration. A new `model.kind` requires
+  a model class path in its Hydra configuration, validation, visualization label, and shared
+  contract support. Checkpoint restoration supplies the class path for older stored configurations.
 - Checkpoints contain the resolved run configuration, provenance, state dictionary, optimizer
   step, selection score, selection metric, and direction. `load_checkpoint` loads plain data and
   tensors on CPU, validates required keys, and checks identity against configuration.
 - `model_from_checkpoint` rebuilds from the stored model configuration, loads weights, moves to the
   requested device, and returns evaluation mode. Do not reconstruct from a current YAML file.
+- Diffusion checkpoint restoration supports prefix encoder configurations, including the former
+  `denoiser: prefix_encoder` field. Joint denoiser checkpoints are unsupported.
 - Save the repeatedly replaced best checkpoint through a temporary `.pt.tmp` file. Checkpoints
   written once may be written directly to their final destination.
 

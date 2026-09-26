@@ -1,22 +1,23 @@
+from hydra.utils import get_class
 from omegaconf import DictConfig, OmegaConf
 
 from src.datasets.codec import DatasetCodec
-from src.models.architectures.diffusion_transformer.model import DiffusionTransformer
-from src.models.architectures.head_sampling_transformer.model import HeadSamplingTransformer
-from src.models.architectures.u_ed_sutran.model import UEDSuTraN
 from src.models.checkpoint import MODEL_KEYS, require_keys
 from src.models.models import SuffixModel
 
+_LEGACY_CLASS_NAMES = {
+    'diffusion_transformer': 'DiffusionTransformer',
+    'head_sampling_transformer': 'HeadSamplingTransformer',
+    'u_ed_sutran': 'UEDSuTraN',
+}
+
 
 def build_model(config: DictConfig, codec: DatasetCodec) -> SuffixModel:
-    """Build the architecture named by the model configuration."""
-    if config.kind == 'head_sampling_transformer':
-        return HeadSamplingTransformer(config=config, codec=codec)
-    if config.kind == 'diffusion_transformer':
-        return DiffusionTransformer(config=config, codec=codec)
-    if config.kind == 'u_ed_sutran':
-        return UEDSuTraN(config=config, codec=codec)
-    raise ValueError(f'Unknown model kind: {config.kind}')
+    """Build the model class specified by its Hydra configuration."""
+    model_class = get_class(config._target_)
+    if not issubclass(model_class, SuffixModel):
+        raise TypeError(f'Model target must implement SuffixModel: {config._target_}')
+    return model_class(config=config, codec=codec)
 
 
 def model_from_checkpoint(
@@ -33,6 +34,11 @@ def model_from_checkpoint(
             f'{codec.dataset!r}'
         )
     config = OmegaConf.create(checkpoint['config']['model'])
+    if '_target_' not in config:
+        kind = config.kind
+        if kind not in _LEGACY_CLASS_NAMES:
+            raise ValueError(f'Unknown model kind: {kind}')
+        config._target_ = f'src.models.architectures.{kind}.model.{_LEGACY_CLASS_NAMES[kind]}'
     model = build_model(config=config, codec=codec).to(device=device)
     model.load_state_dict(state_dict=checkpoint['model_state_dict'])
     model.eval()
