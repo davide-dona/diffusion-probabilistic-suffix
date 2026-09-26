@@ -118,6 +118,28 @@ class TuningReport:
         path.write_text(json.dumps(asdict(self), indent=2))
         return path
 
+    def apply_to_checkpoint(self, checkpoint: dict) -> dict:
+        """Apply this report's sampler selection and provenance to a training checkpoint."""
+        if checkpoint['config']['model']['kind'] != 'head_sampling_transformer':
+            raise ValueError('Only head_sampling_transformer checkpoints can be tuned')
+        if checkpoint.get('tuning') is not None:
+            raise ValueError('Checkpoint has already been tuned')
+        source = Provenance.from_dict(checkpoint['provenance'])
+        if self.run != source.run:
+            raise ValueError('Tuning report belongs to a different training run')
+        if self.dataset_fingerprint != source.dataset_fingerprint:
+            raise ValueError('Tuning report belongs to a different dataset bundle')
+
+        tuned = copy.deepcopy(checkpoint)
+        tuned['provenance'] = Provenance(
+            run=source.run,
+            dataset_fingerprint=source.dataset_fingerprint,
+            source_sha256=self.source_checkpoint_sha256,
+        ).as_dict()
+        tuned['config']['model']['sampling'] = self.chosen
+        tuned['tuning'] = self.as_dict()
+        return tuned
+
 
 _ADAPTER = TypeAdapter(TuningReport)
 
@@ -136,26 +158,3 @@ def require_generation_ready(checkpoint: dict) -> TuningReport | None:
     if tuning_payload is not None:
         raise ValueError(f'{kind} does not support sampler tuning')
     return None
-
-
-def tuned_checkpoint_payload(checkpoint: dict, report: TuningReport) -> dict:
-    """Apply sampler selection and its provenance to a training checkpoint."""
-    if checkpoint['config']['model']['kind'] != 'head_sampling_transformer':
-        raise ValueError('Only head_sampling_transformer checkpoints can be tuned')
-    if checkpoint.get('tuning') is not None:
-        raise ValueError('Checkpoint has already been tuned')
-    source = Provenance.from_dict(checkpoint['provenance'])
-    if report.run != source.run:
-        raise ValueError('Tuning report belongs to a different training run')
-    if report.dataset_fingerprint != source.dataset_fingerprint:
-        raise ValueError('Tuning report belongs to a different dataset bundle')
-
-    tuned = copy.deepcopy(checkpoint)
-    tuned['provenance'] = Provenance(
-        run=source.run,
-        dataset_fingerprint=source.dataset_fingerprint,
-        source_sha256=report.source_checkpoint_sha256,
-    ).as_dict()
-    tuned['config']['model']['sampling'] = report.chosen
-    tuned['tuning'] = report.as_dict()
-    return tuned

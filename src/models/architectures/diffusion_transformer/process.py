@@ -16,14 +16,6 @@ def cosine_betas(steps: int, *, offset: float, terminal_mask: bool) -> torch.Ten
     return betas.float()
 
 
-def reverse_grid(steps: int, calls: int, *, start_level: int) -> list[tuple[int, int]]:
-    """Return descending noise levels and their preceding endpoints, ending at zero."""
-    if not 1 <= calls <= start_level <= steps:
-        raise ValueError('Sampling calls and start level must fit within the noise levels')
-    levels = torch.linspace(start_level, 1, calls, dtype=torch.float64).round().long().tolist()
-    return list(zip(levels, levels[1:] + [0], strict=True))
-
-
 class CategoricalDiffusion(nn.Module):
     """Absorbing MASK diffusion over the clean suffix activity vocabulary."""
 

@@ -15,12 +15,7 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset, fixed_subset
 from src.evaluation import PrefixSummary
 from src.inference.generate import generate_batch, generation_batch_size
-from src.inference.tuning import (
-    SearchPass,
-    TuningPoint,
-    TuningReport,
-    tuned_checkpoint_payload,
-)
+from src.inference.tuning import SearchPass, TuningPoint, TuningReport
 from src.logs import Split
 from src.logs.declare import ConformanceChecker
 from src.models.architectures.head_sampling_transformer.model import HeadSamplingTransformer
@@ -233,7 +228,7 @@ def run(
     )
     provenance.require_source(checkpoint_path)
     report.write(report_path)
-    write_checkpoint(tuned_checkpoint_payload(checkpoint, report), tuned_checkpoint_path)
+    write_checkpoint(report.apply_to_checkpoint(checkpoint), tuned_checkpoint_path)
     print(
         f'Chose temperature {report.chosen["temperature"]}, top_p {report.chosen["top_p"]}. '
         f'Wrote the search to {report_path} and tuned checkpoint to {tuned_checkpoint_path}'

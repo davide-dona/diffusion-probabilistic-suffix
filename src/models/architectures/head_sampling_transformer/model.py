@@ -6,10 +6,7 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.models.architectures.head_sampling_transformer.decoder import Decoder
 from src.models.contracts import DecoderOutput, GeneratedSuffix
-from src.models.sutran.loss import (
-    reconstruction_loss,
-    timed_positions,
-)
+from src.models.sutran.loss import reconstruction_loss
 from src.models.sutran.model import SuTraNModel
 from src.training.loss import Loss
 
@@ -77,7 +74,7 @@ class HeadSamplingTransformer(SuTraNModel[DecoderOutput]):
         inter_event_time_loss = (
             (output.inter_event_times - batch.inter_event_times)
             .square()
-            .masked_fill(mask=~timed_positions(batch), value=0.0)
+            .masked_fill(mask=~batch.timed_positions(), value=0.0)
             .sum(dim=1)
         )
 

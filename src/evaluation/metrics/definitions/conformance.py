@@ -1,4 +1,3 @@
-from src.evaluation.metrics.helpers import sample_mean
 from src.evaluation.metrics.metadata import Direction, MetricGroup, Owner
 from src.evaluation.metrics.registry import METRICS
 from src.evaluation.prepared import PreparedPrefix
@@ -20,7 +19,7 @@ def conformance_sample_mean(context: PreparedPrefix) -> float:
     Returns:
         The draw-weighted mean share of satisfied constraints. No sampled draws score zero.
     """
-    return sample_mean(context, [check.share for check in context.sample_conformance])
+    return context.generation.samples.mean([check.share for check in context.sample_conformance])
 
 
 @METRICS.register(
@@ -59,7 +58,7 @@ def full_conformance_sample_rate(context: PreparedPrefix) -> float:
         The draw-weighted rate of fully conformant sampled suffixes. No sampled draws score
         zero.
     """
-    return sample_mean(context, [check.full for check in context.sample_conformance])
+    return context.generation.samples.mean([check.full for check in context.sample_conformance])
 
 
 @METRICS.register(

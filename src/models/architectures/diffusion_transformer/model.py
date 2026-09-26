@@ -9,7 +9,6 @@ from src.models.architectures.diffusion_transformer.denoiser import DiffusionDen
 from src.models.architectures.diffusion_transformer.process import (
     CategoricalDiffusion,
     GaussianDiffusion,
-    reverse_grid,
 )
 from src.models.base import SuffixModel
 from src.models.contracts import DiffusionOutput, GeneratedSuffix
@@ -112,9 +111,7 @@ class DiffusionTransformer(SuffixModel):
         times = torch.randn(
             size=(rows, self.canvas_length), device=prefix.hidden.device
         )  # [B * S, T]
-        for step, previous_step in reverse_grid(
-            self.steps, self.sampling_calls, start_level=self.sampling_start_level
-        ):
+        for step, previous_step in self._reverse_grid():
             timestep = torch.full(
                 size=(rows,), fill_value=step, dtype=torch.long, device=activities.device
             )  # [B * S]
@@ -192,3 +189,15 @@ class DiffusionTransformer(SuffixModel):
     def _masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Average valid suffix positions within each batch row."""
         return (values * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1)  # [B, T] -> [B]
+
+    def _reverse_grid(self) -> list[tuple[int, int]]:
+        """Return descending sampling levels and their preceding endpoints, ending at zero."""
+        if not 1 <= self.sampling_calls <= self.sampling_start_level <= self.steps:
+            raise ValueError('Sampling calls and start level must fit within the noise levels')
+        levels = (
+            torch.linspace(self.sampling_start_level, 1, self.sampling_calls, dtype=torch.float64)
+            .round()
+            .long()
+            .tolist()
+        )
+        return list(zip(levels, levels[1:] + [0], strict=True))

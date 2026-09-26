@@ -7,39 +7,6 @@ from src.models.sutran.decoder import CausalDecoder
 from src.models.sutran.embeddings import EventEmbeddings
 
 
-def _nucleus(probabilities: torch.Tensor, *, top_p: float) -> torch.Tensor:
-    """Keep the smallest set of activities whose probability sums to `top_p`, and renormalize.
-
-    Where the temperature scales every step alike, this reads how peaked each one is: a step the
-    process already determines leaves one activity above the threshold and the draw becomes the
-    greedy read, where a genuine choice point keeps the activities that make it one. That is the
-    whole reason it is here rather than a fixed candidate count, which cannot tell the two apart
-    on a vocabulary this small.
-
-    Args:
-        probabilities: The activity head's softmax, `[batch_size, num_activities]`. Activities
-            masked out upstream sit at zero and are sorted to the back, so they are never kept.
-        top_p: The mass to keep. 1.0 keeps everything.
-    Returns:
-        The same shape, summing to 1 along the last dimension, zero outside the nucleus.
-    """
-    if top_p >= 1.0:
-        return probabilities
-
-    ordered, indices = probabilities.sort(dim=-1, descending=True)  # [batch_size, num_activities]
-    # The mass strictly before each column. A column is kept when what came before it fell short
-    # of the threshold, so the column that first reaches it is kept too and the heaviest activity
-    # always is: the nucleus is never empty however peaked or flat the step.
-    preceding = ordered.cumsum(dim=-1) - ordered  # [batch_size, num_activities]
-    kept = ordered.masked_fill(mask=preceding >= top_p, value=0.0)
-
-    # Back into vocabulary order, the dropped activities left at zero.
-    probabilities = torch.zeros_like(input=probabilities).scatter(
-        dim=-1, index=indices, src=kept
-    )  # [batch_size, num_activities]
-    return probabilities / probabilities.sum(dim=-1, keepdim=True)
-
-
 class Decoder(CausalDecoder[DecoderOutput]):
     """SuTraN-PH heads and calibrated categorical sampling policy."""
 
@@ -113,8 +80,22 @@ class Decoder(CausalDecoder[DecoderOutput]):
         """
         logits = logits.index_fill(dim=-1, index=self.unemittable_activities, value=-torch.inf)
         probabilities = (logits / self.sampling.temperature).softmax(dim=-1)
-        probabilities = _nucleus(probabilities, top_p=self.sampling.top_p)
+        probabilities = self._nucleus(probabilities)
         return torch.multinomial(input=probabilities, num_samples=1).squeeze(dim=1)  # [B, 1] -> [B]
+
+    def _nucleus(self, probabilities: torch.Tensor) -> torch.Tensor:
+        """Keep the smallest activity set reaching the configured probability mass."""
+        top_p = self.sampling.top_p
+        if top_p >= 1.0:
+            return probabilities
+
+        ordered, indices = probabilities.sort(dim=-1, descending=True)
+        preceding = ordered.cumsum(dim=-1) - ordered
+        kept = ordered.masked_fill(mask=preceding >= top_p, value=0.0)
+        probabilities = torch.zeros_like(input=probabilities).scatter(
+            dim=-1, index=indices, src=kept
+        )
+        return probabilities / probabilities.sum(dim=-1, keepdim=True)
 
     @staticmethod
     def _next_time(mean: torch.Tensor) -> torch.Tensor:
