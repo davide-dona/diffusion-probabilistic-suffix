@@ -38,17 +38,21 @@ probability times clean-token cross entropy at MASK positions, multiplied by `di
 uniform timestep sampling. Each row averages over the entire canvas, including trailing EOT
 positions. A row with no MASK has zero activity loss. The Gaussian noise-prediction squared error
 averages real event positions only. The batch loss averages row losses, and `Loss` fields store row
-sums. There is no auxiliary categorical loss or uniform categorical posterior.
+sums. The masked real-event and EOT activity terms are separately logged contributions under the
+same full-canvas denominator, reveal weight, and batch averaging as the total activity loss. There
+is no auxiliary categorical loss or uniform categorical posterior.
 
 ## Sampling
 
-The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from the
-terminal level to level one and a
-final jump to level zero. The default is 50 calls across 100 noise levels. Activities start as all
-MASK. At each jump, still-masked positions reveal with the cumulative probability above and
-already revealed positions stay fixed. The final jump reveals every MASK. The Gaussian channel
-uses a DDIM jump based on the cumulative signal at both endpoints. `diffusion.sampler.eta` controls
-its stochasticity, with zero as the deterministic default.
+The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from
+`diffusion.sampler.start_level` to level one and a final jump to level zero. New runs use 50 calls
+from level 990 across 1000 noise levels, avoiding the near-zero terminal time signal. Checkpoints
+without `start_level` start from the terminal level, preserving their original sampling behavior.
+Activities start as all MASK and times start as standard Gaussian noise. At each jump, still-masked
+positions reveal with the cumulative probability above and already revealed positions stay fixed.
+The final jump reveals every MASK. The Gaussian channel uses a DDIM jump based on the cumulative
+signal at both endpoints. `diffusion.sampler.eta` controls its stochasticity, with zero as the
+deterministic default.
 
 Initial EOT is forbidden when a masked activity is sampled. After sampling, the first EOT sets the
 length; positions from EOT onward become PAD and standardized zero time. If no EOT appears,

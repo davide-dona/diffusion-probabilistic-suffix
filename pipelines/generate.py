@@ -66,6 +66,9 @@ def run(
         config.inference.evaluation_samples = num_samples
     if num_workers is not None:
         config.dataloader.num_workers = num_workers
+    if config.model.kind == 'diffusion_transformer':
+        sampler = config.model.diffusion.sampler
+        sampler.start_level = sampler.get('start_level', config.model.diffusion.steps)
     validate_experiment_config(config)
     # Record the exact settings used for this generation run.
     save_config(
@@ -107,7 +110,8 @@ def run(
             'device': device,
             'samples': f'{config.inference.evaluation_samples} suffixes per prefix',
             'sampling': (
-                f'{drawn_with.sampler.calls} DDIM calls, eta {drawn_with.sampler.eta}'
+                f'{drawn_with.sampler.calls} DDIM calls from level '
+                f'{drawn_with.sampler.start_level}, eta {drawn_with.sampler.eta}'
                 if config.model.kind == 'diffusion_transformer'
                 else f'temperature {drawn_with.temperature}, top_p {drawn_with.top_p}'
                 if drawn_with is not None

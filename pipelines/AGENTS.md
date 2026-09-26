@@ -71,6 +71,6 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-When changing one stage, inspect small fixtures or existing artifact metadata. Follow the root
+When changing one stage, inspect small inputs or existing artifact metadata. Follow the root
 guide's disposable-check policy when verifying input and output contracts, split selection, or
 provenance fields.

@@ -27,6 +27,7 @@ class DiffusionTransformer(SuffixModel):
         self.canvas_length = codec.max_trace_length - 1
         self.steps = config.diffusion.steps
         self.sampling_calls = config.diffusion.sampler.calls
+        self.sampling_start_level = config.diffusion.sampler.get('start_level', self.steps)
         self.sampling_eta = config.diffusion.sampler.eta
         self.activities = CategoricalDiffusion(
             codec=codec,
@@ -75,7 +76,11 @@ class DiffusionTransformer(SuffixModel):
         )  # [B, T]
         masked = output.noisy_activity.eq(self.activities.mask_index)
         reveal = self.activities.adjacent_reveal_probability(output.timestep)  # [B]
-        activity = (cross_entropy * masked).mean(dim=1) * reveal * self.steps  # [B]
+        weighted = cross_entropy * masked  # [B, T]
+        factor = reveal * self.steps  # [B]
+        real_activity = weighted.masked_fill(~output.time_mask, 0.0).mean(dim=1) * factor  # [B]
+        eot_activity = weighted.masked_fill(output.time_mask, 0.0).mean(dim=1) * factor  # [B]
+        activity = real_activity + eot_activity  # [B]
         time = self._masked_mean(
             values=(output.noise - output.predicted_noise).square(), mask=output.time_mask
         )  # [B]
@@ -84,6 +89,10 @@ class DiffusionTransformer(SuffixModel):
             loss=per_example.sum().item(),
             activity_loss=activity.sum().item(),
             inter_event_time_loss=time.sum().item(),
+            optional_terms={
+                'masked_real_activity_loss': real_activity.sum().item(),
+                'masked_eot_activity_loss': eot_activity.sum().item(),
+            },
         )
         return per_example.mean(), metrics
 
@@ -102,7 +111,9 @@ class DiffusionTransformer(SuffixModel):
         times = torch.randn(
             size=(rows, self.canvas_length), device=prefix.activities.device
         )  # [B * S, T]
-        for step, previous_step in reverse_grid(self.steps, self.sampling_calls):
+        for step, previous_step in reverse_grid(
+            self.steps, self.sampling_calls, start_level=self.sampling_start_level
+        ):
             timestep = torch.full(
                 size=(rows,), fill_value=step, dtype=torch.long, device=activities.device
             )  # [B * S]
