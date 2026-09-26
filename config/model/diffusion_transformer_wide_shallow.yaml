@@ -3,9 +3,9 @@ defaults:
 - _self_
 kind: diffusion_transformer
 name: diffusion_transformer_wide_shallow
-d_model: 128
+d_model: 48
 transformer:
   num_layers: 4
   num_heads: 8
-  feedforward_dim: 512
+  feedforward_dim: 192
   dropout: 0.1

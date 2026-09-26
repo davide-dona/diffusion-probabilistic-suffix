@@ -102,8 +102,9 @@ Validation uses isolated seeded draws and selects checkpoints by the existing ge
 The diffusion model uses absorbing MASK activity corruption and Gaussian time noise. Its default
 configuration has 1000 noise levels and 50 DDIM sampling calls starting at level 990. The activity
 loss supervises real events and all EOT positions in the fixed suffix canvas. The
-`diffusion_transformer_wide_shallow` model config uses width 128 and four layers instead of width
-32 and eight layers. Compare sampler and model settings on validation data before final test
+`diffusion_transformer_wide_shallow` model config uses width 48 and four layers instead of width
+32 and eight layers, keeping its parameter count close to the other models. Compare sampler and
+model settings on validation data before final test
 generation. Older checkpoints without a sampler start level retain their configured terminal start.
 Train the stable width-32 baseline and the wider variant with the same dataset and seed:
 
@@ -209,7 +210,7 @@ Datasets, models, training defaults, and runtime profiles live in the correspond
 early stopping is expressed in validation checks. The CUDA profile selects a batch size and training
 regime for each dataset automatically.
 All model configs use activity/resource/attribute embedding widths of 32/16/8. The wider
-diffusion variant projects these to width 128; the other configs project to width 32. Checkpoints
+diffusion variant projects these to width 48; the other configs project to width 32. Checkpoints
 retain their own embedding configuration.
 Override individual settings with dotted keys:
 
