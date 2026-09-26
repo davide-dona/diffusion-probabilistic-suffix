@@ -104,8 +104,9 @@ configuration has 1000 noise levels and 50 DDIM sampling calls starting at level
 loss supervises real events and all EOT positions in the fixed suffix canvas. A four-layer prefix
 encoder processes the observed events once. A four-layer bidirectional suffix decoder cross-attends
 to the cached prefix states at each sampling call. Compare sampler and model settings on validation
-data before final test generation. Older encoder-decoder checkpoints without a sampler start level
-retain their configured terminal start. Checkpoints from the former joint denoiser cannot be loaded.
+data before final test generation. Checkpoints require the current model configuration, including
+`_target_` and `diffusion.sampler.start_level`.
+
 Train the diffusion model with:
 
 ```bash

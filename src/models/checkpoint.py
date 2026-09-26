@@ -3,9 +3,11 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import torch
+from omegaconf import OmegaConf
 from torch import nn
 
 from src.artifacts import Provenance, RunIdentity
+from src.config_validation.model import validate_model
 from src.inference.tuning import TuningReport
 from src.selection import SELECTION_METRIC
 
@@ -69,6 +71,7 @@ def load_checkpoint(model_path: str | Path) -> dict:
     require_keys(checkpoint, CHECKPOINT_KEYS, purpose='loaded', remedy='Train a new checkpoint.')
     model = checkpoint.get('config', {}).get('model', {})
     data = checkpoint.get('config', {}).get('data', {})
+    validate_model(OmegaConf.create(model))
     provenance = checkpoint_provenance(checkpoint)
     run = provenance.run
     if run.dataset != data.get('name') or run.model != model.get('name'):

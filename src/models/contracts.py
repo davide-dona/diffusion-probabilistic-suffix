@@ -32,7 +32,7 @@ class GeneratedSuffix:
     lengths: torch.Tensor  # [...], events before EOT, or T if EOT was not emitted
     inter_event_times: torch.Tensor  # [..., T], standardized
     remaining_time: torch.Tensor  # [...], standardized
-    used_sentinel: torch.Tensor | None = None  # [...]
+    used_sentinel: torch.Tensor  # [...]
 
 
 @dataclass(frozen=True)

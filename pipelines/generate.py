@@ -66,9 +66,6 @@ def run(
         config.inference.evaluation_samples = num_samples
     if num_workers is not None:
         config.dataloader.num_workers = num_workers
-    if config.model.kind == 'diffusion_transformer':
-        sampler = config.model.diffusion.sampler
-        sampler.start_level = sampler.get('start_level', config.model.diffusion.steps)
     validate_experiment_config(config)
     # Record the exact settings used for this generation run.
     save_config(
@@ -92,8 +89,7 @@ def run(
         num_samples=config.inference.evaluation_samples,
         prefixes_upper_bound=config.dataloader.batch_size,
     )
-    # A checkpoint that has been trimmed for publishing still carries both of these.
-    trained_step, score = checkpoint.get('step'), checkpoint.get('selection_score')
+    trained_step, score = checkpoint['step'], checkpoint['selection_score']
     drawn_with = config.model.get('sampling')
     if config.model.kind == 'diffusion_transformer':
         drawn_with = config.model.diffusion
@@ -104,9 +100,7 @@ def run(
             'checkpoint_sha256': checkpoint_hash,
             'run': run,
             'dataset': config.data.name,
-            'model': f'{config.model.name} (step {trained_step}, selection score {score:.4f})'
-            if trained_step is not None and score is not None
-            else config.model.name,
+            'model': f'{config.model.name} (step {trained_step}, selection score {score:.4f})',
             'device': device,
             'samples': f'{config.inference.evaluation_samples} suffixes per prefix',
             'sampling': (

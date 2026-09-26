@@ -21,8 +21,8 @@ groups. The result is validated at the stage boundary and stored with every dura
 - The diffusion model separates `diffusion.steps` noise levels from `diffusion.sampler.calls`
   denoiser calls. The sampler uses DDIM, calls must not exceed `diffusion.sampler.start_level`,
   and the start level must not exceed the noise levels. `diffusion.sampler.eta` lies in `[0, 1]`.
-  New runs default to 1000 levels, 50 calls starting at level 990, and zero Gaussian sampling
-  stochasticity. Checkpoints without a start level retain the original terminal start level.
+  The default is 1000 levels, 50 calls starting at level 990, and zero Gaussian sampling
+  stochasticity. Require an explicit start level in every diffusion configuration.
 - Add or change fields together with their checks in `src/config_validation/`. Reject invalid values before
   reading large artifacts or starting model work.
 - Keep dataset-specific training values under `training.regimes.<dataset>` and batch sizes under

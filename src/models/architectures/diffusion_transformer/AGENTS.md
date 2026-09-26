@@ -23,8 +23,8 @@ comparison. BPIC12 shows a provisional improvement in selection score, while the
 run currently trails its joint baseline. Do not describe these results as a demonstrated improvement
 across all datasets.
 
-The joint denoiser is no longer implemented, so its checkpoints cannot be restored. Encoder-decoder
-checkpoints with the former `denoiser: prefix_encoder` field remain loadable.
+Checkpoint configurations require `prefix_encoder.num_layers` and an explicit
+`diffusion.sampler.start_level`. The obsolete `denoiser` field is invalid.
 
 ## Clean Canvas and Forward Processes
 
@@ -59,9 +59,8 @@ is no auxiliary categorical loss or uniform categorical posterior.
 ## Sampling
 
 The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from
-`diffusion.sampler.start_level` to level one and a final jump to level zero. New runs use 50 calls
-from level 990 across 1000 noise levels, avoiding the near-zero terminal time signal. Checkpoints
-without `start_level` start from the terminal level, preserving their original sampling behavior.
+`diffusion.sampler.start_level` to level one and a final jump to level zero. The default uses 50 calls
+from level 990 across 1000 noise levels, avoiding the near-zero terminal time signal.
 Activities start as all MASK and times start as standard Gaussian noise. At each jump, still-masked
 positions reveal with the cumulative probability above and already revealed positions stay fixed.
 The final jump reveals every MASK. The Gaussian channel uses a DDIM jump based on the cumulative

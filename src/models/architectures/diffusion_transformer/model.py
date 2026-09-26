@@ -23,15 +23,13 @@ class DiffusionTransformer(SuffixModel):
     def __init__(self, config: DictConfig, codec: DatasetCodec):
         """Build the denoiser, activity process, and time process."""
         super().__init__(codec=codec)
-        if config.get('denoiser', 'prefix_encoder') != 'prefix_encoder' or (
-            'prefix_encoder' not in config
-        ):
-            raise ValueError('Joint diffusion checkpoints are no longer supported')
+        if 'denoiser' in config:
+            raise ValueError('model.denoiser is not supported')
         self.codec = codec
         self.canvas_length = codec.max_trace_length - 1
         self.steps = config.diffusion.steps
         self.sampling_calls = config.diffusion.sampler.calls
-        self.sampling_start_level = config.diffusion.sampler.get('start_level', self.steps)
+        self.sampling_start_level = config.diffusion.sampler.start_level
         self.sampling_eta = config.diffusion.sampler.eta
         self.activities = CategoricalDiffusion(
             codec=codec,

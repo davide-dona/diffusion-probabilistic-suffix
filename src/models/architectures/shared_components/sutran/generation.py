@@ -77,4 +77,5 @@ def generate_autoregressive(
         lengths=lengths,
         inter_event_times=generated_inter_event_times[:, :steps_taken],  # [batch_size, steps]
         remaining_time=generated_inter_event_times.new_zeros(size=(batch_size,)),
+        used_sentinel=lengths.eq(max_steps),
     )

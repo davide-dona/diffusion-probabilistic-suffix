@@ -53,7 +53,7 @@ class SuTraNModel[OutputT](SuffixModel):
                 activities=generated.activities.masked_fill(~kept, self.pad_activity_index),
                 inter_event_times=generated.inter_event_times.masked_fill(~kept, 0.0),
                 remaining_time=remaining,
-                used_sentinel=generated.lengths.eq(generated.activities.size(dim=1)),
+                used_sentinel=generated.used_sentinel,
             ),
             batch_size=batch_size,
         )

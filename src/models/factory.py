@@ -1,15 +1,10 @@
 from hydra.utils import get_class
 from omegaconf import DictConfig, OmegaConf
 
+from src.config_validation.model import validate_model
 from src.datasets.codec import DatasetCodec
-from src.models.checkpoint import MODEL_KEYS, require_keys
+from src.models.checkpoint import CHECKPOINT_KEYS, require_keys
 from src.models.models import SuffixModel
-
-_LEGACY_CLASS_NAMES = {
-    'diffusion_transformer': 'DiffusionTransformer',
-    'head_sampling_transformer': 'HeadSamplingTransformer',
-    'u_ed_sutran': 'UEDSuTraN',
-}
 
 
 def build_model(config: DictConfig, codec: DatasetCodec) -> SuffixModel:
@@ -25,7 +20,10 @@ def model_from_checkpoint(
 ) -> SuffixModel:
     """Restore the configured architecture and weights in evaluation mode."""
     require_keys(
-        checkpoint=checkpoint, keys=MODEL_KEYS, purpose='rebuilt', remedy='Train the model again.'
+        checkpoint=checkpoint,
+        keys=CHECKPOINT_KEYS,
+        purpose='rebuilt',
+        remedy='Train the model again.',
     )
     checkpoint_dataset = checkpoint['config']['data']['name']
     if codec.dataset != checkpoint_dataset:
@@ -34,11 +32,7 @@ def model_from_checkpoint(
             f'{codec.dataset!r}'
         )
     config = OmegaConf.create(checkpoint['config']['model'])
-    if '_target_' not in config:
-        kind = config.kind
-        if kind not in _LEGACY_CLASS_NAMES:
-            raise ValueError(f'Unknown model kind: {kind}')
-        config._target_ = f'src.models.architectures.{kind}.model.{_LEGACY_CLASS_NAMES[kind]}'
+    validate_model(config)
     model = build_model(config=config, codec=codec).to(device=device)
     model.load_state_dict(state_dict=checkpoint['model_state_dict'])
     model.eval()

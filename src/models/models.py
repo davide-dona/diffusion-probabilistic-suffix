@@ -66,11 +66,7 @@ class SuffixModel(nn.Module, ABC):
                 batch_size, -1, generated.inter_event_times.size(dim=1)
             ),  # [B * S, T] -> [B, S, T]
             remaining_time=generated.remaining_time.view(batch_size, -1),  # [B * S] -> [B, S]
-            used_sentinel=(
-                generated.used_sentinel.view(batch_size, -1)  # [B * S] -> [B, S]
-                if generated.used_sentinel is not None
-                else None
-            ),
+            used_sentinel=generated.used_sentinel.view(batch_size, -1),  # [B * S] -> [B, S]
         )
 
     @staticmethod

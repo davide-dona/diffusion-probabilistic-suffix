@@ -59,11 +59,7 @@ def generate_batch(
     # [batch_size, num_samples, steps]
     inter_event_times = generated.inter_event_times.cpu().numpy()
     remaining_time = generated.remaining_time.cpu().numpy()  # [batch_size, num_samples]
-    used_sentinel = (
-        generated.used_sentinel.cpu().numpy()
-        if generated.used_sentinel is not None
-        else np.zeros_like(lengths, dtype=bool)
-    )
+    used_sentinel = generated.used_sentinel.cpu().numpy()
     true_activities = batch.suffix.activities.cpu().numpy()  # [batch_size, seq_len]
     true_inter_event_times = batch.inter_event_times.cpu().numpy()  # [batch_size, seq_len]
     # Position 0 answers for the last prefix event, which is what a remaining time is measured

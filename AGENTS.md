@@ -9,10 +9,7 @@ accuracy, diversity, calibration, time prediction, and process conformance.
 The main model is a diffusion Transformer with a cached prefix encoder and a bidirectional suffix
 decoder over categorical activities and continuous times. It is compared with the implemented
 probabilistic SuTraN-PH and uncertainty-aware U-ED-SuTraN baselines on Sepsis, BPIC12, BPIC17,
-and BPIC19. As of 2026-09-26, the Sepsis encoder-decoder run improved the selected activity energy
-score from 0.3065 to 0.2966 and reduced logged generation time from 85.5 to 28.9 seconds per
-validation check compared with the former joint denoiser. BPIC12 and BPIC17 comparisons are still
-provisional, so these results do not establish an improvement on every dataset.
+and BPIC19.
 
 ## Safety and Correctness
 
@@ -25,6 +22,9 @@ provisional, so these results do not establish an improvement on every dataset.
   path.
 - Preserve chronological splits, fitted codecs, seeds, resolved configurations, checkpoint hashes,
   and run identity across artifact handoffs.
+- Do not add retrocompatibility for superseded model names, configuration fields, class paths,
+  artifact schemas, or checkpoint formats. Require the current contract, so that legacy artifacts
+  are automatically invalidated.
 - Do not hand edit source logs or generated dataset and run artifacts.
 - Use four-space indentation, single quotes, 100-character lines, type hints, `snake_case` names,
   and `PascalCase` classes. Ruff is the formatting and linting authority. Never comments as the

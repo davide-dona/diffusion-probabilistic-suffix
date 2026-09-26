@@ -33,15 +33,16 @@ def validate_model(model: DictConfig) -> None:
     validate_model_name(model.name)
     if model.kind not in {'head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran'}:
         raise ValueError(f'Unknown model kind: {model.kind}')
-    if '_target_' in model:
-        target = model._target_
-        module = f'src.models.architectures.{model.kind}.model'
-        if not isinstance(target, str) or not target.startswith(f'{module}.'):
-            raise ValueError(f'model._target_ must name a class in {module}')
-        from src.models.models import SuffixModel
+    if '_target_' not in model:
+        raise ValueError('model._target_ is required')
+    target = model._target_
+    module = f'src.models.architectures.{model.kind}.model'
+    if not isinstance(target, str) or not target.startswith(f'{module}.'):
+        raise ValueError(f'model._target_ must name a class in {module}')
+    from src.models.models import SuffixModel
 
-        if not issubclass(get_class(target), SuffixModel):
-            raise ValueError('model._target_ must implement SuffixModel')
+    if not issubclass(get_class(target), SuffixModel):
+        raise ValueError('model._target_ must implement SuffixModel')
 
     validate_number(model.d_model, 'model.d_model', integer=True)
     for key, value in model.embeddings.items():
@@ -101,8 +102,8 @@ def _validate_uncertainty(model: DictConfig) -> None:
 
 
 def _validate_diffusion_transformer(model: DictConfig) -> None:
-    if model.get('denoiser', 'prefix_encoder') != 'prefix_encoder':
-        raise ValueError('Joint diffusion denoiser is no longer supported')
+    if 'denoiser' in model:
+        raise ValueError('model.denoiser is not supported')
     if 'prefix_encoder' not in model or set(model.prefix_encoder) != {'num_layers'}:
         raise ValueError('model.prefix_encoder must contain exactly num_layers')
     validate_number(
@@ -119,16 +120,17 @@ def _validate_diffusion_transformer(model: DictConfig) -> None:
     validate_number(model.diffusion.sampler.calls, 'model.diffusion.sampler.calls', integer=True)
     if model.diffusion.sampler.calls > model.diffusion.steps:
         raise ValueError('model.diffusion.sampler.calls must not exceed model.diffusion.steps')
-    if 'start_level' in model.diffusion.sampler:
-        validate_number(
-            model.diffusion.sampler.start_level,
-            'model.diffusion.sampler.start_level',
-            integer=True,
-        )
-        if model.diffusion.sampler.start_level > model.diffusion.steps:
-            raise ValueError('model.diffusion.sampler.start_level must not exceed diffusion.steps')
-        if model.diffusion.sampler.calls > model.diffusion.sampler.start_level:
-            raise ValueError('model.diffusion.sampler.calls must not exceed sampler.start_level')
+    if 'start_level' not in model.diffusion.sampler:
+        raise ValueError('model.diffusion.sampler.start_level is required')
+    validate_number(
+        model.diffusion.sampler.start_level,
+        'model.diffusion.sampler.start_level',
+        integer=True,
+    )
+    if model.diffusion.sampler.start_level > model.diffusion.steps:
+        raise ValueError('model.diffusion.sampler.start_level must not exceed diffusion.steps')
+    if model.diffusion.sampler.calls > model.diffusion.sampler.start_level:
+        raise ValueError('model.diffusion.sampler.calls must not exceed sampler.start_level')
     validate_number(model.diffusion.sampler.eta, 'model.diffusion.sampler.eta', inclusive=True)
     if model.diffusion.sampler.eta > 1:
         raise ValueError('model.diffusion.sampler.eta must not exceed 1')

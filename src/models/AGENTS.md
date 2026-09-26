@@ -14,7 +14,7 @@ generation depend on this interface rather than on architecture internals.
 | `eot_activity_index` | Activity token that terminates a suffix. |
 
 `GeneratedSuffix.activities` and `inter_event_times` have shape `[B, S, T]`; `lengths`,
-`remaining_time`, and optional `used_sentinel` have shape `[B, S]`. Length counts real generated
+`remaining_time`, and `used_sentinel` have shape `[B, S]`. Length counts real generated
 events before EOT, or the generated canvas length when no EOT appears.
 
 `DecoderOutput` holds activity logits `[B, T, V]` and standardized time predictions `[B, T]`.
@@ -28,14 +28,14 @@ and standardized time means and log-variances `[B, T]`.
 
 - `build_model` resolves `model._target_` from the Hydra configuration. A new `model.kind` requires
   a model class path in its Hydra configuration, validation, visualization label, and shared
-  contract support. Checkpoint restoration supplies the class path for older stored configurations.
+  contract support. Stored configurations must contain the class path.
 - Checkpoints contain the resolved run configuration, provenance, state dictionary, optimizer
   step, selection score, selection metric, and direction. `load_checkpoint` loads plain data and
   tensors on CPU, validates required keys, and checks identity against configuration.
 - `model_from_checkpoint` rebuilds from the stored model configuration, loads weights, moves to the
   requested device, and returns evaluation mode. Do not reconstruct from a current YAML file.
-- Diffusion checkpoint restoration supports prefix encoder configurations, including the former
-  `denoiser: prefix_encoder` field. Joint denoiser checkpoints are unsupported.
+- Diffusion checkpoints require the current prefix encoder configuration and an explicit sampler
+  start level.
 - Save the repeatedly replaced best checkpoint through a temporary `.pt.tmp` file. Checkpoints
   written once may be written directly to their final destination.
 
