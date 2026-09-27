@@ -48,8 +48,9 @@ Preserve draw multiplicity when working with folded suffixes.
 | Conformance | Mean satisfied-constraint share, full-conformance sample rate, and observed-log references | Higher model conformance |
 
 Energy scores combine distance to truth with a diversity correction between independent draws.
-CRPS uses the same fair finite-sample energy estimator with absolute distances, calculated
-efficiently through sorted samples. Coverage gap is empirical central-interval
+CRPS uses the same fair finite-sample energy estimator with absolute distances, integrated over
+gaps between sorted samples with nonnegative weights. Never compute it as accuracy minus spread:
+extreme draws make both totals huge and their difference is floating-point noise. Coverage gap is empirical central-interval
 coverage minus its nominal level. Inter-event metrics compare against the observed suffix width;
 sampled time sequences are truncated or zero-padded to that width during preparation.
 

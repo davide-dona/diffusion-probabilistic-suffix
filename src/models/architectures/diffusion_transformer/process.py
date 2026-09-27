@@ -92,11 +92,19 @@ class CategoricalDiffusion(nn.Module):
 class GaussianDiffusion(nn.Module):
     """Diffuse standardized inter-event times with a Gaussian cosine schedule."""
 
-    def __init__(self, *, steps: int, cosine_offset: float):
-        """Build cumulative signal probabilities for the time channel."""
+    def __init__(self, *, steps: int, cosine_offset: float, clean_range: tuple[float, float]):
+        """Build cumulative signal probabilities for the time channel.
+
+        Args:
+            steps: Number of noise levels.
+            cosine_offset: Offset of the cosine schedule near level zero.
+            clean_range: Smallest and largest standardized train times, which bound every
+                clean estimate during sampling.
+        """
         super().__init__()
         betas = cosine_betas(steps=steps, offset=cosine_offset, terminal_mask=False)
         self.register_buffer(name='alpha_bars', tensor=torch.cumprod(1 - betas, dim=0))
+        self.clean_minimum, self.clean_maximum = clean_range
 
     def corrupt(
         self, clean: torch.Tensor, timestep: torch.Tensor
@@ -116,17 +124,26 @@ class GaussianDiffusion(nn.Module):
         previous_step: int,
         eta: float,
     ) -> torch.Tensor:
-        """Take a DDIM jump between arbitrary noise levels with optional stochasticity."""
+        """Take a DDIM jump between arbitrary noise levels with optional stochasticity.
+
+        The clean estimate is clipped to the standardized train range, and the noise is
+        re-derived from it so the jump stays consistent with the current times. The final jump
+        to level zero returns the clipped estimate itself.
+        """
         current = self.alpha_bars[step - 1]
         previous = self.alpha_bars[previous_step - 1] if previous_step else current.new_tensor(1.0)
-        clean = (times - (1 - current).sqrt() * noise) / current.sqrt()
+        clean = ((times - (1 - current).sqrt() * noise) / current.sqrt()).clamp(
+            min=self.clean_minimum, max=self.clean_maximum
+        )
+        implied_noise = (times - current.sqrt() * clean) / (1 - current).sqrt()
         sigma = (
             eta
             * ((1 - previous) / (1 - current)).sqrt()
             * (1 - current / previous).clamp_min(0).sqrt()
         )
         result = (
-            previous.sqrt() * clean + (1 - previous - sigma.square()).clamp_min(0).sqrt() * noise
+            previous.sqrt() * clean
+            + (1 - previous - sigma.square()).clamp_min(0).sqrt() * implied_noise
         )
         if previous_step and eta:
             result = result + sigma * torch.randn_like(times)

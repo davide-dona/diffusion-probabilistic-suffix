@@ -47,7 +47,8 @@ change prefix identity. `fixed_subset()` selects a reproducible random subset fr
 
 - Activity and resource vocabularies with stable special token indices.
 - Categorical feature vocabularies and non-overlapping offsets into one shared embedding table.
-- Mean, standard deviation, and optional log scaling for numeric features and inter-event time.
+- Mean, standard deviation, train minimum and maximum, and optional log scaling for numeric
+  features and inter-event time. Statistics are stored after the log transform.
 - The maximum retained trace length and the dataset configuration used to locate split artifacts.
 
 Activity special tokens are PAD, UNK, EOT, and SOS. The activity codec used by evaluation maps
