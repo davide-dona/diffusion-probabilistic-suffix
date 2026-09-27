@@ -33,7 +33,8 @@ are folded into distinct strings plus draw records containing the suffix index, 
 flag. The file also stores truth, activity vocabulary, sampler settings, and provenance.
 
 `PreparedPrefix` expands shared values: suffix lengths, aligned inter-event times, remaining times,
-and Declare conformance. The validation-only DLS similarity is computed only when requested.
+and Declare conformance. Remaining time is `DecodedEvents.remaining_time_minutes`, the sum of the
+decoded inter-event minutes; the generations file does not store it. The validation-only DLS similarity is computed only when requested.
 Preserve draw multiplicity when working with folded suffixes.
 
 ## Metric Semantics

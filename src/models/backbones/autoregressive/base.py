@@ -37,19 +37,16 @@ class AutoregressiveSuffixModel[OutputT](SuffixModel):
         )
 
     def _finish_generation(self, generated: GeneratedSuffix, *, batch_size: int) -> GeneratedSuffix:
-        """Pad terminated rows, derive remaining time, and group independent sample rows."""
+        """Pad terminated rows and group independent sample rows."""
         positions = torch.arange(
             end=generated.inter_event_times.size(dim=1), device=generated.activities.device
         )
         kept = positions.unsqueeze(dim=0) < generated.lengths.unsqueeze(dim=1)  # [B * S, T]
-        remaining = self._remaining_time(times=generated.inter_event_times, keep=kept)
         return self._per_sample(
             generated=replace(
                 generated,
                 activities=generated.activities.masked_fill(~kept, self.pad_activity_index),
                 inter_event_times=generated.inter_event_times.masked_fill(~kept, 0.0),
-                remaining_time=remaining,
-                used_sentinel=generated.used_sentinel,
             ),
             batch_size=batch_size,
         )

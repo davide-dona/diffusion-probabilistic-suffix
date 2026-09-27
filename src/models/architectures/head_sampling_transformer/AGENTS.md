@@ -18,7 +18,7 @@ p_\theta(a_{1:n}, \mathrm{EOT}, \tau_{1:n}\mid c)
 \]
 
 The implementation samples activities categorically and standardized inter-event times from a
-unit-variance Gaussian centered on the time head. Remaining time is derived from sampled durations.
+unit-variance Gaussian centered on the time head.
 
 Use `B` for batch size, `P` for padded prefix width, `T` for suffix width, `V` for the activity
 vocabulary, `S` for samples per prefix, and `D` for model width.
@@ -87,8 +87,7 @@ and repeatedly:
 
 A row finishes when it samples EOT. Its length excludes EOT. EOT and later positions are replaced
 with PAD and zero standardized durations. Unfinished rows stop at the maximum decoder steps, which
-equals the batch's padded prefix width, and set `used_sentinel`. Remaining time includes retained
-durations only.
+equals the batch's padded prefix width, and set `used_sentinel`.
 
 Generation may read `TraceCut.prefix` only. Never use the true suffix for teacher forcing or stopping
 during sampling.

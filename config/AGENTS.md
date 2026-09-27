@@ -8,16 +8,18 @@ groups. The result is validated at the stage boundary and stored with every dura
 | Path | Contract |
 | --- | --- |
 | `dataset/*.yaml` | Raw columns, split fractions, filtering, features, scaling, and Declare discovery. |
-| `model/*.yaml` | Architecture kind, public model name, dimensions, architecture parameters, and sampler where supported. |
-| `training/default.yaml` | Optimizer, step schedules, validation cadence, early stopping, sampling counts, and per-dataset regimes. |
-| `runtime/cuda.yaml` | Seed, per-dataset batch sizes, loader workers, device, and W&B settings. |
+| `model/*.yaml` | Architecture class path, dimensions, architecture parameters, and sampler where supported. |
+| `training/default.yaml` | Dataset-independent optimizer, clipping, early stopping, and sampling counts. |
+| `regime/<dataset>.yaml` | Learning rate, warmup, step budget, validation cadence and sizes, patience, and batch size for one dataset. |
+| `runtime/cuda.yaml` | Seed, device, loader workers, and W&B settings. |
 | `output/default.yaml` | Hydra run and sweep directories with `hydra.job.chdir: false`. |
 | Stage YAML | Defaults composition, required inputs, runtime overrides, and output resolvers. |
 
 ## Rules
 
-- Keep `model._target_` aligned with `model.kind` and `model.name` aligned with `RunIdentity`,
-  output paths, and visualization labels.
+- `model._target_` is the only model identity. Its architecture package, read by
+  `src.models.architectures.architecture_of`, names the model in `RunIdentity`, output paths, and
+  visualization labels. Do not add a separate model name or kind field.
 - The diffusion model separates `diffusion.steps` noise levels from `diffusion.sampler.calls`
   denoiser calls. The sampler uses DDIM, calls must not exceed `diffusion.sampler.start_level`,
   and the start level must not exceed the noise levels. `diffusion.sampler.eta` lies in `[0, 1]`.
@@ -25,8 +27,11 @@ groups. The result is validated at the stage boundary and stored with every dura
   stochasticity. Require an explicit start level in every diffusion configuration.
 - Add or change fields together with their checks in `src/config_validation/`. Reject invalid values before
   reading large artifacts or starting model work.
-- Keep dataset-specific training values under `training.regimes.<dataset>` and batch sizes under
-  `dataloader.batch_sizes.<dataset>` so a dataset override selects a complete regime.
+- Keep dataset-specific training values in `regime/<dataset>.yaml`. `train.yaml` selects it with
+  `regime: ${dataset}`, so a dataset override selects a complete regime and the resolved
+  configuration carries only the active values. Every regime sets every regime field.
+- Do not add fields derivable from other fields, such as the train fraction implied by
+  `data.val_split` and `data.test_split`.
 - Express training duration, warmup, and validation cadence in optimizer steps. Express early
   stopping patience in validation checks.
 - Keep optional CLI overrides as `null` in stage configuration and apply them explicitly to the

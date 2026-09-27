@@ -18,6 +18,7 @@ from src.evaluation.metrics.metadata import Owner
 from src.inference.generate import generation_batch_size
 from src.logs import Split
 from src.logs.declare import ConformanceChecker
+from src.models.architectures import architecture_of
 from src.models.base import SuffixModel
 from src.models.persistence.io import save_checkpoint
 from src.selection import SELECTION_METRIC
@@ -134,8 +135,8 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
             'output': output_path('best.pt').parent,
             'run': run,
             'dataset': config.data.name,
-            'model': config.model.name,
-            'device': config.training.device,
+            'model': run.model,
+            'device': config.device,
             'steps': f'at most {config.training.max_steps:,}, validating every '
             f'{config.training.val_every_n_steps:,}',
             'batch': f'{config.dataloader.batch_size} pairs, '
@@ -153,8 +154,8 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
     with step('Loading the dataset codec'):
         codec = DatasetCodec.load(config.data)
 
-    with step(f'Building the model and moving it onto {config.training.device}'):
-        model = SuffixModel.from_config(config.model, codec).to(config.training.device)
+    with step(f'Building the model and moving it onto {config.device}'):
+        model = SuffixModel.from_config(config.model, codec).to(config.device)
         parameters = sum(parameter.numel() for parameter in model.parameters())
         print(f'  {parameters:,} parameters', flush=True)
 
@@ -224,7 +225,7 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
             warmup_steps=config.optimizer.warmup_steps,
             min_lr_factor=config.optimizer.min_lr_factor,
         ),
-        device=torch.device(config.training.device),
+        device=torch.device(config.device),
         seed=config.seed,
         max_steps=config.training.max_steps,
         val_every_n_steps=config.training.val_every_n_steps,
@@ -281,7 +282,9 @@ def main(cfg: DictConfig) -> None:
     validate_experiment_config(cfg)
     run(
         cfg,
-        artifacts.RunIdentity(dataset=cfg.data.name, model=cfg.model.name, run_id=cfg.run_id),
+        artifacts.RunIdentity(
+            dataset=cfg.data.name, model=architecture_of(cfg.model._target_), run_id=cfg.run_id
+        ),
     )
 
 

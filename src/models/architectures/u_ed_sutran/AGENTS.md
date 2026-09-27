@@ -91,7 +91,8 @@ average traces across the batch. Preserve the shared loss metrics and summed-per
 contract. Do not add GradNorm or independent task weighting.
 
 Likelihood draws use a device-local advancing generator during training and a freshly seeded local
-generator during validation. Validation generation uses the training runner's isolated seeded RNG
+generator during validation. Both are seeded from the global seed at model construction, which is
+the run's `seed`. Validation generation uses the training runner's isolated seeded RNG
 context and the existing generation-based selection metric. Repeated validation of an unchanged
 checkpoint must be reproducible without depending on prior global random state.
 
@@ -115,9 +116,8 @@ independent masks and random draws; cached decoding must not share randomness ac
 
 Return the shared `GeneratedSuffix` shapes from [the model guide](../../AGENTS.md). EOT and later
 positions become PAD with zero standardized durations. Length counts retained events before EOT;
-rows reaching the cap set `used_sentinel`. Derive remaining time from retained inter-event times
-through inverse scaling, nonnegative clamping, summation, and remaining-time standardization.
-Do not add an independently generated remaining-time head or expose true suffix fields to sampling.
+rows reaching the cap set `used_sentinel`. Do not add an independently generated remaining-time
+head or expose true suffix fields to sampling.
 
 ## Integration and Provenance
 
@@ -141,7 +141,7 @@ Preserve these behaviors:
 - Epistemic variation with aleatoric draws fixed, aleatoric variation with dropout disabled, and
   independent dropout masks and draws across sample rows.
 - Prefix-only generation, event-feature handling, output shapes, EOT termination, padding, sentinel
-  behavior, remaining-time conversion, checkpoint reload, and mode restoration after failure.
+  behavior, checkpoint reload, and mode restoration after failure.
 
 Follow the root guide's disposable-check policy for local verification and inspect Hydra
 configuration. Never launch training, sampler tuning, full test generation, or full evaluation

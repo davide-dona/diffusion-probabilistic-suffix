@@ -14,11 +14,10 @@ def validate_data(data: DictConfig) -> None:
     """
     validate_dataset(data.name)
 
-    splits = [data.train_split, data.val_split, data.test_split]
-    for value in splits:
-        validate_number(value, 'split fraction')
-    if abs(sum(splits) - 1) > 1e-6:
-        raise ValueError('train/val/test splits must sum to 1')
+    for key in ('val_split', 'test_split'):
+        validate_number(data[key], f'data.{key}')
+    if data.val_split + data.test_split >= 1:
+        raise ValueError('data.val_split and data.test_split must leave a train split')
 
     for key in ('max_seq_len_percentile', 'max_case_duration_percentile'):
         validate_number(data[key], f'data.{key}')

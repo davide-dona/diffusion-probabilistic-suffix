@@ -11,6 +11,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
 from src.artifacts import RunIdentity, dataset_output_dir, model_output_dir
+from src.models.architectures import architecture_of
 
 
 def _available(path: Path) -> Path:
@@ -31,12 +32,14 @@ def _dataset_subdir(stage: str, dataset: str, invocation_id: str) -> str:
     return _subdir(stage, dataset_output_dir(stage, dataset, invocation_id))
 
 
-def _model_output(stage: str, dataset: str, model: str, run_id: str) -> str:
-    return _available(model_output_dir(stage, RunIdentity(dataset, model, run_id))).as_posix()
+def _model_output(stage: str, dataset: str, target: str, run_id: str) -> str:
+    run = RunIdentity(dataset, architecture_of(target), run_id)
+    return _available(model_output_dir(stage, run)).as_posix()
 
 
-def _model_subdir(stage: str, dataset: str, model: str, run_id: str) -> str:
-    return _subdir(stage, model_output_dir(stage, RunIdentity(dataset, model, run_id)))
+def _model_subdir(stage: str, dataset: str, target: str, run_id: str) -> str:
+    run = RunIdentity(dataset, architecture_of(target), run_id)
+    return _subdir(stage, model_output_dir(stage, run))
 
 
 @cache

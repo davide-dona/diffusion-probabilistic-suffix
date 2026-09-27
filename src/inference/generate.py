@@ -58,13 +58,9 @@ def generate_batch(
     lengths = generated.lengths.cpu().numpy()  # [batch_size, num_samples]
     # [batch_size, num_samples, steps]
     inter_event_times = generated.inter_event_times.cpu().numpy()
-    remaining_time = generated.remaining_time.cpu().numpy()  # [batch_size, num_samples]
     used_sentinel = generated.used_sentinel.cpu().numpy()
     true_activities = batch.suffix.activities.cpu().numpy()  # [batch_size, seq_len]
     true_inter_event_times = batch.inter_event_times.cpu().numpy()  # [batch_size, seq_len]
-    # Position 0 answers for the last prefix event, which is what a remaining time is measured
-    # from.
-    true_remaining_time = batch.remaining_times[:, 0].cpu().numpy()  # [batch_size]
     prefix_activities = batch.prefix.activities.cpu().numpy()  # [batch_size, seq_len]
     prefix_lengths = batch.prefix.length.cpu().numpy()  # [batch_size]
 
@@ -82,7 +78,6 @@ def generate_batch(
                         activities=activities[position, sample],
                         inter_event_times=inter_event_times[position, sample],
                         length=lengths[position, sample],
-                        remaining_time=remaining_time[position, sample],
                         used_eot_sentinel=used_sentinel[position, sample],
                         clamp=True,
                     )
@@ -95,7 +90,6 @@ def generate_batch(
                 activities=true_activities[position],
                 inter_event_times=true_inter_event_times[position],
                 length=true_lengths[position],
-                remaining_time=true_remaining_time[position],
             ),
         )
         for position in range(len(true_lengths))
@@ -109,7 +103,6 @@ def _decode(
     activities: np.ndarray,
     inter_event_times: np.ndarray,
     length: int,
-    remaining_time: float,
     used_eot_sentinel: bool = False,
     clamp: bool = False,
 ) -> DecodedEvents:
@@ -122,20 +115,16 @@ def _decode(
         inter_event_times: The run's standardized inter-event time before each activity,
             `[steps]`.
         length: How many of them are events, the rest being the EOT and the padding behind it.
-        remaining_time: The run's standardized remaining time.
         clamp: Whether to floor the denormalized times at 0, matching the baselines' behaviour on
             a model prediction. Left off for ground truth, which is never negative to begin with.
     Returns:
         The run as the report and the generations file hold it.
     """
     inter_event_time_minutes = codec.inter_event_time.denormalize(inter_event_times[:length])
-    remaining_time_minutes = float(codec.remaining_time.denormalize(remaining_time))
     if clamp:
         inter_event_time_minutes = np.maximum(inter_event_time_minutes, 0.0)
-        remaining_time_minutes = max(remaining_time_minutes, 0.0)
     return DecodedEvents(
         activities=activity_codec.encode(codec.activity.decode(activities, length=length)),
         inter_event_time_minutes=inter_event_time_minutes.tolist(),
-        remaining_time_minutes=remaining_time_minutes,
         used_eot_sentinel=used_eot_sentinel,
     )

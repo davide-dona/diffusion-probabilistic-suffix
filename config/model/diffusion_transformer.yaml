@@ -1,8 +1,6 @@
 defaults:
 - _self_
 _target_: src.models.architectures.diffusion_transformer.model.DiffusionTransformer
-kind: diffusion_transformer
-name: diffusion_transformer
 d_model: 32
 embeddings:
   activity_dim: 32
@@ -21,7 +19,4 @@ diffusion:
     calls: 50
     start_level: 990
     eta: 0.0
-  activity_schedule:
-    cosine_offset: 0.008
-  time_schedule:
-    cosine_offset: 0.008
+  cosine_offset: 0.008

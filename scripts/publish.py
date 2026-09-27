@@ -62,8 +62,8 @@ def run(model_paths: list[Path]) -> None:
         require_generation_ready(checkpoint)
         # The destination comes from the run's identity, not the checkpoint's filename, making it
         # invariant to local naming.
-        dataset = checkpoint['config']['data']['name']
-        model = checkpoint['config']['model']['name']
+        run = artifacts.Provenance.from_dict(checkpoint['provenance']).run
+        dataset, model = run.dataset, run.model
         label = f'{dataset}/{model}'
 
         fetched_to = artifacts.PRETRAINED.path(dataset=dataset, model=model)

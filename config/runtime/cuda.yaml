@@ -1,15 +1,8 @@
 # @package _global_
 seed: 42
+device: cuda:0
 dataloader:
-  batch_size: ${oc.select:dataloader.batch_sizes.${data.name}}
-  batch_sizes:
-    sepsis: 256
-    bpic12: 128
-    bpic17: 2048
-    bpic19: 2048
   num_workers: 12
-training:
-  device: cuda:0
 wandb:
   project: diffusion-probabilistic-suffix
   mode: online

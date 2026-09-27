@@ -100,7 +100,7 @@ def run(
     Args:
         checkpoint_path: The checkpoint to search for. Named rather than guessed at, as
             `pipelines.generate` names it, and it carries the config of the run that wrote it.
-        device: Overrides the run's own `training.device`. `None` keeps it.
+        device: Overrides the run's own `device`. `None` keeps it.
         pairs: Validation prefixes to search over, or `None` for the run's own
             `training.generation_pairs`. The same subset at every grid point.
         samples: Suffixes drawn per prefix at each point, or `None` for the run's own
@@ -122,7 +122,7 @@ def run(
     )
     config = OmegaConf.create(checkpoint['config'])
     if device is not None:
-        config.training.device = device
+        config.device = device
     if num_workers is not None:
         config.dataloader.num_workers = num_workers
     if pairs is not None:
@@ -148,7 +148,7 @@ def run(
 
     report_path = output_path('tuning.json')
     tuned_checkpoint_path = output_path('tuned.pt')
-    torch_device = torch.device(config.training.device)
+    torch_device = torch.device(config.device)
     grid = [
         OmegaConf.create({'temperature': temperature, 'top_p': top_p})
         for temperature, top_p in itertools.product(temperatures, top_ps)
@@ -160,7 +160,7 @@ def run(
             'checkpoint_sha256': checkpoint_hash,
             'run': run,
             'dataset': config.data.name,
-            'model': config.model.name,
+            'model': run.model,
             'device': torch_device,
             'split': f'{Split.VAL}, {pairs:,} prefixes, {samples} suffixes each',
             'grid': f'{len(grid)} points over temperature {temperatures} and top_p {top_ps}',
@@ -174,10 +174,10 @@ def run(
         codec = DatasetCodec.load(config.data)
 
     with step(f'Building the model and moving it onto {torch_device}'):
-        model = SuffixModel.from_checkpoint(checkpoint, codec, device=config.training.device)
+        model = SuffixModel.from_checkpoint(checkpoint, codec, device=config.device)
         model.eval()
     if not isinstance(model, HeadSamplingTransformer):
-        raise ValueError(f'{config.model.kind} does not support sampler tuning.')
+        raise ValueError(f'{run.model} does not support sampler tuning.')
 
     with step(f'Reading and encoding the {Split.VAL} split'):
         validation_dataset = TraceDataset(codec=codec, split=Split.VAL)

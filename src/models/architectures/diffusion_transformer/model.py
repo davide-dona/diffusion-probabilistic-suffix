@@ -29,12 +29,10 @@ class DiffusionTransformer(SuffixModel):
         self.sampling_start_level = config.diffusion.sampler.start_level
         self.sampling_eta = config.diffusion.sampler.eta
         self.activities = CategoricalDiffusion(
-            codec=codec,
-            steps=self.steps,
-            cosine_offset=config.diffusion.activity_schedule.cosine_offset,
+            codec=codec, steps=self.steps, cosine_offset=config.diffusion.cosine_offset
         )
         self.times = GaussianDiffusion(
-            steps=self.steps, cosine_offset=config.diffusion.time_schedule.cosine_offset
+            steps=self.steps, cosine_offset=config.diffusion.cosine_offset
         )
         self.denoiser = DiffusionDenoiser(
             config=config, codec=codec, num_activities=self.activities.num_activities
@@ -154,12 +152,10 @@ class DiffusionTransformer(SuffixModel):
         keep = positions < lengths.unsqueeze(dim=1)  # [1, T] < [B * S, 1] -> [B * S, T]
         codec_activities = codec_activities.masked_fill(~keep, self.pad_activity_index)
         times = times.masked_fill(~keep, self.standardized_zero)
-        remaining = self._remaining_time(times=times, keep=keep)  # [B * S]
         generated = GeneratedSuffix(
             activities=codec_activities,
             lengths=lengths,
             inter_event_times=times,
-            remaining_time=remaining,
             used_sentinel=used_sentinel,
         )
         return self._per_sample(generated=generated, batch_size=batch_size)

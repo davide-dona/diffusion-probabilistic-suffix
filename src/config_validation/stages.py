@@ -6,6 +6,7 @@ from omegaconf import DictConfig, OmegaConf
 from src.config_validation.data import validate_data, validate_declare
 from src.config_validation.model import validate_model, validate_sampling
 from src.config_validation.primitives import validate_number, validate_string_list
+from src.models.architectures import architecture_of
 
 
 def validate_preprocess_config(config: DictConfig) -> None:
@@ -37,11 +38,11 @@ def validate_experiment_config(config: DictConfig) -> None:
     if training.grad_clip_norm is not None:
         validate_number(training.grad_clip_norm, 'training.grad_clip_norm')
     device_is_valid = (
-        isinstance(training.device, str)
-        and re.fullmatch(r'(cpu|mps|cuda(:\d+)?)', training.device) is not None
+        isinstance(config.device, str)
+        and re.fullmatch(r'(cpu|mps|cuda(:\d+)?)', config.device) is not None
     )
     if not device_is_valid:
-        raise ValueError('training.device must be cpu, mps, cuda, or cuda:<index>')
+        raise ValueError('device must be cpu, mps, cuda, or cuda:<index>')
 
     validate_number(dataloader.batch_size, 'dataloader.batch_size', integer=True)
     validate_number(dataloader.num_workers, 'dataloader.num_workers', inclusive=True, integer=True)
@@ -89,8 +90,9 @@ def validate_tuning_config(
 ) -> None:
     """Validate effective tuning configuration and the Cartesian sampler grid."""
     validate_experiment_config(config)
-    if config.model.kind != 'head_sampling_transformer':
-        raise ValueError(f'{config.model.kind} does not support sampler tuning')
+    architecture = architecture_of(config.model._target_)
+    if architecture != 'head_sampling_transformer':
+        raise ValueError(f'{architecture} does not support sampler tuning')
 
     if not temperatures or not top_ps:
         raise ValueError('Sampler grid cannot be empty')

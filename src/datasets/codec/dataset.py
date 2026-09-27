@@ -24,7 +24,6 @@ from src.logs import (
     ACTIVITY_KEY,
     CASE_KEY,
     INTER_EVENT_TIME_KEY,
-    REMAINING_TIME_KEY,
     RESOURCE_KEY,
     Split,
     read_log,
@@ -39,10 +38,8 @@ class DatasetCodec(BaseModel):
 
     activity: CategoricalColumn
     resource: CategoricalColumn
-    # inter_event_time is read by both the encoders and the decoder; remaining_time is
-    # decoder-only.
+    # Read by both the encoders and the decoder.
     inter_event_time: NumericColumn
-    remaining_time: NumericColumn
 
     # The columns `data.event_features` names, sorted by dtype into the two kinds.
     categorical_features: tuple[CategoricalColumn, ...]
@@ -81,7 +78,7 @@ class DatasetCodec(BaseModel):
         Args:
             train: The train split, as `pipelines/preprocess.py` holds it before writing.
             data_config: The `data` section, for the feature columns, which of them are
-                log-scaled, and how the two time targets are scaled.
+                log-scaled, and whether the inter-event time is.
             max_trace_length: The sequence length splits were preprocessed to, from
                 `pipelines.preprocess.case_length_cutoff`.
         Returns:
@@ -101,9 +98,6 @@ class DatasetCodec(BaseModel):
             ),
             inter_event_time=NumericColumn.fit(
                 train, column=INTER_EVENT_TIME_KEY, log=data_config.log_scaled_inter_event_time
-            ),
-            remaining_time=NumericColumn.fit(
-                train, column=REMAINING_TIME_KEY, log=data_config.log_scaled_remaining_time
             ),
             categorical_features=categorical_features,
             numeric_features=numeric_features,

@@ -69,8 +69,7 @@ deterministic default.
 
 Initial EOT is forbidden when a masked activity is sampled. After sampling, the first EOT sets the
 length; positions from EOT onward become PAD and standardized zero time. If no EOT appears,
-`used_sentinel` is true and the length is the full canvas. Remaining time is derived from decoded,
-nonnegative inter-event times. A residual MASK is an error. Generation metadata stores the
+`used_sentinel` is true and the length is the full canvas. A residual MASK is an error. Generation metadata stores the
 sampling and noise schedule configuration together with checkpoint provenance.
 
 ## Validation
