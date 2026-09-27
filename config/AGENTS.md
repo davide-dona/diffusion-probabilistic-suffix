@@ -23,6 +23,9 @@ groups. The result is validated at the stage boundary and stored with every dura
   and the start level must not exceed the noise levels. `diffusion.sampler.eta` lies in `[0, 1]`.
   The default is 1000 levels, 50 calls starting at level 990, and zero Gaussian sampling
   stochasticity. Require an explicit start level in every diffusion configuration.
+- Diffusion model configurations require `self_conditioning.enabled`. The named
+  `diffusion_transformer_self_conditioned` configuration enables it while retaining the baseline
+  noise schedules, losses, and sampler settings.
 - Add or change fields together with their checks in `src/config_validation/`. Reject invalid values before
   reading large artifacts or starting model work.
 - Keep dataset-specific training values under `training.regimes.<dataset>` and batch sizes under

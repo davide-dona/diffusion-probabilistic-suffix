@@ -104,6 +104,10 @@ def _validate_uncertainty(model: DictConfig) -> None:
 def _validate_diffusion_transformer(model: DictConfig) -> None:
     if 'denoiser' in model:
         raise ValueError('model.denoiser is not supported')
+    if 'self_conditioning' not in model or set(model.self_conditioning) != {'enabled'}:
+        raise ValueError('model.self_conditioning must contain exactly enabled')
+    if not isinstance(model.self_conditioning.enabled, bool):
+        raise ValueError('model.self_conditioning.enabled must be a boolean')
     if 'prefix_encoder' not in model or set(model.prefix_encoder) != {'num_layers'}:
         raise ValueError('model.prefix_encoder must contain exactly num_layers')
     validate_number(

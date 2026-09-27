@@ -21,6 +21,19 @@ def sequence_similarity(predicted: Sequence[Hashable], true: Sequence[Hashable])
     )
 
 
+def _dld(
+    queries: Sequence[Sequence[Hashable]], choices: Sequence[Sequence[Hashable]]
+) -> np.ndarray:
+    """Return pairwise normalized Damerau-Levenshtein distances."""
+    similarities = process.cdist(
+        queries=[(*sequence, END_CODE) for sequence in queries],
+        choices=[(*sequence, END_CODE) for sequence in choices],
+        scorer=DamerauLevenshtein.normalized_similarity,
+        dtype=np.float64,
+    )
+    return np.subtract(1.0, similarities, out=similarities)
+
+
 @METRICS.register(
     'dls_sample_mean',
     label='DLS sample mean',
@@ -45,6 +58,31 @@ def dls_sample_mean(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
+    'pairwise_activity_distance',
+    label='Mean pairwise activity distance',
+    group=MetricGroup.ACTIVITY,
+    bounds=(0.0, 1.0),
+    diagnostic=True,
+)
+def pairwise_activity_distance(context: PreparedPrefix) -> float:
+    """Return the draw-weighted DLD between different sampled suffixes.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        Mean distance over ordered pairs of distinct draws. Fewer than two draws score zero.
+    """
+    samples = context.generation.samples
+    draw_count = len(samples)
+    if draw_count < 2:
+        return 0.0
+    counts = np.asarray(samples.counts, dtype=np.float64)
+    distances = _dld(samples.suffixes, samples.suffixes)
+    return float(counts @ distances @ counts) / (draw_count * (draw_count - 1))
+
+
+@METRICS.register(
     'energy_score_dls',
     label='DLS energy score',
     publication_label=r'$ES_{\mathrm{DL}}$',
@@ -52,7 +90,7 @@ def dls_sample_mean(context: PreparedPrefix) -> float:
     direction=Direction.LOWER,
 )
 def energy_score_dls(context: PreparedPrefix) -> float:
-    """Return the sampled activity energy score on normalized DLS distance.
+    """Return the sampled activity energy score on normalized DLD.
 
     Args:
         context: Prepared samples, truth, and full-trace constraint checks for one prefix.
@@ -62,24 +100,12 @@ def energy_score_dls(context: PreparedPrefix) -> float:
         1.0; a singleton has no diversity correction.
     """
 
-    def distance(
-        queries: Sequence[Sequence[Hashable]], choices: Sequence[Sequence[Hashable]]
-    ) -> np.ndarray:
-        """Return pairwise normalized Damerau-Levenshtein distances."""
-        similarities = process.cdist(
-            queries=[(*sequence, END_CODE) for sequence in queries],
-            choices=[(*sequence, END_CODE) for sequence in choices],
-            scorer=DamerauLevenshtein.normalized_similarity,
-            dtype=np.float64,
-        )
-        return np.subtract(1.0, similarities, out=similarities)
-
     samples, truth = context.generation.samples, context.generation.truth
     return energy_score(
         distinct_draw_values=samples.suffixes,
         truth=truth.activities,
         draw_counts=samples.counts,
-        distance=distance,
+        distance=_dld,
     )
 
 

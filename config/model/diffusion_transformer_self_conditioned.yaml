@@ -1,0 +1,6 @@
+defaults:
+- diffusion_transformer
+- _self_
+name: diffusion_transformer_self_conditioned
+self_conditioning:
+  enabled: true

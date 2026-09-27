@@ -5,7 +5,10 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.models.architectures.diffusion_transformer.denoiser import DiffusionDenoiser
+from src.models.architectures.diffusion_transformer.denoiser import (
+    DiffusionDenoiser,
+    PrefixMemory,
+)
 from src.models.architectures.diffusion_transformer.process import (
     CategoricalDiffusion,
     GaussianDiffusion,
@@ -28,6 +31,7 @@ class DiffusionTransformer(SuffixModel):
         self.sampling_calls = config.diffusion.sampler.calls
         self.sampling_start_level = config.diffusion.sampler.start_level
         self.sampling_eta = config.diffusion.sampler.eta
+        self.self_conditioning = config.self_conditioning.enabled
         self.activities = CategoricalDiffusion(
             codec=codec,
             steps=self.steps,
@@ -52,11 +56,19 @@ class DiffusionTransformer(SuffixModel):
         noisy_activity = self.activities.corrupt(clean=clean_activity, timestep=timestep)  # [B, T]
         noisy_time, noise = self.times.corrupt(clean=clean_time, timestep=timestep)  # [B, T]
         prefix = self.denoiser.encode_prefix(item.prefix)
+        activity_prior = self._training_activity_prior(
+            prefix=prefix,
+            clean_time=clean_time,
+            noisy_activity=noisy_activity,
+            noise=noise,
+            timestep=timestep,
+        )
         logits, predicted_noise = self.denoiser(
             prefix=prefix,
             activities=noisy_activity,
             times=noisy_time,
             timestep=timestep,
+            activity_prior=activity_prior,
         )
         return DiffusionOutput(
             activity_logits=logits,
@@ -111,12 +123,17 @@ class DiffusionTransformer(SuffixModel):
         times = torch.randn(
             size=(rows, self.canvas_length), device=prefix.hidden.device
         )  # [B * S, T]
+        activity_prior = None
         for step, previous_step in self._reverse_grid():
             timestep = torch.full(
                 size=(rows,), fill_value=step, dtype=torch.long, device=activities.device
             )  # [B * S]
             logits, noise = self.denoiser(
-                prefix=prefix, activities=activities, times=times, timestep=timestep
+                prefix=prefix,
+                activities=activities,
+                times=times,
+                timestep=timestep,
+                activity_prior=activity_prior,
             )
             probabilities = self.activities.constrain_logits(logits).softmax(dim=-1)
             activities = self.activities.sample_reverse(
@@ -125,6 +142,10 @@ class DiffusionTransformer(SuffixModel):
                 step=step,
                 previous_step=previous_step,
             )  # [B * S, T]
+            if self.self_conditioning:
+                activity_prior = probabilities.masked_fill(
+                    activities.ne(self.activities.mask_index).unsqueeze(dim=-1), 0.0
+                )  # [B * S, T, K]
             times = self.times.sample_reverse(
                 times=times,
                 noise=noise,
@@ -163,6 +184,55 @@ class DiffusionTransformer(SuffixModel):
             used_sentinel=used_sentinel,
         )
         return self._per_sample(generated=generated, batch_size=batch_size)
+
+    def _training_activity_prior(
+        self,
+        *,
+        prefix: PrefixMemory,
+        clean_time: torch.Tensor,
+        noisy_activity: torch.Tensor,
+        noise: torch.Tensor,
+        timestep: torch.Tensor,
+    ) -> torch.Tensor | None:
+        """Predict a detached activity prior at the preceding sampler level."""
+        if (
+            not self.self_conditioning
+            or self.sampling_calls == 1
+            or torch.rand((), device=timestep.device) >= 0.5
+        ):
+            return None
+
+        levels = torch.tensor(
+            [step for step, _ in self._reverse_grid()][::-1], device=timestep.device
+        )
+        indices = torch.searchsorted(levels, timestep, right=True)
+        has_predecessor = indices.lt(levels.numel())
+        if not has_predecessor.any():
+            return None
+        earlier_level = torch.where(
+            has_predecessor, levels[indices.clamp_max(levels.numel() - 1)], timestep
+        )
+        current_signal = self.activities.alpha_bars[timestep - 1]
+        earlier_signal = self.activities.alpha_bars[earlier_level - 1]
+        still_visible = (
+            torch.rand_like(noisy_activity, dtype=torch.float32)
+            < (
+                earlier_signal / current_signal.clamp_min(torch.finfo(current_signal.dtype).tiny)
+            ).unsqueeze(dim=1)
+        ) & noisy_activity.ne(self.activities.mask_index)
+        earlier_activity = noisy_activity.masked_fill(~still_visible, self.activities.mask_index)
+        time_signal = self.times.alpha_bars[earlier_level - 1].unsqueeze(dim=1)
+        earlier_time = time_signal.sqrt() * clean_time + (1 - time_signal).sqrt() * noise
+        with torch.no_grad():
+            logits, _ = self.denoiser(
+                prefix=prefix,
+                activities=earlier_activity,
+                times=earlier_time,
+                timestep=earlier_level,
+            )
+            probabilities = self.activities.constrain_logits(logits).softmax(dim=-1)
+        active = noisy_activity.eq(self.activities.mask_index) & has_predecessor.unsqueeze(dim=1)
+        return probabilities.masked_fill(~active.unsqueeze(dim=-1), 0.0)
 
     def _clean_canvas(self, batch: TraceCut) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Build fixed width clean activity and time canvases with their masks."""

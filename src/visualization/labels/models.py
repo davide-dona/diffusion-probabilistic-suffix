@@ -22,5 +22,11 @@ MODELS = {
     'diffusion_transformer': ModelStyle(
         label='Diffusion Transformer', color='#2A7F9E', marker='^', linestyle='-'
     ),
+    'diffusion_transformer_self_conditioned': ModelStyle(
+        label='Diffusion Transformer (self-conditioned)',
+        color='#A65C9B',
+        marker='v',
+        linestyle='--',
+    ),
     'u_ed_sutran': ModelStyle(label='U-ED-SuTraN', color='#57834B', marker='P', linestyle='--'),
 }

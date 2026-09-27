@@ -13,6 +13,13 @@ may use a true suffix field. The denoiser encodes the observed event sequence on
 bidirectional suffix decoder with cross-attention to those states. Generation caches encoded prefix
 states across samples and diffusion calls.
 
+The `self_conditioning.enabled` model setting is required. The baseline disables it. When enabled,
+the decoder also receives the previous call's soft clean-activity probabilities at positions still
+MASK. The first call has no prior, and each sample carries its own prior. Revealed activities remain
+fixed. During training, half of batches use a detached preliminary prediction at the next higher
+sampling-grid level, with activity masks coupled to the current level and the same Gaussian time
+noise. The remaining batches use no prior. The activity and time losses are unchanged.
+
 ## Observed Comparison
 
 As of 2026-09-26, the selected Sepsis validation activity energy score was 0.2966 for the prefix
@@ -23,8 +30,8 @@ comparison. BPIC12 shows a provisional improvement in selection score, while the
 run currently trails its joint baseline. Do not describe these results as a demonstrated improvement
 across all datasets.
 
-Checkpoint configurations require `prefix_encoder.num_layers` and an explicit
-`diffusion.sampler.start_level`. The obsolete `denoiser` field is invalid.
+Checkpoint configurations require `prefix_encoder.num_layers`, `self_conditioning.enabled`, and an
+explicit `diffusion.sampler.start_level`. The obsolete `denoiser` field is invalid.
 
 ## Clean Canvas and Forward Processes
 

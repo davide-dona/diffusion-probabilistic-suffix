@@ -37,8 +37,8 @@ and standardized time means and log-variances `[B, T]`.
   to the requested device, and returns evaluation mode. Do not reconstruct from a current YAML file.
 - `src.artifacts` owns `RunIdentity` and `Provenance`. `src.inference.tuning` owns the sampler
   readiness rule and the tuned checkpoint payload; persistence owns its file write.
-- Diffusion checkpoints require the current prefix encoder configuration and an explicit sampler
-  start level.
+- Diffusion checkpoints require the current prefix encoder and self-conditioning configurations
+  and an explicit sampler start level.
 - Save the repeatedly replaced best checkpoint through a temporary `.pt.tmp` file. Checkpoints
   written once may be written directly to their final destination.
 

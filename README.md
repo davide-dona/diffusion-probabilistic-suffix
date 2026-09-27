@@ -93,7 +93,7 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
 Available model configs are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
-(U-ED-SuTraN), and `diffusion_transformer`.
+(U-ED-SuTraN), `diffusion_transformer`, and `diffusion_transformer_self_conditioned`.
 U-ED-SuTraN shares SuTraN-PH's encoder and causal
 decoder, adding MC dropout and learned activity-logit and time variances. Its defaults use 20
 categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
@@ -105,7 +105,11 @@ loss supervises real events and all EOT positions in the fixed suffix canvas. A 
 encoder processes the observed events once. A four-layer bidirectional suffix decoder cross-attends
 to the cached prefix states at each sampling call. Compare sampler and model settings on validation
 data before final test generation. Checkpoints require the current model configuration, including
-`_target_` and `diffusion.sampler.start_level`.
+`_target_`, `diffusion.sampler.start_level`, and `self_conditioning.enabled`. The self-conditioned
+variant carries the previous call's soft activity probabilities for still-masked positions without
+changing when activities are revealed.
+See [the self-conditioning experiment](experiments/self_conditioning.md) for the matched validation
+comparison and run commands.
 
 Train the diffusion model with:
 
@@ -169,8 +173,10 @@ The report and its per-prefix scores are written under
 `scores.suffix_length`, `scores.remaining_time`, `scores.inter_event_time`, and
 `scores.conformance`, both overall and within each length bucket.
 
-DLS sample mean and suffix-length MAE are validation diagnostics, logged to W&B under
-`diagnostic_activity/dls_sample_mean` and `diagnostic_suffix_length/suffix_length_mae`.
+DLS sample mean, mean pairwise activity distance, and suffix-length MAE are validation diagnostics,
+logged to W&B under `diagnostic_activity/dls_sample_mean`,
+`diagnostic_activity/pairwise_activity_distance`, and
+`diagnostic_suffix_length/suffix_length_mae`.
 They are excluded from final reports, score files, and publication comparisons.
 
 Generation metrics are logged under `generation_<group>/<metric>`. Only model-owned metrics are

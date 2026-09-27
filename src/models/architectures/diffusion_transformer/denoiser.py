@@ -88,6 +88,11 @@ class DiffusionDenoiser(nn.Module):
             num_layers=config.transformer.num_layers,
             norm=nn.LayerNorm(normalized_shape=d_model),
         )
+        self.self_condition_projection = (
+            nn.Linear(in_features=num_activities, out_features=d_model, bias=False)
+            if config.self_conditioning.enabled
+            else None
+        )
 
     def encode_prefix(self, prefix: Events) -> PrefixMemory:
         """Encode observed events once, excluding padding beyond the longest prefix."""
@@ -109,9 +114,15 @@ class DiffusionDenoiser(nn.Module):
         activities: torch.Tensor,
         times: torch.Tensor,
         timestep: torch.Tensor,
+        activity_prior: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Predict both channels from a noisy suffix with full suffix self-attention."""
-        suffix = self._embed_suffix(activities=activities, times=times, timestep=timestep)
+        suffix = self._embed_suffix(
+            activities=activities,
+            times=times,
+            timestep=timestep,
+            activity_prior=activity_prior,
+        )
         hidden = self.suffix_decoder(
             tgt=suffix,
             memory=prefix.hidden,
@@ -131,15 +142,19 @@ class DiffusionDenoiser(nn.Module):
         activities: torch.Tensor,
         times: torch.Tensor,
         timestep: torch.Tensor,
+        activity_prior: torch.Tensor | None,
     ) -> torch.Tensor:
-        """Combine noisy suffix content, positions, segment, and timestep."""
+        """Combine noisy suffix content, earlier activity probabilities, and position."""
         activity = self.suffix_activity_embedding(activities)  # [B, T, A]
         features = torch.cat(tensors=(activity, times.unsqueeze(dim=-1)), dim=-1)  # [B, T, A + 1]
         hidden = self.suffix_projection(features)  # [B, T, A + 1] -> [B, T, D]
         positions = self.position_encoding[: hidden.size(dim=1)]  # [T, D]
         segment = self.segment_embedding.weight[1]  # [D]
         step = self._timestep_embedding(timestep)  # [B, 1, D]
-        return self.input_norm(self.dropout(hidden + positions + segment + step))  # [B, T, D]
+        hidden = hidden + positions + segment + step  # [B, T, D]
+        if self.self_condition_projection is not None and activity_prior is not None:
+            hidden = hidden + self.self_condition_projection(activity_prior)  # [B, T, D]
+        return self.input_norm(self.dropout(hidden))  # [B, T, D]
 
     def _timestep_embedding(self, timestep: torch.Tensor) -> torch.Tensor:
         """Encode one diffusion step per row as `[B, 1, D]`."""
