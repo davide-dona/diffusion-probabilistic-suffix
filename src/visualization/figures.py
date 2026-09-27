@@ -14,6 +14,7 @@ from src.evaluation.metrics.metadata import Direction, Metric, Owner
 from src.visualization import labels
 from src.visualization.catalogue import Plot
 from src.visualization.style import (
+    BAND_ALPHA,
     DATASET_HEIGHT,
     FIGURE_OVERHEAD,
     MAX_MARKERS,
@@ -34,11 +35,11 @@ AXIS_ARROWS = {
 
 
 def _draw_metric(axes: Axes, frame: pd.DataFrame, metric: Metric) -> int:
-    """Draw one metric.
+    """Draw one metric as the mean over runs, with a band of one standard deviation.
 
     Args:
         axes: Panel to draw on.
-        frame: Report rows for one dataset and breakdown.
+        frame: Summary rows for one dataset and breakdown.
         metric: Metric to display.
 
     Returns:
@@ -60,9 +61,18 @@ def _draw_metric(axes: Axes, frame: pd.DataFrame, metric: Metric) -> int:
     longest = 1
     for line, style in lines:
         longest = max(longest, int(line['length'].max()))
+        if metric.owner is not Owner.LOG and (line['runs'] > 1).any():
+            axes.fill_between(
+                line['length'],
+                line['mean'] - line['std'],
+                line['mean'] + line['std'],
+                color=style.color,
+                alpha=BAND_ALPHA,
+                linewidth=0,
+            )
         axes.plot(
             line['length'],
-            line['value'],
+            line['mean'],
             label=style.label,
             color=style.color,
             marker=style.marker,
@@ -79,7 +89,7 @@ def _draw_panel(
 
     Args:
         axes: Panel to draw on.
-        frame: Report rows for one dataset and breakdown.
+        frame: Summary rows for one dataset and breakdown.
         panel: Metrics displayed together.
         x_bins: Maximum x-axis tick bins.
 
@@ -120,7 +130,7 @@ def compose_figure(frame: pd.DataFrame, plot: Plot) -> Figure:
     """Compose a catalogue figure across all datasets.
 
     Args:
-        frame: Report rows.
+        frame: Summary rows, from `summarize_runs`.
         plot: Figure definition.
 
     Returns:

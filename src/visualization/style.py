@@ -15,6 +15,8 @@ PANEL_X_BINS = 5
 MAX_MARKERS = 8
 # Upper-bound headroom as a share of its range.
 Y_HEADROOM = 0.05
+# Opacity of the band of one standard deviation over runs.
+BAND_ALPHA = 0.2
 
 # Shared Matplotlib settings.
 _PAPER_RC = {

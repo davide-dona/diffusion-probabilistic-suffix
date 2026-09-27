@@ -1,3 +1,4 @@
+import math
 from collections.abc import Container, Sequence
 
 import pandas as pd
@@ -28,20 +29,41 @@ def _escape_latex(text: str) -> str:
     return text
 
 
-def _value(frame: pd.DataFrame, key: str) -> float:
-    """Read a metric value.
+def _value(frame: pd.DataFrame, key: str) -> tuple[float, float]:
+    """Read a metric's summary over runs.
 
     Args:
-        frame: Report rows for one model and dataset.
+        frame: Summary rows for one model and dataset.
         key: Metric key.
 
     Returns:
-        Metric value.
+        Mean over runs and its sample standard deviation, NaN for a single run.
     """
-    rows = frame.loc[frame['metric'] == key, 'value']
+    rows = frame.loc[frame['metric'] == key, ['mean', 'std']]
     if len(rows) != 1:
         raise ValueError(f'Expected one value for {key}, found {len(rows)}.')
-    return float(rows.iloc[0])
+    return float(rows['mean'].iloc[0]), float(rows['std'].iloc[0])
+
+
+def _cell(mean: float, std: float, *, bold: bool) -> str:
+    """Render one table cell as a value, or as mean and standard deviation over runs.
+
+    Args:
+        mean: Mean over runs.
+        std: Sample standard deviation over runs, NaN for a single run.
+        bold: Whether to emphasize the cell.
+
+    Returns:
+        LaTex cell contents.
+    """
+    written = f'{mean:.3f}'
+    if math.isnan(std):
+        return f'\\textbf{{{written}}}' if bold else written
+    spread = f'{std:.3f}'
+    if bold:
+        # `\textbf` does not reach math mode.
+        written, spread = f'\\mathbf{{{written}}}', f'\\mathbf{{{spread}}}'
+    return f'${written} \\pm {spread}$'
 
 
 def _row(
@@ -55,17 +77,14 @@ def _row(
 
     Args:
         columns: Metrics to render.
-        frame: Report rows for the model.
+        frame: Summary rows for the model.
         label: Model display label.
         best: Metrics to render in bold.
 
     Returns:
         One LaTex table row.
     """
-    cells = []
-    for metric in columns:
-        written = f'{_value(frame, metric.key):.3f}'
-        cells.append(f'\\textbf{{{written}}}' if metric.key in best else written)
+    cells = [_cell(*_value(frame, metric.key), bold=metric.key in best) for metric in columns]
     return '   & ' + ' & '.join([_escape_latex(label), *cells]) + ' \\\\'
 
 
@@ -79,7 +98,7 @@ def _block(
 
     Args:
         table: Table definition.
-        frame: Report rows for the dataset.
+        frame: Summary rows for the dataset.
         significance: Metrics to emphasize by model.
         models: Models in display order.
 
@@ -138,8 +157,10 @@ def _headers(table: Table) -> list[str]:
 def latex_table(frame: pd.DataFrame, table: Table, significance: pd.DataFrame) -> str:
     """Render a booktabs LaTex table with descriptive and inferential emphasis notes.
 
+    A model with several runs shows its mean and sample standard deviation over them.
+
     Args:
-        frame: Report rows for all datasets and models.
+        frame: Summary rows for all datasets and models, from `summarize_runs`.
         table: Table definition.
         significance: Metrics to emphasize by dataset and model.
 

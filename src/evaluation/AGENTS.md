@@ -75,11 +75,15 @@ are emitted in ascending order. Empty aggregates contain zero scores. `evaluatio
 this summary and provenance.
 `prefix_scores.parquet` stores the prefix key, lengths, and all report metric values for paired analysis.
 
-Keep the two files adjacent. Visualization rejects duplicate model reports within one dataset and
-requires score files for significance analysis. Comparisons align identical prefix populations,
-resample whole cases, use 10,000 paired bootstrap draws with seed 42, and apply Holm correction over
-all model pairs for each dataset and ranked metric. Table emphasis means observed best or no detected
-difference from it; it does not establish equivalence.
+Keep the two files adjacent. Visualization treats several reports of one model on one dataset as
+seeds of one configuration and rejects a training run given twice. Every run of a dataset must
+score the same prefixes. Tables show the mean and sample standard deviation over runs, figures the
+mean with a band of one standard deviation, and a single run shows its value alone. Significance
+analysis requires score files. Comparisons align identical prefix populations and use 10,000
+two-level paired bootstrap draws with seed 42: each draw resamples whole cases for all models, then
+resamples each model's runs independently, so p-values include seed variance. A model with one run
+draws no runs. Holm correction covers all model pairs for each dataset and ranked metric. Table
+emphasis means observed best or no detected difference from it; it does not establish equivalence.
 
 ## Parallelism
 

@@ -31,24 +31,33 @@ def oriented(values: np.ndarray, directions: Sequence[Direction]) -> np.ndarray:
     return sign * np.where(absolute, np.abs(values), values)
 
 
+def _run_means(totals: Sequence[np.ndarray]) -> np.ndarray:
+    """Average each model's case totals over its runs, giving `[cases, models, ...]`."""
+    return np.stack([model.mean(axis=1) for model in totals], axis=1)
+
+
 def two_sided_p(
-    totals: np.ndarray,
+    totals: Sequence[np.ndarray],
     counts: np.ndarray,
     *,
+    left: np.ndarray,
+    right: np.ndarray,
     resamples: int,
     generator: np.random.Generator,
 ) -> np.ndarray:
-    """Estimate null-centered two-sided bootstrap p-values for paired differences.
+    """Estimate null-centered two-sided bootstrap p-values for paired mean differences.
 
     Args:
-        totals: Case sums of paired prefix differences, `[cases, pairs, metrics]`.
+        totals: Case score sums, one `[cases, runs, metrics]` array per model.
         counts: Eligible prefix counts per case, `[cases]`.
+        left: First model of each pair, `[pairs]`.
+        right: Second model of each pair, `[pairs]`.
         resamples: Positive number of bootstrap draws.
-        generator: Random source for paired case resampling.
+        generator: Random source for case and run resampling.
 
     Returns:
-        Approximate p-values, `[pairs, metrics]`. Fewer than two cases or a constant
-        bootstrap distribution give NaN. Independent, representative cases and a
+        Approximate p-values for `left` minus `right`, `[pairs, metrics]`. Fewer than two cases
+        or a constant bootstrap distribution give NaN. Independent, representative cases and a
         sufficiently large case sample are required; these are not exact null tests.
 
     Raises:
@@ -56,22 +65,25 @@ def two_sided_p(
     """
     if resamples < 1:
         raise ValueError('resamples must be positive.')
+    averaged = _run_means(totals)
+    differences = averaged[:, left] - averaged[:, right]
     if len(counts) < 2:
-        return np.full(totals.shape[1:], np.nan)
+        return np.full(differences.shape[1:], np.nan)
 
-    observed = totals.sum(axis=0) / counts.sum()
+    observed = differences.sum(axis=0) / counts.sum()
     extreme = np.zeros(observed.shape, dtype=np.int64)
     smallest = np.full(observed.shape, np.inf)
     largest = np.full(observed.shape, -np.inf)
     # Roundoff at the scale of case differences must not separate equal tail values.
-    scale = np.max(np.abs(totals / counts[:, None, None]), axis=0)
+    scale = np.max(np.abs(differences / counts[:, None, None]), axis=0)
     tolerance = 100 * np.finfo(np.float64).eps * scale
-    for differences in resample_means(
+    for means in resample_means(
         totals=totals, counts=counts, resamples=resamples, generator=generator
     ):
-        extreme += (np.abs(differences - observed) >= np.abs(observed) - tolerance).sum(axis=0)
-        smallest = np.minimum(smallest, differences.min(axis=0))
-        largest = np.maximum(largest, differences.max(axis=0))
+        drawn = means[:, left] - means[:, right]
+        extreme += (np.abs(drawn - observed) >= np.abs(observed) - tolerance).sum(axis=0)
+        smallest = np.minimum(smallest, drawn.min(axis=0))
+        largest = np.maximum(largest, drawn.max(axis=0))
 
     p_values = (extreme + 1) / (resamples + 1)
     p_values[largest - smallest <= tolerance] = np.nan
@@ -94,7 +106,7 @@ def holm(p_values: np.ndarray) -> np.ndarray:
 
 
 def compare_means(
-    totals: np.ndarray,
+    totals: Sequence[np.ndarray],
     counts: np.ndarray,
     *,
     directions: Sequence[Direction],
@@ -104,11 +116,12 @@ def compare_means(
     """Return adjusted p-values against the observed best and table emphasis.
 
     Args:
-        totals: Case score sums, `[cases, models, metrics]`, in stable model order.
+        totals: Case score sums, one `[cases, runs, metrics]` array per model in stable model
+            order. Runs are seeds of one model and are resampled within it.
         counts: Eligible prefix counts per case, `[cases]`.
         directions: Ranking direction of each metric; ZERO is descriptive only.
         resamples: Number of paired bootstrap draws.
-        generator: Random source for case resampling.
+        generator: Random source for case and run resampling.
 
     Returns:
         Two `[models, metrics]` arrays: adjusted p-values and emphasis flags. Each
@@ -116,7 +129,7 @@ def compare_means(
         calibration metrics, and unavailable tests have NaN p-values. Emphasis
         means observed best or no detected difference, not evidence of equivalence.
     """
-    means = totals.sum(axis=0) / counts.sum()
+    means = _run_means(totals).sum(axis=0) / counts.sum()
     scores = oriented(values=means, directions=directions)
     reference = scores.argmax(axis=0)
     best = scores == scores.max(axis=0)
@@ -130,9 +143,13 @@ def compare_means(
         return p_values, best
 
     left, right = np.triu_indices(len(means), k=1)
-    differences = totals[:, left][:, :, tested] - totals[:, right][:, :, tested]
     uncorrected = two_sided_p(
-        totals=differences, counts=counts, resamples=resamples, generator=generator
+        totals=[model[:, :, tested] for model in totals],
+        counts=counts,
+        left=left,
+        right=right,
+        resamples=resamples,
+        generator=generator,
     )
     for column, metric in enumerate(tested):
         adjusted = holm(uncorrected[:, column])
@@ -146,8 +163,10 @@ def compare_means(
 
 
 def test_significance(reports: Sequence[Path]) -> pd.DataFrame:
-    """Compare reported means with a paired case bootstrap and all-pairs Holm correction.
+    """Compare reported means with a two-level paired bootstrap and all-pairs Holm correction.
 
+    Several reports of one model on one dataset are seeds of one configuration: means average
+    them, and each bootstrap draw resamples cases for all models and runs within each model.
     Calibration emphasis is descriptive: smallest absolute mean gap. Single-model
     datasets have no emphasis. Populations with no eligible prefixes are omitted.
 
@@ -159,7 +178,7 @@ def test_significance(reports: Sequence[Path]) -> pd.DataFrame:
         against the observed best, or NaN when unavailable. `best` controls emphasis.
 
     Raises:
-        ValueError: If scores are missing, model runs are duplicated, prefixes or
+        ValueError: If scores are missing, a training run is given twice, prefixes or
             occurrence counts differ, or eligible scores are nonfinite.
     """
     rows: list[dict[str, object]] = []

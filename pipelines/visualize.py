@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 from pipelines.helpers.console import banner, step
 from pipelines.helpers.invocation import output_path, start_stage
 from src.config_validation import validate_visualization_config
-from src.evaluation import read_reports
+from src.evaluation import read_reports, summarize_runs
 from src.uncertainty import test_significance
 from src.visualization import (
     FIGURES,
@@ -37,7 +37,7 @@ def _draw_figures(frame: pd.DataFrame) -> int:
     """Draw every figure of the catalogue, each covering every log the reports cover at once.
 
     Args:
-        frame: Every report read, from `read_reports`.
+        frame: Every report summarized over runs, from `summarize_runs`.
     Returns:
         How many figures were written, under the invocation's `figures/`.
     """
@@ -55,7 +55,7 @@ def _write_tables(frame: pd.DataFrame, significance: pd.DataFrame) -> int:
     """Write every comparison table, over every log at once, under the invocation's `tables/`.
 
     Args:
-        frame: Every report read, from `read_reports`.
+        frame: Every report summarized over runs, from `summarize_runs`.
         significance: Table emphasis and adjusted comparisons from `test_significance`.
     Returns:
         How many tables were written.
@@ -65,17 +65,30 @@ def _write_tables(frame: pd.DataFrame, significance: pd.DataFrame) -> int:
     return len(TABLES)
 
 
+def _run_counts(frame: pd.DataFrame) -> dict[tuple[str, str], int]:
+    """Count the runs behind each dataset and model.
+
+    Args:
+        frame: Every report summarized over runs, from `summarize_runs`.
+    Returns:
+        Run counts keyed by dataset and model, in report order.
+    """
+    counts = frame.groupby(['dataset', 'model'], sort=False)['runs'].first()
+    return {(str(dataset), str(model)): int(runs) for (dataset, model), runs in counts.items()}
+
+
 def run(evaluation_files: Sequence[Path]) -> None:
     """Draw a set of evaluation reports and tabulate them, under the active Hydra output directory.
 
     Args:
         evaluation_files: The reports to compare, from `python -m pipelines.evaluate`. These draw
             the metric figures and comparison tables, and the per-prefix scores beside each report
-            are what the tables' emphasis is tested on.
+            are what the tables' emphasis is tested on. Several reports of one model on one log
+            are seeds of one configuration, summarized by their mean and standard deviation.
     Raises:
         ValueError: If a file is not a report, if a report has no per-prefix scores beside it, if a
-            model has no look declared in `src.visualization.labels`, or if one log is given two
-            runs of the same model.
+            model has no look declared in `src.visualization.labels`, if one training run is given
+            twice, or if the runs of one model do not score the same prefixes.
     """
     apply_style()
     banner(
@@ -88,7 +101,9 @@ def run(evaluation_files: Sequence[Path]) -> None:
     )
 
     with step(f'Reading {len(evaluation_files)} evaluation report(s)'):
-        reports = read_reports(evaluation_files)
+        reports = summarize_runs(read_reports(evaluation_files))
+    for (dataset, model), runs in _run_counts(reports).items():
+        print(f'  {dataset}: {model}, {runs} run(s)')
 
     logs = sorted(set(reports['dataset']))
     with step(f'Drawing {", ".join(logs)}'):

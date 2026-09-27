@@ -187,6 +187,11 @@ uv run python -m pipelines.visualize \
   'evaluations=[/path/to/first/evaluation.json,/path/to/second/evaluation.json]'
 ```
 
+Pass the reports of every seed of a model together. Several reports of one model on one dataset
+are summarized as seeds: tables show the mean and sample standard deviation, figures the mean with
+a band of one standard deviation, and table emphasis comes from a bootstrap over cases and seeds.
+Each report must come from a distinct training run.
+
 Keep every `evaluation.json` beside its `prefix_scores.parquet`. Figures are written as PDF under
 `outputs/visualize/<date>/<time>/figures/`, and comparison tables as LaTeX under
 `outputs/visualize/<date>/<time>/tables/`.

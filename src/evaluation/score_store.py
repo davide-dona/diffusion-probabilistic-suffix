@@ -7,7 +7,7 @@ import pyarrow.parquet as pq
 
 from src.artifacts import Provenance
 from src.evaluation.metrics import METRICS
-from src.evaluation.reports import EvaluationReport, _group_by_model
+from src.evaluation.reports import EvaluationReport, group_runs
 from src.evaluation.scoring import PrefixSummary
 from src.inference.generation_store import PrefixKey
 
@@ -109,18 +109,18 @@ def read_prefix_scores(path: Path, *, columns: Sequence[str] | None = None) -> p
     return pq.read_table(source=path, columns=wanted).to_pandas()
 
 
-def score_files(reports: Sequence[Path]) -> dict[str, dict[str, Path]]:
+def score_files(reports: Sequence[Path]) -> dict[str, dict[str, tuple[Path, ...]]]:
     """Find score files beside reports and group them by dataset.
 
     Args:
         reports: Report paths with an adjacent prefix_scores.parquet file for each run.
 
     Returns:
-        Dataset names mapped to model names and their score paths, validated for report
-        columns and artifact provenance.
+        Dataset names mapped to model names and the score paths of their runs in input order,
+        validated for report columns and artifact provenance.
 
     Raises:
-        ValueError: If score files are missing or invalid, or a dataset repeats a model.
+        ValueError: If score files are missing or invalid, or a training run is given twice.
     """
     files = [(report, report.with_name('prefix_scores.parquet')) for report in reports]
     missing = [str(report) for report, scores in files if not scores.exists()]
@@ -144,4 +144,4 @@ def score_files(reports: Sequence[Path]) -> dict[str, dict[str, Path]]:
                 runs.append((provenance, scores))
         except (ValueError, TypeError, KeyError) as error:
             raise ValueError(f'{scores} is not a per-prefix scores file: {error}') from error
-    return _group_by_model(runs)
+    return group_runs(runs)
