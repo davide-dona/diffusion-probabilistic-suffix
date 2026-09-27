@@ -9,6 +9,8 @@ class NumericColumn(BaseModel):
     - log: Whether the values pass through a log1p before the standardization.
     - mean: The mean of the train values, after the log1p if there is one.
     - std: The standard deviation of the same, 1.0 for a channel that never varies.
+    - minimum: The smallest train value, after the log1p if there is one.
+    - maximum: The largest train value, after the log1p if there is one.
     """
 
     model_config = ConfigDict(frozen=True, extra='forbid')
@@ -17,6 +19,8 @@ class NumericColumn(BaseModel):
     log: bool
     mean: float
     std: float
+    minimum: float
+    maximum: float
 
     @classmethod
     def fit(cls, train: pd.DataFrame, *, column: str, log: bool) -> 'NumericColumn':
@@ -54,6 +58,8 @@ class NumericColumn(BaseModel):
             log=log,
             mean=float(scaled.mean()),
             std=std if std > 0 else 1.0,
+            minimum=float(scaled.min()),
+            maximum=float(scaled.max()),
         )
 
     @staticmethod
@@ -72,6 +78,10 @@ class NumericColumn(BaseModel):
             back to a range.
         """
         return ((self._scale(values, log=self.log) - self.mean) / self.std).astype(np.float32)
+
+    def normalized_range(self) -> tuple[float, float]:
+        """Return the smallest and largest train values in standardized units."""
+        return (self.minimum - self.mean) / self.std, (self.maximum - self.mean) / self.std
 
     def denormalize(self, normalized: np.ndarray) -> np.ndarray:
         """Read standardized values back as the raw quantity they came from, exactly: the

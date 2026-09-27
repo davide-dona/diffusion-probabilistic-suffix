@@ -49,7 +49,11 @@ def energy_score(
 
 
 def crps(draws: np.ndarray, truth: np.ndarray) -> float:
-    """Return mean fair CRPS over columns using sorted absolute-distance sums.
+    """Return mean fair CRPS over columns, integrated over gaps between sorted samples.
+
+    The fair score equals a sum of gap lengths with nonnegative weights, so it never
+    subtracts two large accuracy and diversity totals. That keeps it exact and nonnegative
+    when a few draws are orders of magnitude larger than the rest.
 
     Args:
         draws: Numeric samples shaped [S, D], with repeated draws retained.
@@ -62,13 +66,21 @@ def crps(draws: np.ndarray, truth: np.ndarray) -> float:
     draw_count, columns = draws.shape
     if draw_count == 0 or columns == 0:
         return 0.0
-    accuracy = float(np.abs(draws - truth).sum(axis=0).mean()) / draw_count
     if draw_count == 1:
-        return accuracy
-    ordered = np.sort(draws, axis=0)
-    ranks = np.arange(draw_count, dtype=np.float64)[:, None]
-    spread = ((2.0 * ranks - draw_count + 1.0) * ordered).sum(axis=0)
-    return accuracy - float(spread.mean()) / (draw_count * (draw_count - 1))
+        return float(np.abs(draws[0] - truth).mean())
+    ordered = np.sort(draws, axis=0)  # [S, D]
+    lower, upper = ordered[:-1], ordered[1:]  # [S - 1, D]
+    below_truth = np.clip(np.minimum(upper, truth) - lower, 0.0, None)  # [S - 1, D]
+    above_truth = np.clip(upper - np.maximum(lower, truth), 0.0, None)  # [S - 1, D]
+    # Number of draws at or below each gap between consecutive sorted draws.
+    at_or_below = np.arange(1, draw_count, dtype=np.float64)[:, None]  # [S - 1, 1]
+    at_or_above = draw_count - at_or_below
+    between = (
+        at_or_below * (at_or_below - 1.0) * below_truth
+        + at_or_above * (at_or_above - 1.0) * above_truth
+    ).sum(axis=0) / (draw_count * (draw_count - 1.0))  # [D]
+    outside = np.clip(ordered[0] - truth, 0.0, None) + np.clip(truth - ordered[-1], 0.0, None)
+    return float((between + outside).mean())
 
 
 def mae(draws: np.ndarray, truth: np.ndarray) -> float:
