@@ -5,13 +5,13 @@ from omegaconf import DictConfig
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.models.architectures.head_sampling_transformer.decoder import Decoder
+from src.models.backbones.autoregressive.base import AutoregressiveSuffixModel
+from src.models.backbones.autoregressive.loss import reconstruction_loss
 from src.models.contracts import DecoderOutput, GeneratedSuffix
-from src.models.sutran.loss import reconstruction_loss
-from src.models.sutran.model import SuTraNModel
 from src.training.loss import Loss
 
 
-class HeadSamplingTransformer(SuTraNModel[DecoderOutput]):
+class HeadSamplingTransformer(AutoregressiveSuffixModel[DecoderOutput]):
     """An encoder-decoder transformer that samples every suffix channel from output heads."""
 
     def __init__(self, config: DictConfig, codec: DatasetCodec) -> None:

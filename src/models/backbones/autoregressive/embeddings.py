@@ -4,14 +4,14 @@ from torch import nn
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import Events
-from src.models.shared.embeddings import (
+from src.models.embeddings import (
     EventContentEmbedding,
     sinusoidal_encoding,
 )
 
 
 class EventEmbeddings(nn.Module):
-    """Add fixed positions to shared event content for the head sampling model."""
+    """Add fixed positions to event content for causal suffix models."""
 
     def __init__(self, config: DictConfig, codec: DatasetCodec, *, d_model: int) -> None:
         """Build content embeddings and a positional encoding table."""

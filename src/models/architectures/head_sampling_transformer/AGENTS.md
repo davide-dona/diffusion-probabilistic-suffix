@@ -106,9 +106,10 @@ generation only when both `RunIdentity` and checkpoint SHA-256 match.
 
 ## Configuration
 
-The encoder, embeddings, attention, causal decoder trunk, cache, and generation loop live in
-`src/models/sutran` and are shared with U-ED-SuTraN. The local decoder owns baseline heads
-and sampler controls.
+The causal encoder, positioned event embeddings, attention, decoder trunk, cache, and generation
+loop live in `src/models/backbones/autoregressive` and are reused by U-ED-SuTraN. Cross-architecture
+event-content and positional embedding utilities live in `src/models/embeddings.py`. The local
+decoder owns baseline heads and sampler controls.
 
 `config/model/head_sampling_transformer.yaml` defines model and embedding widths, encoder and
 decoder depth, attention heads, feedforward sizes, dropout, teacher-forced activity dropout, shared

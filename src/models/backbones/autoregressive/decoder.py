@@ -5,10 +5,10 @@ from omegaconf import DictConfig
 from torch import nn
 
 from src.datasets.dataset import Events
+from src.models.backbones.autoregressive.cache import LayerCache
+from src.models.backbones.autoregressive.decoder_layer import DecoderLayer
+from src.models.backbones.autoregressive.embeddings import EventEmbeddings
 from src.models.contracts import GeneratedSuffix
-from src.models.sutran.cache import LayerCache
-from src.models.sutran.decoder_layer import DecoderLayer
-from src.models.sutran.embeddings import EventEmbeddings
 
 
 class CausalDecoder[OutputT](nn.Module, ABC):

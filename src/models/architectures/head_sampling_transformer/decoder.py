@@ -2,9 +2,9 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 
+from src.models.backbones.autoregressive.decoder import CausalDecoder
+from src.models.backbones.autoregressive.embeddings import EventEmbeddings
 from src.models.contracts import DecoderOutput
-from src.models.sutran.decoder import CausalDecoder
-from src.models.sutran.embeddings import EventEmbeddings
 
 
 class Decoder(CausalDecoder[DecoderOutput]):

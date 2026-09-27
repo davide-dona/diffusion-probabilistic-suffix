@@ -25,8 +25,9 @@ substituting a generic loss-attenuation formula.
 
 ## Shared Backbone and Controlled Comparison
 
-`UEDSuTraN` uses the shared SuTraN event embeddings, prefix encoder, causal decoder trunk,
-attention, KV cache, and generation loop under `src/models/sutran`. Prediction heads,
+`UEDSuTraN` uses the causal event embeddings, prefix encoder, decoder trunk, attention, KV cache,
+and generation loop under `src/models/backbones/autoregressive`. Cross-architecture event-content
+and positional embedding utilities live in `src/models/embeddings.py`. Prediction heads,
 uncertainty losses, and MC dropout belong in this package.
 
 - Keep structural defaults in `config/model/u_ed_sutran.yaml` equal to those in

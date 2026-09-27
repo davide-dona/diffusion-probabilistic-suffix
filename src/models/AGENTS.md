@@ -51,8 +51,11 @@ and standardized time means and log-variances `[B, T]`.
   generated inter-event times after inverse scaling, nonnegative clamping, summation, and
   standardization through the remaining-time codec by `SuffixModel._remaining_time`. It is not an
   independent generated head.
-- Shared SuTraN encoder, decoder, attention, cache, and loss code lives in `src/models/sutran`.
-  Model-specific heads, losses, and sampling policies stay in their architecture packages.
+- `src/models/embeddings.py` holds event-content and positional embeddings used across model
+  families. `src/models/backbones/autoregressive` holds the causal prefix encoder, decoder trunk,
+  attention, cache, and loss normalization reused by the two SuTraN baselines. Neither location
+  defines a selectable architecture. Model-specific heads, losses, and sampling policies stay in
+  their architecture packages.
 - Average position losses within each trace before averaging traces so long suffixes do not receive
   unintended batch weight.
 - Report finite losses and generations and keep gradients finite for every trainable model.

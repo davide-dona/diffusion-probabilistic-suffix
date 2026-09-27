@@ -10,14 +10,14 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.models.architectures.u_ed_sutran.decoder import UncertaintyAwareDecoder
 from src.models.architectures.u_ed_sutran.distributions import sample_gaussian
+from src.models.backbones.autoregressive.attention import MultiHeadAttention
+from src.models.backbones.autoregressive.base import AutoregressiveSuffixModel
+from src.models.backbones.autoregressive.loss import reconstruction_loss
 from src.models.contracts import GeneratedSuffix, UncertaintyAwareDecoderOutput
-from src.models.sutran.attention import MultiHeadAttention
-from src.models.sutran.loss import reconstruction_loss
-from src.models.sutran.model import SuTraNModel
 from src.training.loss import Loss
 
 
-class UEDSuTraN(SuTraNModel[UncertaintyAwareDecoderOutput]):
+class UEDSuTraN(AutoregressiveSuffixModel[UncertaintyAwareDecoderOutput]):
     """SuTraN with MC dropout and learned activity-logit and duration uncertainty."""
 
     def __init__(self, config: DictConfig, codec: DatasetCodec) -> None:

@@ -7,7 +7,7 @@ from torch import nn
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import Events
-from src.models.shared.embeddings import (
+from src.models.embeddings import (
     EventContentEmbedding,
     sinusoidal_encoding,
 )

@@ -5,15 +5,15 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
+from src.models.backbones.autoregressive.decoder import CausalDecoder
+from src.models.backbones.autoregressive.embeddings import EventEmbeddings
+from src.models.backbones.autoregressive.trace_encoder import TraceEncoder
 from src.models.base import SuffixModel
 from src.models.contracts import GeneratedSuffix
-from src.models.sutran.decoder import CausalDecoder
-from src.models.sutran.embeddings import EventEmbeddings
-from src.models.sutran.trace_encoder import TraceEncoder
 
 
-class SuTraNModel[OutputT](SuffixModel):
-    """Shared prefix encoding, teacher forcing, and duration conversion for SuTraN models."""
+class AutoregressiveSuffixModel[OutputT](SuffixModel):
+    """Prefix encoding, teacher forcing, and duration conversion for causal suffix models."""
 
     decoder: CausalDecoder[OutputT]
 
