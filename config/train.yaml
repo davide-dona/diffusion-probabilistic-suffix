@@ -3,7 +3,9 @@ defaults:
 - dataset: ???
 - model: head_sampling_transformer
 - training: default
-- regime: ${dataset}
+# A multirun first composes without its sweep values, leaving `dataset` missing. Falling back to
+# ??? makes Hydra skip the regime there too, instead of failing on the missing interpolation.
+- regime: ${oc.select:dataset,???}
 - runtime: cuda
 - _self_
 run_id: ${now:%Y%m%d-%H%M%S-%f}
