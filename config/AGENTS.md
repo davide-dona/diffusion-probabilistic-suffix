@@ -27,9 +27,13 @@ groups. The result is validated at the stage boundary and stored with every dura
   stochasticity. Require an explicit start level in every diffusion configuration.
 - Add or change fields together with their checks in `src/config_validation/`. Reject invalid values before
   reading large artifacts or starting model work.
-- Keep dataset-specific training values in `regime/<dataset>.yaml`. `train.yaml` selects it with
-  `regime: ${dataset}`, so a dataset override selects a complete regime and the resolved
+- Keep dataset-specific training values in `regime/<dataset>.yaml`. `train.yaml` selects it from
+  the `dataset` choice, so a dataset override selects a complete regime and the resolved
   configuration carries only the active values. Every regime sets every regime field.
+- A Defaults List interpolation of a required group must fall back to `???`, as in
+  `regime: ${oc.select:dataset,???}`. Multirun composes once without sweep values, and a bare
+  `${dataset}` then fails instead of being skipped. Check multirun composition when changing
+  such a default.
 - Do not add fields derivable from other fields, such as the train fraction implied by
   `data.val_split` and `data.test_split`.
 - Express training duration, warmup, and validation cadence in optimizer steps. Express early
