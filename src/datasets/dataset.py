@@ -71,8 +71,8 @@ class Events(NamedTuple):
 
 
 class TraceCut(NamedTuple):
-    """A single trace cut into a (prefix, suffix) pair, with the decoder's time targets aligned
-    to the suffix positions they are read at."""
+    """A single trace cut into a (prefix, suffix) pair, with the decoder's time target aligned
+    to the suffix positions it is read at."""
 
     # Which case of the log this was cut from. Allow to identify the original trace after
     # generation.
@@ -81,10 +81,9 @@ class TraceCut(NamedTuple):
     prefix: Events  # the condition: the events before the cut, no EOT
     suffix: Events  # what the decoder must produce: content, EOT, then padding
 
-    # Standardized minutes until the event written at each suffix position, and until the case
-    # ends. Both measure from the last prefix event at position 0.
+    # Standardized minutes until the event written at each suffix position, measured from the
+    # last prefix event at position 0.
     inter_event_times: torch.Tensor  # float32, [max_trace_length], batched [batch_size, ...]
-    remaining_times: torch.Tensor  # float32, shaped like `inter_event_times`
 
     def timed_positions(self) -> torch.Tensor:
         """Mark real suffix events, excluding terminal EOT and padding, as `[B, T]`."""
@@ -100,7 +99,6 @@ class TraceCut(NamedTuple):
             prefix=self.prefix.to(device),
             suffix=self.suffix.to(device),
             inter_event_times=self.inter_event_times.to(device),
-            remaining_times=self.remaining_times.to(device),
         )
 
 
@@ -110,9 +108,6 @@ class _Case:
 
     case_id: str  # which case of the log this is
     events: Events  # the case's events, unpadded
-    remaining_times: (
-        torch.Tensor
-    )  # standardized minutes from each event to the case's real ending, [len(events)]
     # The lower bound for the case cut points,
     # which the preprocessing step computed and stored in the log.
     min_prefix_len: int
@@ -143,14 +138,7 @@ class TraceDataset(Dataset):
         # would be repeated for every cut point of every case.
         split_dataset = codec.read_split(split)
 
-        events = self._encode_events(split_dataset)
-        remaining_times = torch.from_numpy(codec.remaining_time.encode(split_dataset))
-
-        self._cases = _group_cases(
-            split_dataset,
-            events=events,
-            remaining_times=remaining_times,
-        )
+        self._cases = _group_cases(split_dataset, events=self._encode_events(split_dataset))
 
         self._case_cuts: list[tuple[int, int]] = [
             (case_idx, k)
@@ -198,11 +186,10 @@ class TraceDataset(Dataset):
             prefix=prefix,
             suffix=suffix,
             inter_event_times=self._pad_target(case.events.inter_event_times[k : k + suffix_len]),
-            remaining_times=self._pad_target(case.remaining_times[k - 1 : k + suffix_len - 1]),
         )
 
     def _pad_target(self, target: torch.Tensor) -> torch.Tensor:
-        """Pad one of the decoder's time targets out to `max_trace_length`.
+        """Pad the decoder's time target out to `max_trace_length`.
 
         Args:
             target: The target at each suffix position, `[suffix_len]`.
@@ -250,19 +237,13 @@ def fixed_subset(dataset: Dataset, *, size: int, generator: torch.Generator) -> 
     return Subset(dataset=dataset, indices=indices.tolist())
 
 
-def _group_cases(
-    split_dataset: pd.DataFrame,
-    *,
-    events: Events,
-    remaining_times: torch.Tensor,
-) -> list[_Case]:
+def _group_cases(split_dataset: pd.DataFrame, *, events: Events) -> list[_Case]:
     """Group a split's already-encoded events into per-case runs.
 
     Args:
         split_dataset: The split, from `_read_split`; only its case column and row order are
             read here, the values themselves already encoded into `events`.
         events: The split's events, encoded whole, indexed the same as `split_dataset`.
-        remaining_times: The split's standardized remaining time, indexed the same way.
     Returns:
         One `_Case` per case of the split, each of them whole: preprocessing dropped the cases
         that do not fit `max_trace_length`, so nothing is cut short here.
@@ -277,7 +258,6 @@ def _group_cases(
             _Case(
                 case_id=str(case_id),
                 events=events.cut(positions),
-                remaining_times=remaining_times[positions],
                 min_prefix_len=int(bounds[MIN_PREFIX_KEY]),
             )
         )

@@ -17,7 +17,6 @@ from src.logs import (
     INTER_EVENT_TIME_KEY,
     MIN_PREFIX_KEY,
     MISSING_FEATURE,
-    REMAINING_TIME_KEY,
     RESOURCE_KEY,
     SECONDS_COS_KEY,
     SECONDS_SIN_KEY,
@@ -31,7 +30,6 @@ from src.logs.preprocessing import (
     add_calendar,
     add_case_elapsed,
     add_inter_event_time,
-    add_remaining_time,
     case_durations,
     drop_cases_by_duration,
     drop_cases_by_length,
@@ -107,8 +105,8 @@ def preprocess(log: pd.DataFrame, *, feature_columns: list[str]) -> pd.DataFrame
             to fill in again. The numeric ones keep their gaps: a missing number is carried by
             the present flag instead.
     Returns:
-        A copy of `log` with the two timestamp proxies, the remaining time and the four calendar
-        columns added, and its categorical columns filled.
+        A copy of `log` with the two timestamp proxies and the four calendar columns added, and
+        its categorical columns filled.
     """
     log = add_inter_event_time(
         log,
@@ -121,12 +119,6 @@ def preprocess(log: pd.DataFrame, *, feature_columns: list[str]) -> pd.DataFrame
         case_key=CASE_KEY,
         timestamp_key=TIMESTAMP_KEY,
         out_key=CASE_ELAPSED_KEY,
-    )
-    log = add_remaining_time(
-        log,
-        case_key=CASE_KEY,
-        timestamp_key=TIMESTAMP_KEY,
-        out_key=REMAINING_TIME_KEY,
     )
     log = add_calendar(
         log,
@@ -169,7 +161,8 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
         f'Preprocessing "{dataset}"',
         {
             'original log': artifacts.ORIGINAL_LOG.path(dataset),
-            'split': f'{data_config.train_split:.0%} train, {data_config.val_split:.0%} val, '
+            'split': f'{1 - data_config.val_split - data_config.test_split:.0%} train, '
+            f'{data_config.val_split:.0%} val, '
             f'{data_config.test_split:.0%} test, out of time',
             'splits': artifacts.PROCESSED_SPLIT.directory(dataset),
             'codec': artifacts.CODEC.path(dataset),

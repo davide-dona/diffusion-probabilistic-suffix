@@ -23,7 +23,7 @@ class UEDSuTraN(AutoregressiveSuffixModel[UncertaintyAwareDecoderOutput]):
     def __init__(self, config: DictConfig, codec: DatasetCodec) -> None:
         super().__init__(config=config, codec=codec)
         self.uncertainty = config.uncertainty
-        self._training_seed = torch.initial_seed()
+        self._seed = torch.initial_seed()
         self._loss_generators: dict[torch.device, torch.Generator] = {}
         self.decoder = UncertaintyAwareDecoder(
             config=config.decoder,
@@ -45,11 +45,11 @@ class UEDSuTraN(AutoregressiveSuffixModel[UncertaintyAwareDecoderOutput]):
         if self.training:
             if device not in self._loss_generators:
                 self._loss_generators[device] = torch.Generator(device=device).manual_seed(
-                    self._training_seed
+                    self._seed
                 )
             generator = self._loss_generators[device]
         else:
-            generator = torch.Generator(device=device).manual_seed(self.uncertainty.validation_seed)
+            generator = torch.Generator(device=device).manual_seed(self._seed)
         log_variances = output.activity_log_variances.clamp(
             min=self.uncertainty.log_variance_min, max=self.uncertainty.log_variance_max
         )

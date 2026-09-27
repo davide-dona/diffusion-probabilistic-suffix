@@ -6,7 +6,6 @@ data:
   resource_key: org:resource
   timestamp_key: time:timestamp
   separator: ;
-  train_split: 0.65
   val_split: 0.15
   test_split: 0.2
   max_seq_len_percentile: 98.5
@@ -31,9 +30,13 @@ data:
   - day_cos
   - seconds_sin
   - seconds_cos
-  log_scaled_features: []
-  log_scaled_remaining_time: false
-  log_scaled_inter_event_time: false
+  log_scaled_features:
+  - case:RequestedAmount
+  - FirstWithdrawalAmount
+  - MonthlyCost
+  - OfferedAmount
+  - ts_start
+  log_scaled_inter_event_time: true
 declare:
   consider_vacuity: false
   min_support: 0.8

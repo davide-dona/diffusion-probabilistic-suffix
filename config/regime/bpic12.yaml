@@ -1,0 +1,13 @@
+# @package _global_
+optimizer:
+  lr: 0.0003
+  warmup_steps: 1500
+training:
+  max_steps: 30000
+  val_every_n_steps: 300
+  validation_pairs: 10000
+  generation_pairs: 1000
+early_stopping:
+  patience_validations: 20
+dataloader:
+  batch_size: 128

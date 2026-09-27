@@ -5,6 +5,7 @@ from omegaconf import OmegaConf
 from src.artifacts import Provenance
 from src.config_validation.model import validate_model
 from src.inference.tuning import TuningReport
+from src.models.architectures import architecture_of
 
 CHECKPOINT_KEYS = (
     'config',
@@ -34,14 +35,15 @@ def validate_checkpoint(checkpoint: dict, *, purpose: str, remedy: str) -> None:
     model = checkpoint.get('config', {}).get('model', {})
     data = checkpoint.get('config', {}).get('data', {})
     validate_model(OmegaConf.create(model))
+    architecture = architecture_of(model['_target_'])
     provenance = Provenance.from_dict(checkpoint['provenance'])
     run = provenance.run
-    if run.dataset != data.get('name') or run.model != model.get('name'):
+    if run.dataset != data.get('name') or run.model != architecture:
         raise ValueError('Checkpoint run identity does not match its training configuration')
     tuning_payload = checkpoint.get('tuning')
     if tuning_payload is not None:
         tuning = TuningReport.from_payload(tuning_payload)
-        if model.get('kind') != 'head_sampling_transformer':
+        if architecture != 'head_sampling_transformer':
             raise ValueError('Only head_sampling_transformer checkpoints can contain tuning')
         if tuning.run != run:
             raise ValueError('Checkpoint tuning belongs to a different training run')

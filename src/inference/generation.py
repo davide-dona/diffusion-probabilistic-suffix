@@ -1,3 +1,4 @@
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
@@ -18,12 +19,16 @@ class DecodedEvents:
     # The minutes of inter-event time before each activity, in the same order, so a run's
     # timestamps are these accumulated from the last prefix event on.
     inter_event_time_minutes: list[float]
-    # Minutes until the case ends, derived from the generated inter-event times above.
-    remaining_time_minutes: float
     used_eot_sentinel: bool = False
 
     def __len__(self) -> int:
         return len(self.activities)
+
+    @property
+    def remaining_time_minutes(self) -> float:
+        """Minutes from the last prefix event to the end of the case: the inter-event times
+        summed, since every case is whole and so ends at its last event."""
+        return math.fsum(self.inter_event_time_minutes)
 
 
 @dataclass(frozen=True)
@@ -42,8 +47,8 @@ class Draws:
     suffixes: tuple[str, ...]
     # Which of them each draw took, one entry per draw in draw order.
     taken: tuple[int, ...]
-    # The inter-event times and the remaining time of each draw, in the same order as `taken`. The
-    # activities of draw `i` are `suffixes[taken[i]]`.
+    # The inter-event times of each draw, in the same order as `taken`. The activities of draw
+    # `i` are `suffixes[taken[i]]`.
     events: list[DecodedEvents]
 
     @classmethod

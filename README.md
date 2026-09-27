@@ -207,8 +207,8 @@ uv run python -m scripts.fetch
 
 Datasets, models, training defaults, and runtime profiles live in the corresponding groups under
 `config/`. Training duration, warmup, and validation cadence are expressed in optimizer steps;
-early stopping is expressed in validation checks. The CUDA profile selects a batch size and training
-regime for each dataset automatically.
+early stopping is expressed in validation checks. The `regime` group holds each dataset's learning
+rate, schedule, validation sizes, patience, and batch size, and is selected by the `dataset` choice.
 All model configs use activity/resource/attribute embedding widths of 32/16/8. The wider
 diffusion variant projects these to width 48; the other configs project to width 32. Checkpoints
 retain their own embedding configuration.
@@ -216,7 +216,7 @@ Override individual settings with dotted keys:
 
 ```bash
 uv run python -m pipelines.train dataset=bpic17 model=head_sampling_transformer \
-  optimizer.lr=0.0005 training.device=cuda:0
+  optimizer.lr=0.0005 device=cuda:0
 ```
 
 Inspect the fully resolved configuration without starting a run:

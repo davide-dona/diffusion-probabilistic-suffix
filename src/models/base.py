@@ -68,7 +68,6 @@ class SuffixModel(nn.Module, ABC):
             inter_event_times=generated.inter_event_times.view(
                 batch_size, -1, generated.inter_event_times.size(dim=1)
             ),  # [B * S, T] -> [B, S, T]
-            remaining_time=generated.remaining_time.view(batch_size, -1),  # [B * S] -> [B, S]
             used_sentinel=generated.used_sentinel.view(batch_size, -1),  # [B * S] -> [B, S]
         )
 
@@ -76,14 +75,6 @@ class SuffixModel(nn.Module, ABC):
     def _repeat_prefix(prefix: Events, *, num_samples: int) -> Events:
         """Expand every prefix channel into independent generation rows."""
         return Events(*(field.repeat_interleave(num_samples, dim=0) for field in prefix))
-
-    def _remaining_time(self, times: torch.Tensor, keep: torch.Tensor) -> torch.Tensor:
-        """Sum retained standardized durations and return standardized remaining time."""
-        scaled = times * self.codec.inter_event_time.std + self.codec.inter_event_time.mean
-        minutes = scaled.expm1() if self.codec.inter_event_time.log else scaled
-        total = (minutes.clamp_min(0) * keep).sum(dim=1)
-        transformed = torch.log1p(total) if self.codec.remaining_time.log else total
-        return (transformed - self.codec.remaining_time.mean) / self.codec.remaining_time.std
 
     @classmethod
     def from_config(cls, config: DictConfig, codec: DatasetCodec) -> Self:

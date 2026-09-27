@@ -36,7 +36,7 @@ def run(
             caller makes, not one to be inferred from a filename. It carries the config of the
             run that wrote it, so nothing about the model or the dataset is passed alongside it.
             A head-sampling Transformer must use the tuned checkpoint from `pipelines.tune`.
-        device: Overrides the run's own `training.device`, e.g. to generate on a different
+        device: Overrides the run's own `device`, e.g. to generate on a different
             machine than the one it trained on. `None` keeps it.
         num_samples: How many suffixes to draw per prefix, or `None` for the run's own
             `inference.evaluation_samples`.
@@ -58,7 +58,7 @@ def run(
     # Start with the config stored in the checkpoint and apply runtime overrides.
     config = OmegaConf.create(checkpoint['config'])
     if device is not None:
-        config.training.device = device
+        config.device = device
     if num_samples is not None:
         config.inference.evaluation_samples = num_samples
     if num_workers is not None:
@@ -80,16 +80,15 @@ def run(
     torch.manual_seed(config.seed)
 
     path = output_path('generations.parquet')
-    device = torch.device(config.training.device)
+    device = torch.device(config.device)
     batch_size = generation_batch_size(
         inference=config.inference,
         num_samples=config.inference.evaluation_samples,
         prefixes_upper_bound=config.dataloader.batch_size,
     )
     trained_step, score = checkpoint['step'], checkpoint['selection_score']
-    drawn_with = config.model.get('sampling')
-    if config.model.kind == 'diffusion_transformer':
-        drawn_with = config.model.diffusion
+    diffusion = run.model == 'diffusion_transformer'
+    drawn_with = config.model.diffusion if diffusion else config.model.get('sampling')
 
     banner(
         'Generating suffixes',
@@ -97,13 +96,13 @@ def run(
             'checkpoint_sha256': checkpoint_hash,
             'run': run,
             'dataset': config.data.name,
-            'model': f'{config.model.name} (step {trained_step}, selection score {score:.4f})',
+            'model': f'{run.model} (step {trained_step}, selection score {score:.4f})',
             'device': device,
             'samples': f'{config.inference.evaluation_samples} suffixes per prefix',
             'sampling': (
                 f'{drawn_with.sampler.calls} DDIM calls from level '
                 f'{drawn_with.sampler.start_level}, eta {drawn_with.sampler.eta}'
-                if config.model.kind == 'diffusion_transformer'
+                if diffusion
                 else f'temperature {drawn_with.temperature}, top_p {drawn_with.top_p}'
                 if drawn_with is not None
                 else 'not configured'
@@ -117,7 +116,7 @@ def run(
         codec = DatasetCodec.load(config.data)
 
     with step(f'Building the model and moving it onto {device}'):
-        model = SuffixModel.from_checkpoint(checkpoint, codec, device=config.training.device)
+        model = SuffixModel.from_checkpoint(checkpoint, codec, device=config.device)
         model.eval()
 
     # Build the DataLoader for the test split

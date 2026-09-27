@@ -11,6 +11,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from src.artifacts import Provenance, RunIdentity
 from src.config_validation.model import validate_sampling
+from src.models.architectures import architecture_of
 from src.selection import SELECTION_METRIC
 
 
@@ -120,7 +121,8 @@ class TuningReport:
 
     def apply_to_checkpoint(self, checkpoint: dict) -> dict:
         """Apply this report's sampler selection and provenance to a training checkpoint."""
-        if checkpoint['config']['model']['kind'] != 'head_sampling_transformer':
+        architecture = architecture_of(checkpoint['config']['model']['_target_'])
+        if architecture != 'head_sampling_transformer':
             raise ValueError('Only head_sampling_transformer checkpoints can be tuned')
         if checkpoint.get('tuning') is not None:
             raise ValueError('Checkpoint has already been tuned')
@@ -146,9 +148,9 @@ _ADAPTER = TypeAdapter(TuningReport)
 
 def require_generation_ready(checkpoint: dict) -> TuningReport | None:
     """Require post-training sampler selection for architectures that need it."""
-    kind = checkpoint['config']['model']['kind']
+    architecture = architecture_of(checkpoint['config']['model']['_target_'])
     tuning_payload = checkpoint.get('tuning')
-    if kind == 'head_sampling_transformer':
+    if architecture == 'head_sampling_transformer':
         if tuning_payload is None:
             raise ValueError(
                 'head_sampling_transformer generation requires a tuned checkpoint. '
@@ -156,5 +158,5 @@ def require_generation_ready(checkpoint: dict) -> TuningReport | None:
             )
         return TuningReport.from_payload(tuning_payload)
     if tuning_payload is not None:
-        raise ValueError(f'{kind} does not support sampler tuning')
+        raise ValueError(f'{architecture} does not support sampler tuning')
     return None

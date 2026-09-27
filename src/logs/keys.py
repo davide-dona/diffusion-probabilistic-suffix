@@ -24,8 +24,6 @@ TIMESTAMP_KEY = 'time:timestamp'
 INTER_EVENT_TIME_KEY = 'inter_event_time'
 # Minutes since the first event of the same case, offered to the encoders the same way
 CASE_ELAPSED_KEY = 'ts_start'
-# Minutes until the end of the case. Predicted by the decoder
-REMAINING_TIME_KEY = 'rtime'
 # The calendar position of the event, offered to the encoders the same way. Cyclical: sin/cos of
 # the day of the week and of the second of the day, so the encoders read the wrap-around (Sunday
 # to Monday, midnight to midnight) rather than a raw count that treats it as a jump.

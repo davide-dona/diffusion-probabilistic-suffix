@@ -31,7 +31,6 @@ class GeneratedSuffix:
     activities: torch.Tensor  # [..., T]
     lengths: torch.Tensor  # [...], events before EOT, or T if EOT was not emitted
     inter_event_times: torch.Tensor  # [..., T], standardized
-    remaining_time: torch.Tensor  # [...], standardized
     used_sentinel: torch.Tensor  # [...]
 
 

@@ -13,8 +13,8 @@ generation depend on this interface rather than on architecture internals.
 | `pad_activity_index` | Activity index ignored by reconstruction loss and used after generated termination. |
 | `eot_activity_index` | Activity token that terminates a suffix. |
 
-`GeneratedSuffix.activities` and `inter_event_times` have shape `[B, S, T]`; `lengths`,
-`remaining_time`, and `used_sentinel` have shape `[B, S]`. Length counts real generated
+`GeneratedSuffix.activities` and `inter_event_times` have shape `[B, S, T]`; `lengths` and
+`used_sentinel` have shape `[B, S]`. Length counts real generated
 events before EOT, or the generated canvas length when no EOT appears.
 
 `DecoderOutput` holds activity logits `[B, T, V]` and standardized time predictions `[B, T]`.
@@ -26,9 +26,11 @@ and standardized time means and log-variances `[B, T]`.
 
 ## Construction and Persistence
 
-- `SuffixModel.from_config` resolves `model._target_` from the Hydra configuration. A new
-  `model.kind` requires a model class path in its Hydra configuration, validation, visualization
-  label, and shared contract support. Stored configurations must contain the class path.
+- `SuffixModel.from_config` resolves `model._target_` from the Hydra configuration. The class path
+  is the only model identity: `src.models.architectures.architecture_of` reads the architecture
+  package from it, and that name is the run identity model. A new architecture requires a package
+  under `architectures/`, an entry in `ARCHITECTURES`, a Hydra configuration, validation, a
+  visualization label, and shared contract support.
 - Checkpoints contain the resolved run configuration, provenance, state dictionary, optimizer
   step, selection score, selection metric, and direction. `persistence.io.load_checkpoint` loads
   plain data and tensors on CPU; `persistence.validation` checks the stored model configuration,
@@ -47,10 +49,9 @@ and standardized time means and log-variances `[B, T]`.
 - Generation must be invariant to every true suffix field for all architectures.
 - PAD and SOS are structural tokens and cannot be sampled as suffix activities. EOT determines
   generated length. UNK remains a valid modeled activity.
-- Inter-event times are modeled in the codec's standardized space. Remaining time is derived from
-  generated inter-event times after inverse scaling, nonnegative clamping, summation, and
-  standardization through the remaining-time codec by `SuffixModel._remaining_time`. It is not an
-  independent generated head.
+- Inter-event times are modeled in the codec's standardized space. Models do not produce remaining
+  time; evaluation derives it by summing decoded, nonnegative inter-event minutes. Do not add an
+  independent remaining-time head.
 - `src/models/embeddings.py` holds event-content and positional embeddings used across model
   families. `src/models/backbones/autoregressive` holds the causal prefix encoder, decoder trunk,
   attention, cache, and loss normalization reused by the two SuTraN baselines. Neither location
@@ -62,7 +63,7 @@ and standardized time means and log-variances `[B, T]`.
 
 ## Architecture Routing
 
-| Model kind | Guide | Status |
+| Architecture | Guide | Status |
 | --- | --- | --- |
 | `diffusion_transformer` | [`architectures/diffusion_transformer/AGENTS.md`](architectures/diffusion_transformer/AGENTS.md) | Implemented main model |
 | `head_sampling_transformer` | [`architectures/head_sampling_transformer/AGENTS.md`](architectures/head_sampling_transformer/AGENTS.md) | Implemented SuTraN-PH baseline |

@@ -3,8 +3,8 @@ import math
 from hydra.utils import get_class
 from omegaconf import DictConfig
 
-from src.artifacts.provenance import validate_model as validate_model_name
 from src.config_validation.primitives import validate_number
+from src.models.architectures import architecture_of
 
 
 def validate_sampling(config: DictConfig) -> None:
@@ -27,30 +27,24 @@ def validate_model(model: DictConfig) -> None:
     """Validate a configured model architecture and its architecture-specific settings.
 
     Raises:
-        ValueError: If a dimension, probability, transformer layout, or model-kind-specific
-            section is invalid.
+        ValueError: If the class path, a dimension, a probability, a transformer layout, or an
+            architecture-specific section is invalid.
     """
-    validate_model_name(model.name)
-    if model.kind not in {'head_sampling_transformer', 'diffusion_transformer', 'u_ed_sutran'}:
-        raise ValueError(f'Unknown model kind: {model.kind}')
     if '_target_' not in model:
         raise ValueError('model._target_ is required')
-    target = model._target_
-    module = f'src.models.architectures.{model.kind}.model'
-    if not isinstance(target, str) or not target.startswith(f'{module}.'):
-        raise ValueError(f'model._target_ must name a class in {module}')
+    architecture = architecture_of(model._target_)
     from src.models.base import SuffixModel
 
-    if not issubclass(get_class(target), SuffixModel):
+    if not issubclass(get_class(model._target_), SuffixModel):
         raise ValueError('model._target_ must implement SuffixModel')
 
     validate_number(model.d_model, 'model.d_model', integer=True)
     for key, value in model.embeddings.items():
         validate_number(value, f'model.embeddings.{key}', integer=True)
 
-    if model.kind in {'head_sampling_transformer', 'u_ed_sutran'}:
+    if architecture in {'head_sampling_transformer', 'u_ed_sutran'}:
         _validate_sutran(model)
-        if model.kind == 'head_sampling_transformer':
+        if architecture == 'head_sampling_transformer':
             validate_sampling(model.sampling)
         else:
             _validate_uncertainty(model)
@@ -80,7 +74,7 @@ def _validate_uncertainty(model: DictConfig) -> None:
     if 'sampling' in model:
         raise ValueError('u_ed_sutran does not support sampler tuning or sampling controls')
     config = model.uncertainty
-    expected = {'log_variance_min', 'log_variance_max', 'categorical_samples', 'validation_seed'}
+    expected = {'log_variance_min', 'log_variance_max', 'categorical_samples'}
     if set(config) != expected:
         raise ValueError(f'model.uncertainty must contain exactly {sorted(expected)}')
     for key in ('log_variance_min', 'log_variance_max'):
@@ -95,9 +89,6 @@ def _validate_uncertainty(model: DictConfig) -> None:
         raise ValueError('model.uncertainty.log_variance_min must be below log_variance_max')
     validate_number(
         config.categorical_samples, 'model.uncertainty.categorical_samples', integer=True
-    )
-    validate_number(
-        config.validation_seed, 'model.uncertainty.validation_seed', integer=True, inclusive=True
     )
 
 
@@ -134,9 +125,4 @@ def _validate_diffusion_transformer(model: DictConfig) -> None:
     validate_number(model.diffusion.sampler.eta, 'model.diffusion.sampler.eta', inclusive=True)
     if model.diffusion.sampler.eta > 1:
         raise ValueError('model.diffusion.sampler.eta must not exceed 1')
-    for channel in ('activity_schedule', 'time_schedule'):
-        validate_number(
-            model.diffusion[channel].cosine_offset,
-            f'model.diffusion.{channel}.cosine_offset',
-            inclusive=True,
-        )
+    validate_number(model.diffusion.cosine_offset, 'model.diffusion.cosine_offset', inclusive=True)

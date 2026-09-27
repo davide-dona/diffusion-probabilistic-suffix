@@ -66,14 +66,12 @@ _EVENTS = pa.struct(
     [
         ('activities', _SUFFIX),
         ('inter_event_time_minutes', _INTER_EVENT_TIMES),
-        ('remaining_time_minutes', pa.float32()),
     ]
 )
 _DRAW = pa.struct(
     [
         ('suffix_index', pa.int32()),
         ('inter_event_time_minutes', _INTER_EVENT_TIMES),
-        ('remaining_time_minutes', pa.float32()),
         ('used_eot_sentinel', pa.bool_()),
     ]
 )
@@ -92,9 +90,7 @@ _SCHEMA = pa.schema(
 _KEY_COLUMNS = ['case_id', 'prefix_len']
 _FLOAT_LEAVES = [
     'generated_draws.list.element.inter_event_time_minutes.list.element',
-    'generated_draws.list.element.remaining_time_minutes',
     'truth.inter_event_time_minutes.list.element',
-    'truth.remaining_time_minutes',
 ]
 
 
@@ -108,7 +104,6 @@ def _generation_row(generation: Generation) -> dict:
             {
                 'suffix_index': index,
                 'inter_event_time_minutes': events.inter_event_time_minutes,
-                'remaining_time_minutes': events.remaining_time_minutes,
                 'used_eot_sentinel': events.used_eot_sentinel,
             }
             for index, events in zip(
@@ -118,7 +113,6 @@ def _generation_row(generation: Generation) -> dict:
         'truth': {
             'activities': generation.truth.activities,
             'inter_event_time_minutes': generation.truth.inter_event_time_minutes,
-            'remaining_time_minutes': generation.truth.remaining_time_minutes,
         },
     }
 
@@ -141,7 +135,6 @@ def _generation_from_row(row: dict) -> Generation:
                 DecodedEvents(
                     activities=suffixes[index],
                     inter_event_time_minutes=draw['inter_event_time_minutes'],
-                    remaining_time_minutes=draw['remaining_time_minutes'],
                     used_eot_sentinel=draw['used_eot_sentinel'],
                 )
                 for index, draw in zip(taken, draws, strict=True)

@@ -1,8 +1,6 @@
 defaults:
 - _self_
 _target_: src.models.architectures.u_ed_sutran.model.UEDSuTraN
-kind: u_ed_sutran
-name: u_ed_sutran
 d_model: 32
 embeddings:
   activity_dim: 32
@@ -24,4 +22,3 @@ uncertainty:
   log_variance_min: -10.0
   log_variance_max: 10.0
   categorical_samples: 20
-  validation_seed: ${seed}
