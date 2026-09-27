@@ -1,4 +1,4 @@
-# Joint Diffusion Transformer
+# Diffusion Transformer with Prefix Encoder
 
 ## Contract
 
@@ -9,8 +9,22 @@ forbidden at position zero in both training predictions and sampling. PAD and SO
 UNK and EOT are clean activity targets. MASK is a separate noisy suffix state and is never emitted.
 
 `generate` may read `TraceCut.prefix` only. No sampling bound, denoiser input, or stopping decision
-may use a true suffix field. The denoiser uses full bidirectional attention over clean prefix rows
-and its own noisy or revealed suffix canvas.
+may use a true suffix field. The denoiser encodes the observed event sequence once, then uses a
+bidirectional suffix decoder with cross-attention to those states. Generation caches encoded prefix
+states across samples and diffusion calls.
+
+## Observed Comparison
+
+As of 2026-09-26, the selected Sepsis validation activity energy score was 0.2966 for the prefix
+encoder model at step 4920 and 0.3065 for the former joint denoiser at step 3600; lower is better.
+Logged validation generation took 28.9 seconds and 85.5 seconds at those steps, respectively, under
+matching sampling settings. The prefix encoder was better and generation was faster in this
+comparison. BPIC12 shows a provisional improvement in selection score, while the unfinished BPIC17
+run currently trails its joint baseline. Do not describe these results as a demonstrated improvement
+across all datasets.
+
+Checkpoint configurations require `prefix_encoder.num_layers` and an explicit
+`diffusion.sampler.start_level`. The obsolete `denoiser` field is invalid.
 
 ## Clean Canvas and Forward Processes
 
@@ -45,9 +59,8 @@ is no auxiliary categorical loss or uniform categorical posterior.
 ## Sampling
 
 The sampler uses DDIM. `diffusion.sampler.calls` selects a descending grid from
-`diffusion.sampler.start_level` to level one and a final jump to level zero. New runs use 50 calls
-from level 990 across 1000 noise levels, avoiding the near-zero terminal time signal. Checkpoints
-without `start_level` start from the terminal level, preserving their original sampling behavior.
+`diffusion.sampler.start_level` to level one and a final jump to level zero. The default uses 50 calls
+from level 990 across 1000 noise levels, avoiding the near-zero terminal time signal.
 Activities start as all MASK and times start as standard Gaussian noise. At each jump, still-masked
 positions reveal with the cumulative probability above and already revealed positions stay fixed.
 The final jump reveals every MASK. The Gaussian channel uses a DDIM jump based on the cumulative

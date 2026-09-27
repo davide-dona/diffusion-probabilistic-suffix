@@ -2,14 +2,14 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 
-from src.models.architectures.shared_components.sutran.decoder import CausalDecoder
-from src.models.architectures.shared_components.sutran.embeddings import EventEmbeddings
 from src.models.architectures.u_ed_sutran.distributions import sample_gaussian
+from src.models.backbones.autoregressive.decoder import CausalDecoder
+from src.models.backbones.autoregressive.embeddings import EventEmbeddings
 from src.models.contracts import UncertaintyAwareDecoderOutput
 
 
 class UncertaintyAwareDecoder(CausalDecoder[UncertaintyAwareDecoderOutput]):
-    """Shared causal SuTraN decoder with learned Gaussian logit and duration uncertainty."""
+    """Causal decoder with learned Gaussian logit and duration uncertainty."""
 
     def __init__(
         self,

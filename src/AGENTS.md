@@ -9,7 +9,7 @@ points; source modules should expose typed operations that can be checked withou
 | --- | --- |
 | `datasets/` | Tensor structures, prefix and suffix cuts, fitted codecs, and split loading. |
 | `artifacts/` | Stored artifact locations, dataset manifests, hashes, identities, and provenance. |
-| `models/` | Shared model interface, architectures, checkpoint loading, and time derivation. |
+| `models/` | Shared model interface, architectures, generation helpers, and checkpoint persistence. |
 | `training/` | Optimization, validation, early stopping, and scalar records. |
 | `inference/` | Batch generation, tuning reports, decoded samples, and generations Parquet I/O. |
 | `evaluation/` | Metric registration, prefix scoring, aggregation, and evaluation reports. |

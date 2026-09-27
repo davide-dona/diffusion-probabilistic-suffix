@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.logs.declare import ConformanceChecker
-from src.models import SuffixModel
+from src.models.base import SuffixModel
 from src.selection import selection_score
 from src.training.loss import Loss
 from src.training.validation import (

@@ -6,9 +6,10 @@ Given an observed process prefix, learn the conditional distribution of the rema
 sequence and its inter-event times. Evaluation draws several suffixes per prefix to measure
 accuracy, diversity, calibration, time prediction, and process conformance.
 
-The main model is a Joint Diffusion Transformer over categorical activities and continuous times.
-It is compared with the implemented probabilistic SuTraN-PH baseline and the uncertainty-aware U-ED-SuTraN
-baseline on Sepsis, BPIC12, BPIC17, and BPIC19.
+The main model is a diffusion Transformer with a cached prefix encoder and a bidirectional suffix
+decoder over categorical activities and continuous times. It is compared with the implemented
+probabilistic SuTraN-PH and uncertainty-aware U-ED-SuTraN baselines on Sepsis, BPIC12, BPIC17,
+and BPIC19.
 
 ## Safety and Correctness
 
@@ -21,6 +22,9 @@ baseline on Sepsis, BPIC12, BPIC17, and BPIC19.
   path.
 - Preserve chronological splits, fitted codecs, seeds, resolved configurations, checkpoint hashes,
   and run identity across artifact handoffs.
+- Do not add retrocompatibility for superseded model names, configuration fields, class paths,
+  artifact schemas, or checkpoint formats. Require the current contract, so that legacy artifacts
+  are automatically invalidated.
 - Do not hand edit source logs or generated dataset and run artifacts.
 - Use four-space indentation, single quotes, 100-character lines, type hints, `snake_case` names,
   and `PascalCase` classes. Ruff is the formatting and linting authority. Never comments as the
@@ -40,7 +44,7 @@ Read the most specific guide before changing files in its scope.
 | Source layout and shared coding contracts | [`src/AGENTS.md`](src/AGENTS.md) |
 | Artifact locations, manifests, hashing, and provenance | [`src/AGENTS.md`](src/AGENTS.md) |
 | Model interface, checkpoints, architecture selection | [`src/models/AGENTS.md`](src/models/AGENTS.md) |
-| Joint Diffusion Transformer | [`src/models/architectures/diffusion_transformer/AGENTS.md`](src/models/architectures/diffusion_transformer/AGENTS.md) |
+| Diffusion Transformer | [`src/models/architectures/diffusion_transformer/AGENTS.md`](src/models/architectures/diffusion_transformer/AGENTS.md) |
 | SuTraN-PH | [`src/models/architectures/head_sampling_transformer/AGENTS.md`](src/models/architectures/head_sampling_transformer/AGENTS.md) |
 | U-ED-SuTraN | [`src/models/architectures/u_ed_sutran/AGENTS.md`](src/models/architectures/u_ed_sutran/AGENTS.md) |
 | Dataset tensors and codecs | [`src/datasets/AGENTS.md`](src/datasets/AGENTS.md) |

@@ -9,8 +9,8 @@ suffixes. Metrics operate per prefix first, then reports average prefixes with e
 - `reports.py` owns JSON reports and the dataframe view used by visualization.
 - `score_store.py` owns streaming Parquet writes, score readers, and adjacent-file discovery.
 - `prepared.py` owns the shared per-prefix arrays and conformance checks.
-- `metrics/helpers.py` owns the draw-weighted sample mean, distance-parametrized energy score,
-  CRPS, MAE, and coverage gap.
+- `Draws.mean` owns the draw-weighted sample mean. `metrics/helpers.py` owns the
+  distance-parametrized energy score, CRPS, MAE, and coverage gap.
 - `metrics/definitions/activity.py` defines each activity distance inside its registered metric.
 - `metrics/metadata.py` defines metric records, groups, display labels, units and bounds, owners,
   and ranking directions.

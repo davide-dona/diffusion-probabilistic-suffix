@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import torch
 
-from src.models.architectures.shared_components.sutran.attention import ProjectedKeysValues
+from src.models.backbones.autoregressive.attention import ProjectedKeysValues
 
 
 @dataclass(frozen=True)

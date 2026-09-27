@@ -2,23 +2,6 @@ from collections.abc import Callable, Hashable, Sequence
 
 import numpy as np
 
-from src.evaluation.prepared import PreparedPrefix
-
-
-def sample_mean(context: PreparedPrefix, values: Sequence[float]) -> float:
-    """Return the draw-weighted mean of values for distinct sampled suffixes.
-
-    Args:
-        context: Prepared prefix whose sample counts give draw multiplicities.
-        values: One value per distinct sampled suffix, in sample order.
-
-    Returns:
-        The mean across sampled draws, or zero when there are no values or draws.
-    """
-    samples = context.generation.samples
-    draw_count = len(samples)
-    return float(samples.counts @ values) / draw_count if values and draw_count else 0.0
-
 
 def energy_score(
     distinct_draw_values: Sequence[Sequence[Hashable]],

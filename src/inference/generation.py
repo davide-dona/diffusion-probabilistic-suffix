@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 
@@ -70,6 +71,17 @@ class Draws:
         weighted mean over these, and they sum to `len(self)`.
         """
         return np.bincount(self.taken, minlength=len(self.suffixes)).astype(np.float64)
+
+    def mean(self, values: Sequence[float]) -> float:
+        """Return the draw-weighted mean of values for distinct sampled suffixes.
+
+        Args:
+            values: One value per distinct sampled suffix, in suffix order.
+        Returns:
+            The mean across draws, or zero when there are no values or draws.
+        """
+        draw_count = len(self)
+        return float(self.counts @ values) / draw_count if values and draw_count else 0.0
 
 
 @dataclass(frozen=True)

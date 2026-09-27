@@ -15,14 +15,10 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset
 from src.inference.generate import generate_batch, generation_batch_size
 from src.inference.generation_store import GenerationWriter
+from src.inference.tuning import require_generation_ready
 from src.logs import Split
-from src.models import (
-    checkpoint_identity,
-    checkpoint_provenance,
-    load_checkpoint,
-    model_from_checkpoint,
-    require_generation_ready,
-)
+from src.models.base import SuffixModel
+from src.models.persistence.io import load_checkpoint
 
 
 def run(
@@ -49,12 +45,13 @@ def run(
     # to read.
     with step(f'Reading the checkpoint at {checkpoint_path}'):
         checkpoint = load_checkpoint(checkpoint_path)
-    run = checkpoint_identity(checkpoint)
+    checkpoint_provenance = artifacts.Provenance.from_dict(checkpoint['provenance'])
+    run = checkpoint_provenance.run
     tuning = require_generation_ready(checkpoint)
     checkpoint_hash = artifacts.sha256(checkpoint_path)
     provenance = artifacts.Provenance(
         run=run,
-        dataset_fingerprint=checkpoint_provenance(checkpoint).dataset_fingerprint,
+        dataset_fingerprint=checkpoint_provenance.dataset_fingerprint,
         checkpoint_sha256=checkpoint_hash,
         source_sha256=checkpoint_hash,
     )
@@ -66,9 +63,6 @@ def run(
         config.inference.evaluation_samples = num_samples
     if num_workers is not None:
         config.dataloader.num_workers = num_workers
-    if config.model.kind == 'diffusion_transformer':
-        sampler = config.model.diffusion.sampler
-        sampler.start_level = sampler.get('start_level', config.model.diffusion.steps)
     validate_experiment_config(config)
     # Record the exact settings used for this generation run.
     save_config(
@@ -92,8 +86,7 @@ def run(
         num_samples=config.inference.evaluation_samples,
         prefixes_upper_bound=config.dataloader.batch_size,
     )
-    # A checkpoint that has been trimmed for publishing still carries both of these.
-    trained_step, score = checkpoint.get('step'), checkpoint.get('selection_score')
+    trained_step, score = checkpoint['step'], checkpoint['selection_score']
     drawn_with = config.model.get('sampling')
     if config.model.kind == 'diffusion_transformer':
         drawn_with = config.model.diffusion
@@ -104,9 +97,7 @@ def run(
             'checkpoint_sha256': checkpoint_hash,
             'run': run,
             'dataset': config.data.name,
-            'model': f'{config.model.name} (step {trained_step}, selection score {score:.4f})'
-            if trained_step is not None and score is not None
-            else config.model.name,
+            'model': f'{config.model.name} (step {trained_step}, selection score {score:.4f})',
             'device': device,
             'samples': f'{config.inference.evaluation_samples} suffixes per prefix',
             'sampling': (
@@ -126,7 +117,7 @@ def run(
         codec = DatasetCodec.load(config.data)
 
     with step(f'Building the model and moving it onto {device}'):
-        model = model_from_checkpoint(checkpoint, codec, device=config.training.device)
+        model = SuffixModel.from_checkpoint(checkpoint, codec, device=config.training.device)
         model.eval()
 
     # Build the DataLoader for the test split

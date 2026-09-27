@@ -86,6 +86,13 @@ class TraceCut(NamedTuple):
     inter_event_times: torch.Tensor  # float32, [max_trace_length], batched [batch_size, ...]
     remaining_times: torch.Tensor  # float32, shaped like `inter_event_times`
 
+    def timed_positions(self) -> torch.Tensor:
+        """Mark real suffix events, excluding terminal EOT and padding, as `[B, T]`."""
+        positions = torch.arange(
+            end=self.suffix.activities.size(dim=1), device=self.suffix.length.device
+        )
+        return positions.unsqueeze(dim=0) < (self.suffix.length - 1).unsqueeze(dim=1)
+
     def to(self, device: torch.device) -> 'TraceCut':
         """Move every tensor field to `device`."""
         return TraceCut(
@@ -136,7 +143,7 @@ class TraceDataset(Dataset):
         # would be repeated for every cut point of every case.
         split_dataset = codec.read_split(split)
 
-        events = _encode_events(codec, split_dataset)
+        events = self._encode_events(split_dataset)
         remaining_times = torch.from_numpy(codec.remaining_time.encode(split_dataset))
 
         self._cases = _group_cases(
@@ -150,6 +157,20 @@ class TraceDataset(Dataset):
             for case_idx, case in enumerate(self._cases)
             for k in range(case.min_prefix_len, int(case.events.length))
         ]
+
+    def _encode_events(self, log: pd.DataFrame) -> Events:
+        """Map raw events to the indices and normalized channels consumed by the model."""
+        numeric_attributes, numeric_attributes_present = self.codec.encode_numeric_features(log)
+        return Events(
+            # Pandas can expose a read-only view, so these integer channels need a copy.
+            activities=torch.tensor(data=self.codec.activity.encode(log), dtype=torch.long),
+            resources=torch.tensor(data=self.codec.resource.encode(log), dtype=torch.long),
+            inter_event_times=torch.from_numpy(self.codec.inter_event_time.encode(log)),
+            categorical_attributes=self.codec.encode_categorical_features(log),
+            numeric_attributes=numeric_attributes,
+            numeric_attributes_present=numeric_attributes_present,
+            length=torch.tensor(data=len(log), dtype=torch.long),
+        )
 
     def _case_and_cut(self, i: int) -> tuple[_Case, int]:
         """Return the source case and cut point for the i-th split trace."""
@@ -227,34 +248,6 @@ def fixed_subset(dataset: Dataset, *, size: int, generator: torch.Generator) -> 
     # Otherwise, draw a random slice of the requested size and return it as a Subset
     indices = torch.randperm(n=len(dataset), generator=generator)[:size]
     return Subset(dataset=dataset, indices=indices.tolist())
-
-
-def _encode_events(codec: DatasetCodec, log: pd.DataFrame) -> Events:
-    """Map a run of raw events to the indices and normalized floats the model consumes.
-
-    Args:
-        codec: The dataset's codec, naming every channel read here and holding the vocabulary or
-            range each is encoded through.
-        log: The events as a preprocessed split holds them. The whole frame, not a selection of
-            it: which columns each channel reads is the codec's answer, and this is where it is
-            asked.
-
-    Returns:
-        The same events as vocabulary indices and normalized channels, unpadded, so every one of
-        them counts towards `length`.
-    """
-    numeric_attributes, numeric_attributes_present = codec.encode_numeric_features(log)
-    return Events(
-        # `torch.tensor` rather than `from_numpy`: pandas hands back a read-only view of its
-        # own block for some dtypes, which torch would wrap rather than copy.
-        activities=torch.tensor(data=codec.activity.encode(log), dtype=torch.long),
-        resources=torch.tensor(data=codec.resource.encode(log), dtype=torch.long),
-        inter_event_times=torch.from_numpy(codec.inter_event_time.encode(log)),
-        categorical_attributes=codec.encode_categorical_features(log),
-        numeric_attributes=numeric_attributes,
-        numeric_attributes_present=numeric_attributes_present,
-        length=torch.tensor(data=len(log), dtype=torch.long),
-    )
 
 
 def _group_cases(

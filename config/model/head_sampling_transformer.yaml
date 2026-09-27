@@ -1,5 +1,6 @@
 defaults:
 - _self_
+_target_: src.models.architectures.head_sampling_transformer.model.HeadSamplingTransformer
 kind: head_sampling_transformer
 name: head_sampling_transformer
 d_model: 32

@@ -7,7 +7,7 @@ from rapidfuzz.distance import DamerauLevenshtein
 from scipy.spatial.distance import cdist
 
 from src.datasets.codec import END_CODE, START_CODE
-from src.evaluation.metrics.helpers import energy_score, sample_mean
+from src.evaluation.metrics.helpers import energy_score
 from src.evaluation.metrics.metadata import Direction, MetricGroup
 from src.evaluation.metrics.registry import METRICS
 from src.evaluation.prepared import PreparedPrefix
@@ -41,7 +41,7 @@ def dls_sample_mean(context: PreparedPrefix) -> float:
     """
     samples, truth = context.generation.samples, context.generation.truth
     similarities = [sequence_similarity(suffix, truth.activities) for suffix in samples.suffixes]
-    return sample_mean(context, similarities)
+    return samples.mean(similarities)
 
 
 @METRICS.register(

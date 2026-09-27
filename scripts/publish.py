@@ -6,7 +6,8 @@ from huggingface_hub.errors import HfHubHTTPError, LocalTokenNotFoundError
 
 from scripts.hub import HF_REPO_ID
 from src import artifacts
-from src.models import load_checkpoint, require_generation_ready
+from src.inference.tuning import require_generation_ready
+from src.models.persistence.io import load_checkpoint
 
 
 def _mebibytes(path: Path) -> str:

@@ -18,7 +18,8 @@ from src.evaluation.metrics.metadata import Owner
 from src.inference.generate import generation_batch_size
 from src.logs import Split
 from src.logs.declare import ConformanceChecker
-from src.models import SuffixModel, build_model, save_checkpoint
+from src.models.base import SuffixModel
+from src.models.persistence.io import save_checkpoint
 from src.selection import SELECTION_METRIC
 from src.training.loss import Loss
 from src.training.train import (
@@ -153,7 +154,7 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
         codec = DatasetCodec.load(config.data)
 
     with step(f'Building the model and moving it onto {config.training.device}'):
-        model = build_model(config.model, codec).to(config.training.device)
+        model = SuffixModel.from_config(config.model, codec).to(config.training.device)
         parameters = sum(parameter.numel() for parameter in model.parameters())
         print(f'  {parameters:,} parameters', flush=True)
 

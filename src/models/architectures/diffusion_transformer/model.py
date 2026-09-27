@@ -5,15 +5,13 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.models.architectures.diffusion_transformer.components.denoiser import DiffusionDenoiser
-from src.models.architectures.diffusion_transformer.components.process import (
+from src.models.architectures.diffusion_transformer.denoiser import DiffusionDenoiser
+from src.models.architectures.diffusion_transformer.process import (
     CategoricalDiffusion,
     GaussianDiffusion,
-    reverse_grid,
 )
+from src.models.base import SuffixModel
 from src.models.contracts import DiffusionOutput, GeneratedSuffix
-from src.models.models import SuffixModel
-from src.models.time import remaining_time_from_inter_event_times
 from src.training.loss import Loss
 
 
@@ -23,11 +21,12 @@ class DiffusionTransformer(SuffixModel):
     def __init__(self, config: DictConfig, codec: DatasetCodec):
         """Build the denoiser, activity process, and time process."""
         super().__init__(codec=codec)
-        self.codec = codec
+        if 'denoiser' in config:
+            raise ValueError('model.denoiser is not supported')
         self.canvas_length = codec.max_trace_length - 1
         self.steps = config.diffusion.steps
         self.sampling_calls = config.diffusion.sampler.calls
-        self.sampling_start_level = config.diffusion.sampler.get('start_level', self.steps)
+        self.sampling_start_level = config.diffusion.sampler.start_level
         self.sampling_eta = config.diffusion.sampler.eta
         self.activities = CategoricalDiffusion(
             codec=codec,
@@ -52,8 +51,9 @@ class DiffusionTransformer(SuffixModel):
         )  # [B]
         noisy_activity = self.activities.corrupt(clean=clean_activity, timestep=timestep)  # [B, T]
         noisy_time, noise = self.times.corrupt(clean=clean_time, timestep=timestep)  # [B, T]
+        prefix = self.denoiser.encode_prefix(item.prefix)
         logits, predicted_noise = self.denoiser(
-            prefix=item.prefix,
+            prefix=prefix,
             activities=noisy_activity,
             times=noisy_time,
             timestep=timestep,
@@ -100,20 +100,18 @@ class DiffusionTransformer(SuffixModel):
     def generate(self, item: TraceCut, *, num_samples: int) -> GeneratedSuffix:
         """Draw `num_samples` complete suffixes for each prefix."""
         batch_size = item.prefix.activities.size(dim=0)
-        prefix = self._repeat_prefix(prefix=item.prefix, num_samples=num_samples)
+        prefix = self.denoiser.encode_prefix(item.prefix).repeat_interleave(num_samples)
         rows = batch_size * num_samples
         activities = torch.full(
             size=(rows, self.canvas_length),
             fill_value=self.activities.mask_index,
             dtype=torch.long,
-            device=prefix.activities.device,
+            device=prefix.hidden.device,
         )  # [B * S, T]
         times = torch.randn(
-            size=(rows, self.canvas_length), device=prefix.activities.device
+            size=(rows, self.canvas_length), device=prefix.hidden.device
         )  # [B * S, T]
-        for step, previous_step in reverse_grid(
-            self.steps, self.sampling_calls, start_level=self.sampling_start_level
-        ):
+        for step, previous_step in self._reverse_grid():
             timestep = torch.full(
                 size=(rows,), fill_value=step, dtype=torch.long, device=activities.device
             )  # [B * S]
@@ -156,9 +154,7 @@ class DiffusionTransformer(SuffixModel):
         keep = positions < lengths.unsqueeze(dim=1)  # [1, T] < [B * S, 1] -> [B * S, T]
         codec_activities = codec_activities.masked_fill(~keep, self.pad_activity_index)
         times = times.masked_fill(~keep, self.standardized_zero)
-        remaining = remaining_time_from_inter_event_times(
-            times=times, keep=keep, codec=self.codec
-        )  # [B * S]
+        remaining = self._remaining_time(times=times, keep=keep)  # [B * S]
         generated = GeneratedSuffix(
             activities=codec_activities,
             lengths=lengths,
@@ -193,3 +189,15 @@ class DiffusionTransformer(SuffixModel):
     def _masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Average valid suffix positions within each batch row."""
         return (values * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1)  # [B, T] -> [B]
+
+    def _reverse_grid(self) -> list[tuple[int, int]]:
+        """Return descending sampling levels and their preceding endpoints, ending at zero."""
+        if not 1 <= self.sampling_calls <= self.sampling_start_level <= self.steps:
+            raise ValueError('Sampling calls and start level must fit within the noise levels')
+        levels = (
+            torch.linspace(self.sampling_start_level, 1, self.sampling_calls, dtype=torch.float64)
+            .round()
+            .long()
+            .tolist()
+        )
+        return list(zip(levels, levels[1:] + [0], strict=True))

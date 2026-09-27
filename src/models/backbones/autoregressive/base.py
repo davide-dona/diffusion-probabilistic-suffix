@@ -5,22 +5,20 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
-from src.models.architectures.shared_components.sutran.decoder import CausalDecoder
-from src.models.architectures.shared_components.sutran.embeddings import EventEmbeddings
-from src.models.architectures.shared_components.sutran.trace_encoder import TraceEncoder
+from src.models.backbones.autoregressive.decoder import CausalDecoder
+from src.models.backbones.autoregressive.embeddings import EventEmbeddings
+from src.models.backbones.autoregressive.trace_encoder import TraceEncoder
+from src.models.base import SuffixModel
 from src.models.contracts import GeneratedSuffix
-from src.models.models import SuffixModel
-from src.models.time import remaining_time_from_inter_event_times
 
 
-class SuTraNModel[OutputT](SuffixModel):
-    """Shared prefix encoding, teacher forcing, and duration conversion for SuTraN models."""
+class AutoregressiveSuffixModel[OutputT](SuffixModel):
+    """Prefix encoding, teacher forcing, and duration conversion for causal suffix models."""
 
     decoder: CausalDecoder[OutputT]
 
     def __init__(self, config: DictConfig, codec: DatasetCodec) -> None:
         super().__init__(codec=codec)
-        self.codec = codec
         self.embeddings = EventEmbeddings(
             config=config.embeddings, codec=codec, d_model=config.d_model
         )
@@ -44,16 +42,14 @@ class SuTraNModel[OutputT](SuffixModel):
             end=generated.inter_event_times.size(dim=1), device=generated.activities.device
         )
         kept = positions.unsqueeze(dim=0) < generated.lengths.unsqueeze(dim=1)  # [B * S, T]
-        remaining = remaining_time_from_inter_event_times(
-            times=generated.inter_event_times, keep=kept, codec=self.codec
-        )
+        remaining = self._remaining_time(times=generated.inter_event_times, keep=kept)
         return self._per_sample(
             generated=replace(
                 generated,
                 activities=generated.activities.masked_fill(~kept, self.pad_activity_index),
                 inter_event_times=generated.inter_event_times.masked_fill(~kept, 0.0),
                 remaining_time=remaining,
-                used_sentinel=generated.lengths.eq(generated.activities.size(dim=1)),
+                used_sentinel=generated.used_sentinel,
             ),
             batch_size=batch_size,
         )

@@ -1,15 +1,6 @@
 import torch
 
-from src.datasets.dataset import TraceCut
 from src.training.loss import Loss
-
-
-def timed_positions(batch: TraceCut) -> torch.Tensor:
-    """Mark real suffix events, excluding terminal EOT and padding, as `[B, T]`."""
-    positions = torch.arange(
-        end=batch.suffix.activities.size(dim=1), device=batch.suffix.length.device
-    )
-    return positions.unsqueeze(dim=0) < (batch.suffix.length - 1).unsqueeze(dim=1)
 
 
 def reconstruction_loss(
