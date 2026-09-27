@@ -169,8 +169,10 @@ The report and its per-prefix scores are written under
 `scores.suffix_length`, `scores.remaining_time`, `scores.inter_event_time`, and
 `scores.conformance`, both overall and within each length bucket.
 
-DLS sample mean and suffix-length MAE are validation diagnostics, logged to W&B under
-`diagnostic_activity/dls_sample_mean` and `diagnostic_suffix_length/suffix_length_mae`.
+DLS sample mean, mean pairwise activity distance, and suffix-length MAE are validation diagnostics,
+logged to W&B under `diagnostic_activity/dls_sample_mean`,
+`diagnostic_activity/pairwise_activity_distance`, and
+`diagnostic_suffix_length/suffix_length_mae`.
 They are excluded from final reports, score files, and publication comparisons.
 
 Generation metrics are logged under `generation_<group>/<metric>`. Only model-owned metrics are
