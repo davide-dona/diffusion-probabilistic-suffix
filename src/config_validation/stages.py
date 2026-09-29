@@ -83,6 +83,9 @@ def validate_experiment_config(config: DictConfig) -> None:
 
     if config.wandb.mode not in ('online', 'offline', 'disabled'):
         raise ValueError('wandb.mode must be online, offline, or disabled')
+    experiment = config.get('experiment')
+    if experiment is not None and (not isinstance(experiment, str) or not experiment.strip()):
+        raise ValueError('experiment must be null or a nonempty string')
 
 
 def validate_tuning_config(

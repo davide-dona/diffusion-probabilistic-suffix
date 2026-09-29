@@ -119,6 +119,8 @@ retains its last successfully saved best checkpoint.
 
 Training curves are logged to the `diffusion-probabilistic-suffix` W&B project. On normal completion, the
 selected checkpoint is also uploaded to W&B.
+Pass `experiment=<label>` to add a label to the W&B display name and tags for filtering across
+datasets. The setting defaults to null and does not change the run identity or artifact paths.
 Diffusion runs also log `train/masked_real_activity_loss`, `train/masked_eot_activity_loss`, and
 their `val/` counterparts. Together they equal the logged activity loss; each uses the full-canvas
 denominator.

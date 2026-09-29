@@ -239,15 +239,16 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
     experiment_config = OmegaConf.to_container(config, resolve=True)
     assert isinstance(experiment_config, dict)
     experiment_config.pop('run_id')
+    experiment = config.get('experiment')
 
     tracking = wandb.init(
         project=experiment_config['wandb']['project'],
         mode=experiment_config['wandb']['mode'],
         id=f'{run.dataset}-{run.model}-{run.run_id}',
-        name=str(run),
+        name=f'{experiment} | {run}' if experiment else str(run),
         group=f'{run.dataset}/{run.model}',
         job_type='train',
-        tags=[run.dataset, run.model],
+        tags=[run.dataset, run.model] + ([experiment] if experiment else []),
         config=experiment_config,
     )
     print(f'Logging to {tracking.url or experiment_config["wandb"]["mode"]}')
