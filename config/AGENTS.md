@@ -40,6 +40,8 @@ groups. The result is validated at the stage boundary and stored with every dura
   stopping patience in validation checks.
 - Keep optional CLI overrides as `null` in stage configuration and apply them explicitly to the
   checkpoint configuration at runtime.
+- The optional top-level `experiment` label is null by default. When set for training, include it
+  in the W&B display name and tags without changing the run identity or artifact paths.
 - Do not encode machine-specific absolute paths in committed YAML.
 - Preserve `_self_` placement when composition order matters and use `# @package _global_` for
   groups that populate the root configuration.
