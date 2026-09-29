@@ -65,7 +65,11 @@ Activities start as all MASK and times start as standard Gaussian noise. At each
 positions reveal with the cumulative probability above and already revealed positions stay fixed.
 The final jump reveals every MASK. The Gaussian channel uses a DDIM jump based on the cumulative
 signal at both endpoints. `diffusion.sampler.eta` controls its stochasticity, with zero as the
-deterministic default.
+deterministic default. When the codec log-scales inter-event times, each jump clips the clean time
+estimate to the standardized train range from `codec.inter_event_time.normalized_range()` and
+re-derives the noise from it, so every sampled time lies within the range observed in training.
+Without the clip, noise prediction errors amplified by `1 / sqrt(alpha_t)` at high levels become
+exponential errors in minutes after the log transform. Without log scaling, jumps are unclipped.
 
 Initial EOT is forbidden when a masked activity is sampled. After sampling, the first EOT sets the
 length; positions from EOT onward become PAD and standardized zero time. If no EOT appears,

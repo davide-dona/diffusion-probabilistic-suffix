@@ -32,8 +32,10 @@ data:
   - day_cos
   - seconds_sin
   - seconds_cos
-  log_scaled_features: []
-  log_scaled_inter_event_time: false
+  log_scaled_features:
+  - Cumulative net worth (EUR)
+  - ts_start
+  log_scaled_inter_event_time: true
 declare:
   consider_vacuity: false
   min_support: 0.8
