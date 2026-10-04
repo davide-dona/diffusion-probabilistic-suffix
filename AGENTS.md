@@ -11,6 +11,19 @@ decoder over categorical activities and continuous times. It is compared with th
 probabilistic SuTraN-PH and uncertainty-aware U-ED-SuTraN baselines on Sepsis, BPIC12, BPIC17,
 and BPIC19.
 
+## Research Knowledge
+
+Research notes live in the Obsidian vault at `~/Obsidian/PPM`. Read the relevant notes
+before changing a research method, model, or metric.
+
+- [Project](~/Obsidian/PPM/Projects/): explains the research objective and scope.
+- [Concepts](~/Obsidian/PPM/Concepts/): defines the key theoretical concepts.
+- [Models](~/Obsidian/PPM/Models/): describes the implemented model architectures.
+- [Ideas](~/Obsidian/PPM/Ideas/): contains research ideas and open questions.
+- [Experiments](~/Obsidian/PPM/Experiments/): recorded comparisons.
+
+The guides below remain the authority for current implementation contracts and safe execution.
+
 ## Safety and Correctness
 
 - Do not run training, sampler tuning, full test generation, or full evaluation locally. Inspect
