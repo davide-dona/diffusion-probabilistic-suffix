@@ -42,7 +42,7 @@ class DiffusionTransformer(SuffixModel):
 
     def forward(self, item: TraceCut) -> DiffusionOutput:
         """Corrupt a clean suffix and predict its activities and time noise."""
-        clean_activity, clean_time, time_mask = self._clean_canvas(item)
+        clean_activity, clean_time, real_mask = self._clean_canvas(item)
         batch_size = clean_activity.size(dim=0)
         timestep = torch.randint(
             low=1, high=self.steps + 1, size=(batch_size,), device=clean_activity.device
@@ -63,7 +63,7 @@ class DiffusionTransformer(SuffixModel):
             noise=noise,
             noisy_activity=noisy_activity,
             timestep=timestep,
-            time_mask=time_mask,
+            real_mask=real_mask,
         )
 
     def compute_loss(self, output: DiffusionOutput, batch: TraceCut) -> tuple[torch.Tensor, Loss]:
@@ -76,12 +76,10 @@ class DiffusionTransformer(SuffixModel):
         reveal = self.activities.adjacent_reveal_probability(output.timestep)  # [B]
         weighted = cross_entropy * masked  # [B, T]
         factor = reveal * self.steps  # [B]
-        real_activity = weighted.masked_fill(~output.time_mask, 0.0).mean(dim=1) * factor  # [B]
-        eot_activity = weighted.masked_fill(output.time_mask, 0.0).mean(dim=1) * factor  # [B]
+        real_activity = weighted.masked_fill(~output.real_mask, 0.0).mean(dim=1) * factor  # [B]
+        eot_activity = weighted.masked_fill(output.real_mask, 0.0).mean(dim=1) * factor  # [B]
         activity = real_activity + eot_activity  # [B]
-        time = self._masked_mean(
-            values=(output.noise - output.predicted_noise).square(), mask=output.time_mask
-        )  # [B]
+        time = (output.noise - output.predicted_noise).square().mean(dim=1)  # [B, T] -> [B]
         per_example = activity + time  # [B]
         metrics = Loss(
             loss=per_example.sum().item(),
@@ -161,7 +159,7 @@ class DiffusionTransformer(SuffixModel):
         return self._per_sample(generated=generated, batch_size=batch_size)
 
     def _clean_canvas(self, batch: TraceCut) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Build fixed width clean activity and time canvases with their masks."""
+        """Build fixed width clean activity and time canvases with their real-event mask."""
         lengths = batch.suffix.length - 1  # [B]
         positions = torch.arange(end=self.canvas_length, device=lengths.device).unsqueeze(
             dim=0
@@ -180,11 +178,6 @@ class DiffusionTransformer(SuffixModel):
             other=self.standardized_zero,
         )  # [B, T]
         return clean_activity, clean_time, real
-
-    @staticmethod
-    def _masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        """Average valid suffix positions within each batch row."""
-        return (values * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1)  # [B, T] -> [B]
 
     def _reverse_grid(self) -> list[tuple[int, int]]:
         """Return descending sampling levels and their preceding endpoints, ending at zero."""

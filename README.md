@@ -101,7 +101,7 @@ categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are c
 Validation uses isolated seeded draws and selects checkpoints by the existing generation metric.
 The diffusion model uses absorbing MASK activity corruption and Gaussian time noise. Its default
 configuration has 1000 noise levels and 50 DDIM sampling calls starting at level 990. The activity
-loss supervises real events and all EOT positions in the fixed suffix canvas. A four-layer prefix
+and time losses supervise real events and all EOT positions in the fixed suffix canvas. A four-layer prefix
 encoder processes the observed events once. A four-layer bidirectional suffix decoder cross-attends
 to the cached prefix states at each sampling call. Compare sampler and model settings on validation
 data before final test generation. Checkpoints require the current model configuration, including

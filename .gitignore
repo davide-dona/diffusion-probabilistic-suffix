@@ -15,9 +15,6 @@ outputs/
 pinned/
 
 
-# Notes on things worth trying, kept out of the repo until one of them is actually done
-ideas/
-
 # Virtual environments
 .venv
 
@@ -32,6 +29,3 @@ data/*/*
 
 # Temporary scripts
 tmp/
-
-# Notes directory
-notes/
