@@ -55,7 +55,9 @@ coverage minus its nominal level. Inter-event metrics compare against the observ
 sampled time sequences are truncated or zero-padded to that width during preparation.
 
 Declare checks evaluate the full trace formed by prefix plus suffix against constraints mined from
-the training split. Observed conformance metrics belong to the log and have no model ranking
+the training split. The checker reads `consider_vacuity` from the model header: a model mined with
+vacuity counts a trace that never activates a binary constraint as satisfying it, except for the
+choice templates, which every trace activates. Observed conformance metrics belong to the log and have no model ranking
 direction. Training validation logs only model-owned report and diagnostic metrics to W&B.
 Log-owned metrics are still computed during validation and remain in report scores, JSON reports,
 and Parquet columns; ownership filtering applies only to metric logging.

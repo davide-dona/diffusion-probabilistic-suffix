@@ -1,8 +1,23 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 # The positions of each activity in a trace, keyed by the activity's character.
 Positions = dict[str, list[int]]
+
+
+def positions_of(trace: str) -> Positions:
+    """Index where each activity of a trace occurs.
+
+    Args:
+        trace: The trace's activities, one character each, in order.
+    Returns:
+        The positions of each activity present in the trace, in ascending order.
+    """
+    positions: Positions = {}
+    for index, activity in enumerate(trace):
+        positions.setdefault(activity, []).append(index)
+    return positions
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,14 +32,23 @@ class Constraint:
     # How many occurrences of `first` a counting template asks for, and 1 for the rest
     n: int
 
-    def holds(self, trace: str, positions: Positions) -> bool:
+    def holds(self, trace: str, positions: Positions, *, vacuity: bool) -> bool:
         """Whether one finished trace satisfies this constraint.
         Args:
             trace: The trace's activities, one character each, in order.
-            positions: Where each of them occurs, from `ConformanceChecker.check`.
+            positions: Where each of them occurs, from `positions_of`.
+            vacuity: Whether a trace that never activates the constraint satisfies it, as
+                Declare4Py reads `consider_vacuity`. Only binary templates other than the choice
+                family have an activation to miss; every trace activates the rest.
         Returns:
-            True if the trace both activates the constraint and does not violate it.
+            True if the trace does not violate the constraint and either activates it or
+            `vacuity` is set.
         """
+        activation = self.template.activation
+        if vacuity and activation is not None:
+            activator = self.first if activation == 'first' else self.second
+            if activator not in positions:
+                return True
         return self.template.holds(self, trace, positions)
 
 
@@ -35,6 +59,8 @@ class _Template:
     holds: Callable[[Constraint, str, Positions], bool]
     is_binary: bool
     supports_cardinality: bool
+    # Which named activity activates the constraint, or None if every trace activates it
+    activation: Literal['first', 'second'] | None
 
 
 def _existence(constraint: Constraint, trace: str, positions: Positions) -> bool:
@@ -176,39 +202,58 @@ def _alternate_precedence(constraint: Constraint, trace: str, positions: Positio
 # Every template `pipelines.preprocess` can mine, keyed by the name it writes into the model
 # file.
 TEMPLATES: dict[str, _Template] = {
-    'Existence': _Template(holds=_existence, is_binary=False, supports_cardinality=True),
-    'Absence': _Template(holds=_absence, is_binary=False, supports_cardinality=True),
-    'Exactly': _Template(holds=_exactly, is_binary=False, supports_cardinality=True),
-    'Init': _Template(holds=_init, is_binary=False, supports_cardinality=False),
-    'End': _Template(holds=_end, is_binary=False, supports_cardinality=False),
-    'Choice': _Template(holds=_choice, is_binary=True, supports_cardinality=False),
+    'Existence': _Template(
+        holds=_existence, is_binary=False, supports_cardinality=True, activation=None
+    ),
+    'Absence': _Template(
+        holds=_absence, is_binary=False, supports_cardinality=True, activation=None
+    ),
+    'Exactly': _Template(
+        holds=_exactly, is_binary=False, supports_cardinality=True, activation=None
+    ),
+    'Init': _Template(holds=_init, is_binary=False, supports_cardinality=False, activation=None),
+    'End': _Template(holds=_end, is_binary=False, supports_cardinality=False, activation=None),
+    'Choice': _Template(holds=_choice, is_binary=True, supports_cardinality=False, activation=None),
     'Exclusive Choice': _Template(
-        holds=_exclusive_choice, is_binary=True, supports_cardinality=False
+        holds=_exclusive_choice, is_binary=True, supports_cardinality=False, activation=None
     ),
     'Responded Existence': _Template(
-        holds=_responded_existence, is_binary=True, supports_cardinality=False
+        holds=_responded_existence, is_binary=True, supports_cardinality=False, activation='first'
     ),
     'Not Responded Existence': _Template(
-        holds=_not_responded_existence, is_binary=True, supports_cardinality=False
+        holds=_not_responded_existence,
+        is_binary=True,
+        supports_cardinality=False,
+        activation='first',
     ),
-    'Response': _Template(holds=_response, is_binary=True, supports_cardinality=False),
-    'Precedence': _Template(holds=_precedence, is_binary=True, supports_cardinality=False),
-    'Not Response': _Template(holds=_not_response, is_binary=True, supports_cardinality=False),
-    'Not Precedence': _Template(holds=_not_precedence, is_binary=True, supports_cardinality=False),
-    'Chain Response': _Template(holds=_chain_response, is_binary=True, supports_cardinality=False),
+    'Response': _Template(
+        holds=_response, is_binary=True, supports_cardinality=False, activation='first'
+    ),
+    'Precedence': _Template(
+        holds=_precedence, is_binary=True, supports_cardinality=False, activation='second'
+    ),
+    'Not Response': _Template(
+        holds=_not_response, is_binary=True, supports_cardinality=False, activation='first'
+    ),
+    'Not Precedence': _Template(
+        holds=_not_precedence, is_binary=True, supports_cardinality=False, activation='second'
+    ),
+    'Chain Response': _Template(
+        holds=_chain_response, is_binary=True, supports_cardinality=False, activation='first'
+    ),
     'Chain Precedence': _Template(
-        holds=_chain_precedence, is_binary=True, supports_cardinality=False
+        holds=_chain_precedence, is_binary=True, supports_cardinality=False, activation='second'
     ),
     'Not Chain Response': _Template(
-        holds=_not_chain_response, is_binary=True, supports_cardinality=False
+        holds=_not_chain_response, is_binary=True, supports_cardinality=False, activation='first'
     ),
     'Not Chain Precedence': _Template(
-        holds=_not_chain_precedence, is_binary=True, supports_cardinality=False
+        holds=_not_chain_precedence, is_binary=True, supports_cardinality=False, activation='second'
     ),
     'Alternate Response': _Template(
-        holds=_alternate_response, is_binary=True, supports_cardinality=False
+        holds=_alternate_response, is_binary=True, supports_cardinality=False, activation='first'
     ),
     'Alternate Precedence': _Template(
-        holds=_alternate_precedence, is_binary=True, supports_cardinality=False
+        holds=_alternate_precedence, is_binary=True, supports_cardinality=False, activation='second'
     ),
 }
