@@ -16,7 +16,7 @@ from src.config_validation import validate_evaluation_config
 from src.datasets.codec import ActivityCodec
 from src.evaluation import EvaluationReport, EvaluationSummary, PrefixSummary, stream_prefix_scores
 from src.inference.generation_store import Generations
-from src.logs.declare import ConformanceChecker, discovery_settings
+from src.logs.declare import ConformanceChecker, DeclareModel
 
 
 @dataclass(frozen=True)
@@ -141,7 +141,7 @@ def run(generations_file: Path, workers: int | None) -> None:
     # What the model being checked against was mined under, so a report is never read without
     # knowing which constraints it holds.
     model_path = artifacts.DECLARE_MODEL.require(dataset)
-    mined = discovery_settings(model_path)
+    mined = DeclareModel.load(dataset).settings
     mined_under = f'min support {mined.min_support:.0%}, consider_vacuity={mined.consider_vacuity}'
 
     banner(

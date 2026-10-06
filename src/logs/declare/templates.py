@@ -56,6 +56,7 @@ class Constraint:
 class _Template:
     """One DECLARE template: what satisfying it means, and how a constraint of it is written."""
 
+    name: str
     holds: Callable[[Constraint, str, Positions], bool]
     is_binary: bool
     supports_cardinality: bool
@@ -202,58 +203,132 @@ def _alternate_precedence(constraint: Constraint, trace: str, positions: Positio
 # Every template `pipelines.preprocess` can mine, keyed by the name it writes into the model
 # file.
 TEMPLATES: dict[str, _Template] = {
-    'Existence': _Template(
-        holds=_existence, is_binary=False, supports_cardinality=True, activation=None
-    ),
-    'Absence': _Template(
-        holds=_absence, is_binary=False, supports_cardinality=True, activation=None
-    ),
-    'Exactly': _Template(
-        holds=_exactly, is_binary=False, supports_cardinality=True, activation=None
-    ),
-    'Init': _Template(holds=_init, is_binary=False, supports_cardinality=False, activation=None),
-    'End': _Template(holds=_end, is_binary=False, supports_cardinality=False, activation=None),
-    'Choice': _Template(holds=_choice, is_binary=True, supports_cardinality=False, activation=None),
-    'Exclusive Choice': _Template(
-        holds=_exclusive_choice, is_binary=True, supports_cardinality=False, activation=None
-    ),
-    'Responded Existence': _Template(
-        holds=_responded_existence, is_binary=True, supports_cardinality=False, activation='first'
-    ),
-    'Not Responded Existence': _Template(
-        holds=_not_responded_existence,
-        is_binary=True,
-        supports_cardinality=False,
-        activation='first',
-    ),
-    'Response': _Template(
-        holds=_response, is_binary=True, supports_cardinality=False, activation='first'
-    ),
-    'Precedence': _Template(
-        holds=_precedence, is_binary=True, supports_cardinality=False, activation='second'
-    ),
-    'Not Response': _Template(
-        holds=_not_response, is_binary=True, supports_cardinality=False, activation='first'
-    ),
-    'Not Precedence': _Template(
-        holds=_not_precedence, is_binary=True, supports_cardinality=False, activation='second'
-    ),
-    'Chain Response': _Template(
-        holds=_chain_response, is_binary=True, supports_cardinality=False, activation='first'
-    ),
-    'Chain Precedence': _Template(
-        holds=_chain_precedence, is_binary=True, supports_cardinality=False, activation='second'
-    ),
-    'Not Chain Response': _Template(
-        holds=_not_chain_response, is_binary=True, supports_cardinality=False, activation='first'
-    ),
-    'Not Chain Precedence': _Template(
-        holds=_not_chain_precedence, is_binary=True, supports_cardinality=False, activation='second'
-    ),
-    'Alternate Response': _Template(
-        holds=_alternate_response, is_binary=True, supports_cardinality=False, activation='first'
-    ),
-    'Alternate Precedence': _Template(
-        holds=_alternate_precedence, is_binary=True, supports_cardinality=False, activation='second'
-    ),
+    template.name: template
+    for template in (
+        _Template(
+            name='Existence',
+            holds=_existence,
+            is_binary=False,
+            supports_cardinality=True,
+            activation=None,
+        ),
+        _Template(
+            name='Absence',
+            holds=_absence,
+            is_binary=False,
+            supports_cardinality=True,
+            activation=None,
+        ),
+        _Template(
+            name='Exactly',
+            holds=_exactly,
+            is_binary=False,
+            supports_cardinality=True,
+            activation=None,
+        ),
+        _Template(
+            name='Init', holds=_init, is_binary=False, supports_cardinality=False, activation=None
+        ),
+        _Template(
+            name='End', holds=_end, is_binary=False, supports_cardinality=False, activation=None
+        ),
+        _Template(
+            name='Choice',
+            holds=_choice,
+            is_binary=True,
+            supports_cardinality=False,
+            activation=None,
+        ),
+        _Template(
+            name='Exclusive Choice',
+            holds=_exclusive_choice,
+            is_binary=True,
+            supports_cardinality=False,
+            activation=None,
+        ),
+        _Template(
+            name='Responded Existence',
+            holds=_responded_existence,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='first',
+        ),
+        _Template(
+            name='Not Responded Existence',
+            holds=_not_responded_existence,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='first',
+        ),
+        _Template(
+            name='Response',
+            holds=_response,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='first',
+        ),
+        _Template(
+            name='Precedence',
+            holds=_precedence,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='second',
+        ),
+        _Template(
+            name='Not Response',
+            holds=_not_response,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='first',
+        ),
+        _Template(
+            name='Not Precedence',
+            holds=_not_precedence,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='second',
+        ),
+        _Template(
+            name='Chain Response',
+            holds=_chain_response,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='first',
+        ),
+        _Template(
+            name='Chain Precedence',
+            holds=_chain_precedence,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='second',
+        ),
+        _Template(
+            name='Not Chain Response',
+            holds=_not_chain_response,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='first',
+        ),
+        _Template(
+            name='Not Chain Precedence',
+            holds=_not_chain_precedence,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='second',
+        ),
+        _Template(
+            name='Alternate Response',
+            holds=_alternate_response,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='first',
+        ),
+        _Template(
+            name='Alternate Precedence',
+            holds=_alternate_precedence,
+            is_binary=True,
+            supports_cardinality=False,
+            activation='second',
+        ),
+    )
 }

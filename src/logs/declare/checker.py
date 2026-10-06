@@ -1,9 +1,8 @@
 from dataclasses import dataclass, replace
 from functools import lru_cache
 
-from src import artifacts
 from src.datasets.codec import ActivityCodec
-from src.logs.declare.constraints import discovery_settings, read_constraints
+from src.logs.declare.model import DeclareModel
 from src.logs.declare.templates import positions_of
 
 # Stands in for an activity the dataset's codebook does not know, so its constraint can never be
@@ -52,10 +51,10 @@ class ConformanceChecker:
                 check. An activity the codebook does not know is given a character no trace can
                 contain, leaving its constraint unactivated rather than growing the codebook.
         """
-        path = artifacts.DECLARE_MODEL.require(dataset)
+        model = DeclareModel.load(dataset)
         # A model mined with vacuity holds constraints whose support counted the traces that
         # never activate them, so checking it must count those traces as satisfying them too.
-        self._vacuity: bool = discovery_settings(path).consider_vacuity
+        self._vacuity: bool = model.settings.consider_vacuity
         self._constraints = tuple(
             replace(
                 constraint,
@@ -66,7 +65,7 @@ class ConformanceChecker:
                     else codes.codes.get(constraint.second, _UNMATCHABLE)
                 ),
             )
-            for constraint in read_constraints(path)
+            for constraint in model.constraints
         )
 
     @lru_cache(maxsize=100_000)  # noqa: B019 -- one checker per scoring process
