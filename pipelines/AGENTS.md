@@ -43,8 +43,8 @@ directory, but Hydra does not pass artifacts to the next stage. Supply every dow
   reads or model execution.
 - Store the fully resolved training configuration in checkpoints. For tuning and generation, save
   the source path, source hash, run identity, and effective runtime overrides.
-- When `experiment` is set, include it in the W&B display name and tags while retaining dataset
-  and architecture tags and the established run identity.
+- When an experiment is selected, include its label in the W&B display name and tags while
+  retaining dataset and architecture tags and the established run identity.
 - Require preprocessing artifacts through `src.artifacts.require_dataset_bundle` before work that
   depends on them.
 - Keep split responsibilities separate. Tuning reads validation only; generation reads test only.

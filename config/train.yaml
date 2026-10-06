@@ -8,6 +8,7 @@ defaults:
 - regime: ${oc.select:dataset,???}
 - runtime: cuda
 - _self_
+- experiment: null
 run_id: ${now:%Y%m%d-%H%M%S-%f}
 experiment: null
 hydra:
