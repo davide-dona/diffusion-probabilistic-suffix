@@ -13,6 +13,7 @@ groups. The result is validated at the stage boundary and stored with every dura
 | `regime/<dataset>.yaml` | Learning rate, warmup, step budget, validation cadence and sizes, patience, and batch size for one dataset. |
 | `runtime/cuda.yaml` | Seed, device, loader workers, and W&B settings. |
 | `output/default.yaml` | Hydra run and sweep directories with `hydra.job.chdir: false`. |
+| `experiment/<name>.yaml` | One experiment's datasets, model, label, and sweep arms. |
 | Stage YAML | Defaults composition, required inputs, runtime overrides, and output resolvers. |
 
 ## Rules
@@ -40,8 +41,12 @@ groups. The result is validated at the stage boundary and stored with every dura
   stopping patience in validation checks.
 - Keep optional CLI overrides as `null` in stage configuration and apply them explicitly to the
   checkpoint configuration at runtime.
-- The optional top-level `experiment` label is null by default. When set for training, include it
-  in the W&B display name and tags without changing the run identity or artifact paths.
+- `experiment/<name>.yaml` defines one experiment in the global package. It selects its model,
+  either overrides its dataset or sweeps `dataset` among its arms, sets the top-level `experiment`
+  label to its own name, and declares its arms in `hydra.sweeper.params`, so
+  `--multirun experiment=<name>` launches every arm. Name the file after the intervention. The
+  label is null without an experiment; when set for training, it appears in the W&B display name
+  and tags without changing the run identity or artifact paths.
 - Do not encode machine-specific absolute paths in committed YAML.
 - Preserve `_self_` placement when composition order matters and use `# @package _global_` for
   groups that populate the root configuration.

@@ -119,8 +119,16 @@ retains its last successfully saved best checkpoint.
 
 Training curves are logged to the `diffusion-probabilistic-suffix` W&B project. On normal completion, the
 selected checkpoint is also uploaded to W&B.
-Pass `experiment=<label>` to add a label to the W&B display name and tags for filtering across
-datasets. The setting defaults to null and does not change the run identity or artifact paths.
+Experiments live in `config/experiment/`. Each one fixes its model, fixes or sweeps its datasets,
+adds its name to the W&B display name and tags, and lists its arms, so one command runs the whole
+comparison:
+
+```bash
+uv run python -m pipelines.train --multirun experiment=<name>
+```
+
+Without an experiment the label is null. The label does not change the run identity or artifact
+paths.
 Diffusion runs also log `train/masked_real_activity_loss`, `train/masked_eot_activity_loss`, and
 their `val/` counterparts. Together they equal the logged activity loss; each uses the full-canvas
 denominator.

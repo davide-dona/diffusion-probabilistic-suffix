@@ -19,8 +19,7 @@ before changing a research method, model, or metric.
 - [Project](~/Obsidian/PPM/Projects/): explains the research objective and scope.
 - [Concepts](~/Obsidian/PPM/Concepts/): defines the key theoretical concepts.
 - [Models](~/Obsidian/PPM/Models/): describes the implemented model architectures.
-- [Ideas](~/Obsidian/PPM/Ideas/): contains research ideas and open questions.
-- [Experiments](~/Obsidian/PPM/Experiments/): recorded comparisons.
+- [Experiments](~/Obsidian/PPM/Experiments/): one note per hypothesis, from proposal to result.
 
 The guides below remain the authority for current implementation contracts and safe execution.
 
@@ -57,9 +56,6 @@ Read the most specific guide before changing files in its scope.
 | Source layout and shared coding contracts | [`src/AGENTS.md`](src/AGENTS.md) |
 | Artifact locations, manifests, hashing, and provenance | [`src/AGENTS.md`](src/AGENTS.md) |
 | Model interface, checkpoints, architecture selection | [`src/models/AGENTS.md`](src/models/AGENTS.md) |
-| Diffusion Transformer | [`src/models/architectures/diffusion_transformer/AGENTS.md`](src/models/architectures/diffusion_transformer/AGENTS.md) |
-| SuTraN-PH | [`src/models/architectures/head_sampling_transformer/AGENTS.md`](src/models/architectures/head_sampling_transformer/AGENTS.md) |
-| U-ED-SuTraN | [`src/models/architectures/u_ed_sutran/AGENTS.md`](src/models/architectures/u_ed_sutran/AGENTS.md) |
 | Dataset tensors and codecs | [`src/datasets/AGENTS.md`](src/datasets/AGENTS.md) |
 | Source and generated data artifacts | [`data/AGENTS.md`](data/AGENTS.md) |
 | Hydra configuration | [`config/AGENTS.md`](config/AGENTS.md) |
