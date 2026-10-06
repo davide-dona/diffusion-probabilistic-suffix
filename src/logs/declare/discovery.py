@@ -1,13 +1,12 @@
-import json
 from collections import Counter
 from collections.abc import Iterator
+from dataclasses import replace
 from itertools import permutations
 
 import pandas as pd
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
-from src import artifacts
-from src.logs.declare.constraints import COMMENT, SETTINGS_LINE
+from src.logs.declare.model import DeclareModel
 from src.logs.declare.templates import TEMPLATES, Constraint, Positions, positions_of
 from src.logs.keys import ACTIVITY_KEY, CASE_KEY
 
@@ -43,20 +42,6 @@ def discover_declare_model(
     """
     activities = sorted(train[ACTIVITY_KEY].astype(str).unique())
 
-    # A constraint line names its activities inside brackets, separated by `, `, and closes on
-    # the conditions behind a `|`. An activity carrying any of that would be read back as two
-    # activities, or as a condition, so the model could not say what it was mined to say.
-    unwritable = [
-        activity
-        for activity in activities
-        if any(marker in activity for marker in ('[', ']', '|', ', '))
-    ]
-    if unwritable:
-        raise ValueError(
-            f'{dataset} has activities a declarative model cannot name: {unwritable}. '
-            'Rename them in the raw log, or drop them from the preprocessed split.'
-        )
-
     codes = {activity: chr(_FIRST_CODE + index) for index, activity in enumerate(activities)}
     names = {code: activity for activity, code in codes.items()}
     traces = train[ACTIVITY_KEY].astype(str).map(codes).groupby(train[CASE_KEY], sort=False)
@@ -86,17 +71,17 @@ def discover_declare_model(
         >= declare_config.min_support
     ]
 
-    # What the constraints below were mined under, so a reader of the file can tell a model mined
-    # one way from one mined another, and so the checker reads vacuity the way mining did.
-    lines = [
-        f'{COMMENT} discovered from the train split of {dataset} by pipelines.preprocess',
-        f'{SETTINGS_LINE}{json.dumps(OmegaConf.to_container(declare_config, resolve=True))}',
-    ]
-    lines += [f'activity {activity}' for activity in activities]
-    lines += [_serialize(constraint, names) for constraint in mined]
-
-    path = artifacts.DECLARE_MODEL.prepare(dataset)
-    path.write_text('\n'.join(lines) + '\n')
+    DeclareModel(
+        settings=declare_config,
+        constraints=tuple(
+            replace(
+                constraint,
+                first=names[constraint.first],
+                second=None if constraint.second is None else names[constraint.second],
+            )
+            for constraint in mined
+        ),
+    ).save(dataset)
 
     return len(mined)
 
@@ -137,15 +122,3 @@ def _support(
         for positions, trace, count in log
         if constraint.holds(trace, positions, vacuity=vacuity)
     )
-
-
-def _serialize(constraint: Constraint, names: dict[str, str]) -> str:
-    """Write one constraint as a Declare4Py line, with empty activation, target, and time
-    conditions for a binary template and empty activation and time conditions for a unary one.
-    """
-    template = constraint.template
-    name = next(key for key, value in TEMPLATES.items() if value is template)
-    cardinality = str(constraint.n) if template.supports_cardinality else ''
-    if template.is_binary:
-        return f'{name}[{names[constraint.first]}, {names[constraint.second]}] | | |'
-    return f'{name}{cardinality}[{names[constraint.first]}] | |'
