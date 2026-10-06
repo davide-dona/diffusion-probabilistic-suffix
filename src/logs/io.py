@@ -68,8 +68,7 @@ def read_original_log(data_config: DictConfig) -> pd.DataFrame:
             data_config.timestamp_key: TIMESTAMP_KEY,
         },
         # The case identifier is a name, never a number: a log that numbers its cases would
-        # otherwise be read as integers, which is a dtype pm4py refuses when the declarative
-        # model is discovered and which every reader downstream already overrides to text.
+        # otherwise be read as integers, which every reader downstream already overrides to text.
         dtype=dict.fromkeys([data_config.case_key, *data_config.string_features], str),
     )
 

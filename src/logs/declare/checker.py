@@ -3,8 +3,8 @@ from functools import lru_cache
 
 from src import artifacts
 from src.datasets.codec import ActivityCodec
-from src.logs.declare.constraints import read_constraints
-from src.logs.declare.templates import Positions
+from src.logs.declare.constraints import discovery_settings, read_constraints
+from src.logs.declare.templates import positions_of
 
 # Stands in for an activity the dataset's codebook does not know, so its constraint can never be
 # activated by a trace the codebook spelled.
@@ -52,6 +52,10 @@ class ConformanceChecker:
                 check. An activity the codebook does not know is given a character no trace can
                 contain, leaving its constraint unactivated rather than growing the codebook.
         """
+        path = artifacts.DECLARE_MODEL.require(dataset)
+        # A model mined with vacuity holds constraints whose support counted the traces that
+        # never activate them, so checking it must count those traces as satisfying them too.
+        self._vacuity: bool = discovery_settings(path).consider_vacuity
         self._constraints = tuple(
             replace(
                 constraint,
@@ -62,7 +66,7 @@ class ConformanceChecker:
                     else codes.codes.get(constraint.second, _UNMATCHABLE)
                 ),
             )
-            for constraint in read_constraints(artifacts.DECLARE_MODEL.require(dataset))
+            for constraint in read_constraints(path)
         )
 
     @lru_cache(maxsize=100_000)  # noqa: B019 -- one checker per scoring process
@@ -78,9 +82,9 @@ class ConformanceChecker:
             How many constraints the trace satisfies out of how many there are, which both the
             share and the verdict are read off.
         """
-        positions: Positions = {}
-        for index, activity in enumerate(trace):
-            positions.setdefault(activity, []).append(index)
-
-        satisfied = sum(constraint.holds(trace, positions) for constraint in self._constraints)
+        positions = positions_of(trace)
+        satisfied = sum(
+            constraint.holds(trace, positions, vacuity=self._vacuity)
+            for constraint in self._constraints
+        )
         return Conformance(satisfied=satisfied, total=len(self._constraints))
