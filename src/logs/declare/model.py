@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self
@@ -8,34 +9,33 @@ from omegaconf import DictConfig, OmegaConf
 from src import artifacts
 from src.logs.declare.templates import TEMPLATES, Constraint
 
+# The exact keys of a saved model and of each of its constraints
 _MODEL_KEYS = {'settings', 'constraints'}
-_CONSTRAINT_KEYS = {'template', 'activities', 'n'}
+_CONSTRAINT_KEYS = {'template', 'activities', 'n', 'support'}
 
 
 @dataclass(frozen=True, slots=True)
 class DeclareModel:
-    """A declarative model mined from a dataset's train split, and the settings it was mined
-    under."""
+    """A Declare model mined from a train split, with the settings it was mined under."""
 
-    # The `declare` config section discovery ran with. The checker reads `consider_vacuity` from
-    # it, so a model is always checked the way it was mined.
+    # The `declare` config section, whose `consider_vacuity` checking must reuse
     settings: DictConfig
-    constraints: tuple[Constraint, ...]
+    # Each constraint, to its support: the fraction of the train split's traces that satisfy it
+    constraints: Mapping[Constraint, float]
 
     def save(self, dataset: str) -> Path:
-        """Write this model where the dataset's artifacts live, and return where it went."""
+        """Save the model among the dataset's artifacts and return its path."""
         payload = {
+            # Resolve interpolations so that the file stands alone, without the Hydra config
             'settings': OmegaConf.to_container(self.settings, resolve=True),
             'constraints': [
                 {
                     'template': constraint.template.name,
-                    'activities': [
-                        constraint.first,
-                        *([] if constraint.second is None else [constraint.second]),
-                    ],
+                    'activities': list(constraint.activities),
                     'n': constraint.n,
+                    'support': support,
                 }
-                for constraint in self.constraints
+                for constraint, support in self.constraints.items()
             ],
         }
         path = artifacts.DECLARE_MODEL.prepare(dataset)
@@ -44,39 +44,36 @@ class DeclareModel:
 
     @classmethod
     def load(cls, dataset: str) -> Self:
-        """Read the model preprocessing wrote for a dataset.
+        """
+        Load the model saved for a dataset.
 
         Raises:
-            ValueError: If the file is not a model this module writes, or if a constraint names a
-                template `TEMPLATES` does not hold, the wrong number of activities, one activity
-                twice, or a count its template does not take. Each would silently change every
-                conformance number in a report, so none is skipped.
+            ValueError: If the file or any of its constraints is malformed.
         """
         path = artifacts.DECLARE_MODEL.require(dataset)
         payload = json.loads(path.read_text())
-        if not isinstance(payload, dict) or set(payload) != _MODEL_KEYS:
-            raise ValueError(f'{path} is not a declarative model.')
-        if not isinstance(payload['settings'], dict) or not isinstance(
-            payload['constraints'], list
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != _MODEL_KEYS
+            or not isinstance(payload['settings'], dict)
+            or not isinstance(payload['constraints'], list)
         ):
-            raise ValueError(f'{path} is not a declarative model.')
-        return cls(
-            settings=OmegaConf.create(payload['settings']),
-            constraints=tuple(_constraint(entry) for entry in payload['constraints']),
-        )
+            raise ValueError(f'{path} is not a Declare model.')
+        constraints = dict(_constraint(entry) for entry in payload['constraints'])
+        # A repeated constraint collapses into a single key, so the dict comes out shorter
+        if len(constraints) != len(payload['constraints']):
+            raise ValueError(f'{path} repeats a constraint.')
+        return cls(settings=OmegaConf.create(payload['settings']), constraints=constraints)
 
 
-def _constraint(entry: Any) -> Constraint:
-    """Build one constraint from its written form, rejecting any it could not have been mined as."""
+def _constraint(entry: Any) -> tuple[Constraint, float]:
+    """Parse one saved constraint and its support, rejecting any that mining cannot produce."""
     if not isinstance(entry, dict) or set(entry) != _CONSTRAINT_KEYS:
         raise ValueError(f'{entry} is not a constraint.')
 
     template = TEMPLATES.get(entry['template'])
     if template is None:
-        raise ValueError(
-            f'{entry} uses the {entry["template"]} template, which src.logs.declare.templates '
-            'does not check. Add it to TEMPLATES there, or mine the model without it.'
-        )
+        raise ValueError(f'{entry} uses an unknown template.')
 
     activities = entry['activities']
     expected = 2 if template.is_binary else 1
@@ -87,15 +84,21 @@ def _constraint(entry: Any) -> Constraint:
     ):
         raise ValueError(f'{entry} does not name {expected} activities.')
     if template.is_binary and activities[0] == activities[1]:
-        raise ValueError(f'{entry} names one activity twice, which no template is defined for.')
+        raise ValueError(f'{entry} names one activity twice.')
 
     n = entry['n']
+    # Compare exact types, since `bool` is a subclass of `int`
     if type(n) is not int or n < 1 or (n != 1 and not template.supports_cardinality):
         raise ValueError(f'{entry} asks for a count its template does not take.')
 
-    return Constraint(
+    support = entry['support']
+    if type(support) is not float or not 0.0 <= support <= 1.0:
+        raise ValueError(f'{entry} has a support outside [0, 1].')
+
+    constraint = Constraint(
         template=template,
-        first=activities[0],
-        second=activities[1] if template.is_binary else None,
+        a=activities[0],
+        b=activities[1] if template.is_binary else None,
         n=n,
     )
+    return constraint, support

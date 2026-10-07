@@ -105,7 +105,7 @@ def validate_generation(
         loader: Validation prefixes.
         num_samples: Draws per prefix.
         codec: Fitted dataset codec.
-        checker: Declarative conformance checker.
+        checker: Declare conformance checker.
         device: Computation device.
         seed: Optional validation seed.
 

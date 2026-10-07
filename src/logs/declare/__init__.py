@@ -1,11 +1,10 @@
-from src.logs.declare.checker import ConformanceChecker
+from src.logs.declare.checker import Conformance, ConformanceChecker
+from src.logs.declare.miner import mine_declare_model
 from src.logs.declare.model import DeclareModel
-from src.logs.declare.templates import TEMPLATES, Constraint, Positions
 
 __all__ = [
-    'TEMPLATES',
+    'Conformance',
     'ConformanceChecker',
-    'Constraint',
     'DeclareModel',
-    'Positions',
+    'mine_declare_model',
 ]
