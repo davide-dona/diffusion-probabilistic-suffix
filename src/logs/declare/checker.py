@@ -1,24 +1,16 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import lru_cache
 
 from src.datasets.codec import ActivityCodec
 from src.logs.declare.model import DeclareModel
 from src.logs.declare.templates import positions_of
 
-# Stands in for an activity the dataset's codebook does not know, so its constraint can never be
-# activated by a trace the codebook spelled.
-_UNMATCHABLE = '\x00'
-
 
 @dataclass(frozen=True, slots=True)
 class Conformance:
-    """How one trace fared against a declarative model, read either as a share or as a verdict.
-
-    The two are the same check at two granularities. A share says how much of the process a trace
-    respects, which moves smoothly and so separates models that are all wrong in different amounts;
-    the verdict says whether the trace is one the process allows at all, which is what a trace
-    handed to someone as a continuation has to be. A trace can sit high on the first and fail the
-    second on one constraint.
+    """How one trace scores against the declarative model a dataset was mined for.
+    - satisfied: How many constraints the trace satisfies.
+    - total: How many constraints there are in the model.
     """
 
     satisfied: int
@@ -26,60 +18,48 @@ class Conformance:
 
     @property
     def share(self) -> float:
-        """The fraction of constraints the trace satisfies, in `[0, 1]`, or 0.0 for a model that
-        checks nothing."""
+        """The fraction of constraints the trace satisfies, in `[0, 1]`"""
         return self.satisfied / self.total if self.total else 0.0
 
     @property
     def full(self) -> float:
-        """1.0 if the trace satisfies every constraint and 0.0 otherwise, so that a mean over
-        traces is the share of them that are conformant. A model that checks nothing rates 0.0
-        here as it does on `share`, rather than calling every trace conformant."""
+        """1.0 if the trace satisfies every constraint and 0.0 otherwise.
+        A mean over traces is the share of them that are conformant."""
         return float(self.total > 0 and self.satisfied == self.total)
 
 
 class ConformanceChecker:
-    """Scores traces against the declarative model a dataset was mined for."""
+    """Checks encoded traces against a Declare model."""
 
-    def __init__(self, dataset: str, codes: ActivityCodec) -> None:
+    def __init__(self, model: DeclareModel, codes: ActivityCodec) -> None:
         """
         Args:
-            dataset: The dataset whose model to check against, read from where preprocessing
-                wrote it.
-            codes: The dataset's codebook, which the constraints are translated onto so a trace is
-                checked as the string the generations already hold it as, with nothing decoded per
-                check. An activity the codebook does not know is given a character no trace can
-                contain, leaving its constraint unactivated rather than growing the codebook.
+            model: The model to check against, under the vacuity it was mined with.
+            codes: The codebook the traces are encoded with.
+
+        Raises:
+            ValueError: If the codebook lacks an activity the model names, which means the two
+                belong to different datasets.
         """
-        model = DeclareModel.load(dataset)
-        # A model mined with vacuity holds constraints whose support counted the traces that
-        # never activate them, so checking it must count those traces as satisfying them too.
         self._vacuity: bool = model.settings.consider_vacuity
-        self._constraints = tuple(
-            replace(
-                constraint,
-                first=codes.codes.get(constraint.first, _UNMATCHABLE),
-                second=(
-                    None
-                    if constraint.second is None
-                    else codes.codes.get(constraint.second, _UNMATCHABLE)
-                ),
+        try:
+            self._constraints = tuple(
+                constraint.relabel(codes.codes) for constraint in model.constraints
             )
-            for constraint in model.constraints
-        )
+        except KeyError as error:
+            raise ValueError(
+                f'The codebook lacks the activity {error.args[0]!r} of the Declare model.'
+            ) from error
 
     @lru_cache(maxsize=100_000)  # noqa: B019 -- one checker per scoring process
     def check(self, trace: str) -> Conformance:
         """
-        Check one trace against every constraint of the model.
+        Check one trace against every constraint.
 
         Args:
-            trace: The trace's activities, one character each, in order, on the dataset's own
-                scale. A whole case, prefix included: a constraint like `Init` or `Precedence` is
-                about the trace, not about a run of events inside it.
+            trace: The whole case, prefix included, one character per activity.
         Returns:
-            How many constraints the trace satisfies out of how many there are, which both the
-            share and the verdict are read off.
+            The satisfied and total constraint counts.
         """
         positions = positions_of(trace)
         satisfied = sum(

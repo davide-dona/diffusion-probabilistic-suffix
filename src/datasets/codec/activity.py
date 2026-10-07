@@ -41,6 +41,11 @@ class ActivityCodec:
         """Each activity name to the character it is spelled with, read-only."""
         return MappingProxyType(self._codes)
 
+    @property
+    def names(self) -> dict[str, str]:
+        """Each character back to the activity name it spells, the inverse of `codes`."""
+        return {code: activity for activity, code in self._codes.items()}
+
     def encode(self, activities: Sequence[str]) -> str:
         """Encode one activity sequence, giving unseen names the next code point.
 

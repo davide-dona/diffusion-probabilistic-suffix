@@ -10,6 +10,7 @@ from src import artifacts
 from src.config_validation import validate_preprocess_config
 from src.datasets.codec import DatasetCodec
 from src.logs import (
+    ACTIVITY_KEY,
     CASE_ELAPSED_KEY,
     CASE_KEY,
     DAY_COS_KEY,
@@ -222,12 +223,13 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
         codec.save()
 
     with step('Discovering the declarative model'):
-        constraints = discover_declare_model(
-            train,
-            dataset=dataset,
-            declare_config=declare_config,
+        codes = codec.activity_codes
+        traces = train.groupby(CASE_KEY, sort=False)[ACTIVITY_KEY].agg(
+            lambda activities: codes.encode(activities.astype(str))
         )
-    declare_summary = f'{constraints} declarative constraints'
+        declare_model = discover_declare_model(traces, codes=codes, settings=declare_config)
+        declare_model.save(dataset)
+    declare_summary = f'{len(declare_model.constraints)} declarative constraints'
 
     with step('Writing the dataset manifest'):
         manifest = artifacts.DatasetManifest.create(dataset)

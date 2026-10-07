@@ -1,19 +1,13 @@
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
 from typing import Literal
 
-# The positions of each activity in a trace, keyed by the activity's character.
+# Where each activity occurs in a trace, keyed by its character.
 Positions = dict[str, list[int]]
 
 
 def positions_of(trace: str) -> Positions:
-    """Index where each activity of a trace occurs.
-
-    Args:
-        trace: The trace's activities, one character each, in order.
-    Returns:
-        The positions of each activity present in the trace, in ascending order.
-    """
+    """Map each activity of a trace, one character per event, to its ascending positions."""
     positions: Positions = {}
     for index, activity in enumerate(trace):
         positions.setdefault(activity, []).append(index)
@@ -22,27 +16,23 @@ def positions_of(trace: str) -> Positions:
 
 @dataclass(frozen=True, slots=True)
 class Constraint:
-    """One constraint of a model: the template it follows and the activities it is about."""
+    """A template instantiated on one or two activities."""
 
     template: '_Template'
-    # The first activity named, which is what activates every template but the precedence family
     first: str
-    # The second activity of a binary template, or None for a unary one
+    # None for a unary template
     second: str | None
-    # How many occurrences of `first` a counting template asks for, and 1 for the rest
+    # The count of a cardinality template, and 1 for the rest
     n: int
 
     def holds(self, trace: str, positions: Positions, *, vacuity: bool) -> bool:
-        """Whether one finished trace satisfies this constraint.
+        """
+        Whether a finished trace satisfies this constraint.
+
         Args:
-            trace: The trace's activities, one character each, in order.
-            positions: Where each of them occurs, from `positions_of`.
-            vacuity: Whether a trace that never activates the constraint satisfies it, as
-                Declare4Py reads `consider_vacuity`. Only binary templates other than the choice
-                family have an activation to miss; every trace activates the rest.
-        Returns:
-            True if the trace does not violate the constraint and either activates it or
-            `vacuity` is set.
+            trace: One character per activity.
+            positions: The trace's `positions_of`.
+            vacuity: Whether a trace that never activates the constraint satisfies it.
         """
         activation = self.template.activation
         if vacuity and activation is not None:
@@ -51,16 +41,29 @@ class Constraint:
                 return True
         return self.template.holds(self, trace, positions)
 
+    def relabel(self, labels: Mapping[str, str]) -> 'Constraint':
+        """
+        The same constraint on other labels for its activities.
+
+        Raises:
+            KeyError: If `labels` lacks one of its activities.
+        """
+        return replace(
+            self,
+            first=labels[self.first],
+            second=None if self.second is None else labels[self.second],
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class _Template:
-    """One DECLARE template: what satisfying it means, and how a constraint of it is written."""
+    """A Declare template: its check and the shape of its constraints."""
 
     name: str
     holds: Callable[[Constraint, str, Positions], bool]
     is_binary: bool
     supports_cardinality: bool
-    # Which named activity activates the constraint, or None if every trace activates it
+    # Which activity activates the constraint, or None if every trace does
     activation: Literal['first', 'second'] | None
 
 
@@ -70,7 +73,7 @@ def _existence(constraint: Constraint, trace: str, positions: Positions) -> bool
 
 
 def _absence(constraint: Constraint, trace: str, positions: Positions) -> bool:
-    """`a` occurs fewer than `n` times, never running it included."""
+    """`a` occurs fewer than `n` times."""
     return len(positions.get(constraint.first, ())) < constraint.n
 
 
@@ -200,8 +203,7 @@ def _alternate_precedence(constraint: Constraint, trace: str, positions: Positio
     return activations > 0 and activations == fulfillments
 
 
-# Every template `pipelines.preprocess` can mine, keyed by the name it writes into the model
-# file.
+# The minable templates, keyed by the name the model file stores.
 TEMPLATES: dict[str, _Template] = {
     template.name: template
     for template in (

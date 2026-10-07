@@ -14,16 +14,14 @@ _CONSTRAINT_KEYS = {'template', 'activities', 'n'}
 
 @dataclass(frozen=True, slots=True)
 class DeclareModel:
-    """A declarative model mined from a dataset's train split, and the settings it was mined
-    under."""
+    """A Declare model mined from a train split, with the settings it was mined under."""
 
-    # The `declare` config section discovery ran with. The checker reads `consider_vacuity` from
-    # it, so a model is always checked the way it was mined.
+    # The `declare` config section, whose `consider_vacuity` checking must reuse
     settings: DictConfig
     constraints: tuple[Constraint, ...]
 
     def save(self, dataset: str) -> Path:
-        """Write this model where the dataset's artifacts live, and return where it went."""
+        """Save the model among the dataset's artifacts and return its path."""
         payload = {
             'settings': OmegaConf.to_container(self.settings, resolve=True),
             'constraints': [
@@ -44,13 +42,11 @@ class DeclareModel:
 
     @classmethod
     def load(cls, dataset: str) -> Self:
-        """Read the model preprocessing wrote for a dataset.
+        """
+        Load the model saved for a dataset.
 
         Raises:
-            ValueError: If the file is not a model this module writes, or if a constraint names a
-                template `TEMPLATES` does not hold, the wrong number of activities, one activity
-                twice, or a count its template does not take. Each would silently change every
-                conformance number in a report, so none is skipped.
+            ValueError: If the file or any of its constraints is malformed.
         """
         path = artifacts.DECLARE_MODEL.require(dataset)
         payload = json.loads(path.read_text())
@@ -67,16 +63,13 @@ class DeclareModel:
 
 
 def _constraint(entry: Any) -> Constraint:
-    """Build one constraint from its written form, rejecting any it could not have been mined as."""
+    """Parse one saved constraint, rejecting any that discovery cannot produce."""
     if not isinstance(entry, dict) or set(entry) != _CONSTRAINT_KEYS:
         raise ValueError(f'{entry} is not a constraint.')
 
     template = TEMPLATES.get(entry['template'])
     if template is None:
-        raise ValueError(
-            f'{entry} uses the {entry["template"]} template, which src.logs.declare.templates '
-            'does not check. Add it to TEMPLATES there, or mine the model without it.'
-        )
+        raise ValueError(f'{entry} uses an unknown template.')
 
     activities = entry['activities']
     expected = 2 if template.is_binary else 1
@@ -87,7 +80,7 @@ def _constraint(entry: Any) -> Constraint:
     ):
         raise ValueError(f'{entry} does not name {expected} activities.')
     if template.is_binary and activities[0] == activities[1]:
-        raise ValueError(f'{entry} names one activity twice, which no template is defined for.')
+        raise ValueError(f'{entry} names one activity twice.')
 
     n = entry['n']
     if type(n) is not int or n < 1 or (n != 1 and not template.supports_cardinality):

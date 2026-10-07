@@ -32,19 +32,19 @@ class _Worker:
 _worker: _Worker
 
 
-def _init_worker(generations_file: Path, dataset: str) -> None:
+def _init_worker(generations_file: Path, model: DeclareModel) -> None:
     """Open the file and prepare the declarative model once for this process.
 
     Args:
         generations_file: The generations every task of this process reads from.
-        dataset: The dataset whose declarative model conformance is checked against.
+        model: The declarative model conformance is checked against.
     """
     global _worker
     generations = Generations(generations_file)
     vocabulary = generations.vocabulary
     _worker = _Worker(
         generations=generations,
-        checker=ConformanceChecker(dataset, ActivityCodec.from_vocabulary(vocabulary)),
+        checker=ConformanceChecker(model, ActivityCodec.from_vocabulary(vocabulary)),
     )
 
 
@@ -65,7 +65,7 @@ def _score_block(block: int) -> list[PrefixSummary]:
 def _score_in_parallel(
     generations_file: Path,
     *,
-    dataset: str,
+    model: DeclareModel,
     blocks: int,
     prefixes: int,
     workers: int | None,
@@ -81,8 +81,7 @@ def _score_in_parallel(
         generations_file: The generations to score, from `python -m pipelines.generate`. Passed as
             a path rather than as read prefixes, since each worker opens the file itself and only
             the scores it computes cross back.
-        dataset: The dataset the prefixes were cut from, naming the declarative model to check
-            conformance against.
+        model: The declarative model to check conformance against.
         blocks: How many blocks the file holds, one unit of work each.
         prefixes: How many prefixes it holds in total, for the progress bar.
         workers: How many processes to score with, or `None` for one per available CPU.
@@ -94,7 +93,7 @@ def _score_in_parallel(
         ProcessPoolExecutor(
             max_workers=workers,
             initializer=_init_worker,
-            initargs=(generations_file, dataset),
+            initargs=(generations_file, model),
         ) as executor,
         tqdm(total=prefixes, desc='Scoring', unit='prefix') as progress,
     ):
@@ -141,7 +140,8 @@ def run(generations_file: Path, workers: int | None) -> None:
     # What the model being checked against was mined under, so a report is never read without
     # knowing which constraints it holds.
     model_path = artifacts.DECLARE_MODEL.require(dataset)
-    mined = DeclareModel.load(dataset).settings
+    model = DeclareModel.load(dataset)
+    mined = model.settings
     mined_under = f'min support {mined.min_support:.0%}, consider_vacuity={mined.consider_vacuity}'
 
     banner(
@@ -174,7 +174,7 @@ def run(generations_file: Path, workers: int | None) -> None:
             stream_prefix_scores(
                 _score_in_parallel(
                     generations_file,
-                    dataset=dataset,
+                    model=model,
                     blocks=blocks,
                     prefixes=prefixes,
                     workers=workers,

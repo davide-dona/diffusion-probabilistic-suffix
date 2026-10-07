@@ -17,7 +17,7 @@ from src.evaluation import PrefixSummary
 from src.inference.generate import generate_batch, generation_batch_size
 from src.inference.tuning import SearchPass, TuningPoint, TuningReport
 from src.logs import Split
-from src.logs.declare import ConformanceChecker
+from src.logs.declare import ConformanceChecker, DeclareModel
 from src.models.architectures.head_sampling_transformer.model import HeadSamplingTransformer
 from src.models.base import SuffixModel
 from src.models.persistence.io import load_checkpoint, write_checkpoint
@@ -198,7 +198,7 @@ def run(
     )
 
     with step('Reading the declarative model'):
-        checker = ConformanceChecker(config.data.name, codec.activity_codes)
+        checker = ConformanceChecker(DeclareModel.load(config.data.name), codec.activity_codes)
 
     points = []
     for position, sampling in enumerate(grid, start=1):
