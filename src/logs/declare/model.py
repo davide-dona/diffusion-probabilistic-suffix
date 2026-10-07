@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self
@@ -9,7 +10,7 @@ from src import artifacts
 from src.logs.declare.templates import TEMPLATES, Constraint
 
 _MODEL_KEYS = {'settings', 'constraints'}
-_CONSTRAINT_KEYS = {'template', 'activities', 'n'}
+_CONSTRAINT_KEYS = {'template', 'activities', 'n', 'support'}
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,7 +19,8 @@ class DeclareModel:
 
     # The `declare` config section, whose `consider_vacuity` checking must reuse
     settings: DictConfig
-    constraints: tuple[Constraint, ...]
+    # Each constraint, to its support: the fraction of the train split's traces that satisfy it
+    constraints: Mapping[Constraint, float]
 
     def save(self, dataset: str) -> Path:
         """Save the model among the dataset's artifacts and return its path."""
@@ -29,8 +31,9 @@ class DeclareModel:
                     'template': constraint.template.name,
                     'activities': list(constraint.activities),
                     'n': constraint.n,
+                    'support': support,
                 }
-                for constraint in self.constraints
+                for constraint, support in self.constraints.items()
             ],
         }
         path = artifacts.DECLARE_MODEL.prepare(dataset)
@@ -54,14 +57,14 @@ class DeclareModel:
             or not isinstance(payload['constraints'], list)
         ):
             raise ValueError(f'{path} is not a Declare model.')
-        return cls(
-            settings=OmegaConf.create(payload['settings']),
-            constraints=tuple(_constraint(entry) for entry in payload['constraints']),
-        )
+        constraints = dict(_constraint(entry) for entry in payload['constraints'])
+        if len(constraints) != len(payload['constraints']):
+            raise ValueError(f'{path} repeats a constraint.')
+        return cls(settings=OmegaConf.create(payload['settings']), constraints=constraints)
 
 
-def _constraint(entry: Any) -> Constraint:
-    """Parse one saved constraint, rejecting any that discovery cannot produce."""
+def _constraint(entry: Any) -> tuple[Constraint, float]:
+    """Parse one saved constraint and its support, rejecting any that discovery cannot produce."""
     if not isinstance(entry, dict) or set(entry) != _CONSTRAINT_KEYS:
         raise ValueError(f'{entry} is not a constraint.')
 
@@ -84,9 +87,14 @@ def _constraint(entry: Any) -> Constraint:
     if type(n) is not int or n < 1 or (n != 1 and not template.supports_cardinality):
         raise ValueError(f'{entry} asks for a count its template does not take.')
 
-    return Constraint(
+    support = entry['support']
+    if type(support) is not float or not 0.0 <= support <= 1.0:
+        raise ValueError(f'{entry} has a support outside [0, 1].')
+
+    constraint = Constraint(
         template=template,
         first=activities[0],
         second=activities[1] if template.is_binary else None,
         n=n,
     )
+    return constraint, support

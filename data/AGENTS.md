@@ -12,7 +12,7 @@ The supported dataset identifiers are `sepsis`, `bpic12`, `bpic17`, and `bpic19`
 | `processed/val.csv` | Chronological validation split written by preprocessing. |
 | `processed/test.csv` | Chronological test split written by preprocessing. |
 | `codec/dataset.json` | Vocabulary and numeric transforms fitted on the training split. |
-| `declare/model.json` | Declare constraints discovered from the training split. |
+| `declare/model.json` | Declare constraints discovered from the training split, each with its train support. |
 | `manifest.json` | Bundle hashes and fingerprint. |
 
 ## Rules

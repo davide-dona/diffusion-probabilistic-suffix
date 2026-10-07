@@ -35,7 +35,7 @@ def discover_declare_model(
         settings: The `declare` config section.
 
     Returns:
-        The mined model, its constraints on activity names.
+        The mined model, its constraints on activity names and each with its support.
     """
     # Count the sequence variants and their frequencies
     variants = [
@@ -43,9 +43,9 @@ def discover_declare_model(
     ]
     n_traces = sum(variant.count for variant in variants)
 
-    def is_frequent(count: int, threshold: float) -> bool:
-        """Whether `count` traces make up at least `threshold` of the log."""
-        return count / n_traces >= threshold
+    def share(count: int) -> float:
+        """The fraction of the log that `count` traces make up."""
+        return count / n_traces
 
     # Keep the activities that occur in at least `itemsets_support` of the traces
     activity_traces: Counter[str] = Counter()
@@ -55,7 +55,7 @@ def discover_declare_model(
     frequent = {
         activity
         for activity, count in activity_traces.items()
-        if is_frequent(count, settings.itemsets_support)
+        if share(count) >= settings.itemsets_support
     }
 
     # Keep the ordered pairs of frequent activities that occur together in at least
@@ -65,22 +65,19 @@ def discover_declare_model(
         for pair in permutations(variant.trace.positions.keys() & frequent, 2):
             pair_traces[pair] += variant.count
     pairs = sorted(
-        pair for pair, count in pair_traces.items() if is_frequent(count, settings.itemsets_support)
+        pair for pair, count in pair_traces.items() if share(count) >= settings.itemsets_support
     )
 
     # Keep the candidates that at least `min_support` of the traces satisfy
-    mined = [
-        constraint
-        for constraint in _candidates(sorted(frequent), pairs, settings.max_cardinality)
-        if is_frequent(
-            _support(constraint, variants, vacuity=settings.consider_vacuity),
-            settings.min_support,
-        )
-    ]
+    mined: dict[Constraint, float] = {}
+    for constraint in _candidates(sorted(frequent), pairs, settings.max_cardinality):
+        support = share(_support(constraint, variants, vacuity=settings.consider_vacuity))
+        if support >= settings.min_support:
+            mined[constraint] = support
     names = codes.names
     return DeclareModel(
         settings=settings,
-        constraints=tuple(constraint.relabel(names) for constraint in mined),
+        constraints={constraint.relabel(names): support for constraint, support in mined.items()},
     )
 
 
