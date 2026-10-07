@@ -158,7 +158,7 @@ def train(
         model: Model already on the configured device.
         loaders: Training and validation batches.
         codec: Fitted dataset codec.
-        checker: Declarative model used for generation validation.
+        checker: Declare conformance checker used for generation validation.
         settings: Optimization, validation, and stopping settings.
         observer: Synchronous callbacks for batch, validation, and best-model updates.
 

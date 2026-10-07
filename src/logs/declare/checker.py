@@ -3,12 +3,12 @@ from functools import lru_cache
 
 from src.datasets.codec import ActivityCodec
 from src.logs.declare.model import DeclareModel
-from src.logs.declare.templates import positions_of
+from src.logs.declare.templates import Trace
 
 
 @dataclass(frozen=True, slots=True)
 class Conformance:
-    """How one trace scores against the declarative model a dataset was mined for.
+    """How one trace scores against the Declare model mined from its dataset.
     - satisfied: How many constraints the trace satisfies.
     - total: How many constraints there are in the model.
     """
@@ -57,13 +57,12 @@ class ConformanceChecker:
         Check one trace against every constraint.
 
         Args:
-            trace: The whole case, prefix included, one character per activity.
+            trace: The whole case, prefix included, one character per event.
         Returns:
             The satisfied and total constraint counts.
         """
-        positions = positions_of(trace)
+        case = Trace(trace)
         satisfied = sum(
-            constraint.holds(trace, positions, vacuity=self._vacuity)
-            for constraint in self._constraints
+            constraint.holds(case, vacuity=self._vacuity) for constraint in self._constraints
         )
         return Conformance(satisfied=satisfied, total=len(self._constraints))

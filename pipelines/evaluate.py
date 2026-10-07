@@ -33,11 +33,11 @@ _worker: _Worker
 
 
 def _init_worker(generations_file: Path, model: DeclareModel) -> None:
-    """Open the file and prepare the declarative model once for this process.
+    """Open the file and prepare the Declare model once for this process.
 
     Args:
         generations_file: The generations every task of this process reads from.
-        model: The declarative model conformance is checked against.
+        model: The Declare model conformance is checked against.
     """
     global _worker
     generations = Generations(generations_file)
@@ -81,7 +81,7 @@ def _score_in_parallel(
         generations_file: The generations to score, from `python -m pipelines.generate`. Passed as
             a path rather than as read prefixes, since each worker opens the file itself and only
             the scores it computes cross back.
-        model: The declarative model to check conformance against.
+        model: The Declare model to check conformance against.
         blocks: How many blocks the file holds, one unit of work each.
         prefixes: How many prefixes it holds in total, for the progress bar.
         workers: How many processes to score with, or `None` for one per available CPU.
@@ -110,7 +110,7 @@ def run(generations_file: Path, workers: int | None) -> None:
     Args:
         generations_file: The generations to score, from `python -m pipelines.generate`. It says
             which run and dataset wrote it, so the report is named after that run and the
-            declarative model is looked up under that dataset.
+            Declare model is looked up under that dataset.
         workers: How many processes to score with, or `None` for one per available CPU.
     """
     with Generations(generations_file) as generations:
@@ -139,8 +139,8 @@ def run(generations_file: Path, workers: int | None) -> None:
 
     # What the model being checked against was mined under, so a report is never read without
     # knowing which constraints it holds.
-    model_path = artifacts.DECLARE_MODEL.require(dataset)
     model = DeclareModel.load(dataset)
+    model_path = artifacts.DECLARE_MODEL.path(dataset)
     mined = model.settings
     mined_under = f'min support {mined.min_support:.0%}, consider_vacuity={mined.consider_vacuity}'
 
@@ -151,7 +151,7 @@ def run(generations_file: Path, workers: int | None) -> None:
             'run': run,
             'dataset': dataset,
             'generations': f'{generations_file} ({prefixes:,} prefixes)',
-            'declarative model': f'{model_path} (mined at {mined_under})',
+            'Declare model': f'{model_path} (mined at {mined_under})',
             'workers': f'{processes} processes, one block of ~{prefixes // max(blocks, 1):,} '
             'prefixes each',
             'report': output_path('evaluation.json'),
@@ -168,7 +168,7 @@ def run(generations_file: Path, workers: int | None) -> None:
     # than a second scoring pass.
     with step(
         f'Scoring {prefixes:,} prefixes across {processes} process(es), each loading the '
-        'declarative model first'
+        'Declare model first'
     ):
         summary = EvaluationSummary.of(
             stream_prefix_scores(

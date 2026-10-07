@@ -116,7 +116,7 @@ CODEC = DatasetArtifact(
     relative='codec/dataset.json',
 )
 DECLARE_MODEL = DatasetArtifact(
-    kind='declarative model',
+    kind='Declare model',
     remedy='Run `uv run python -m pipelines.preprocess dataset={dataset}` first.',
     relative='declare/model.json',
 )

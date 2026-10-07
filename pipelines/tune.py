@@ -48,8 +48,8 @@ def _score(
             pairing is what makes cells a few thousandths apart worth comparing at all.
         num_samples: Suffixes drawn per prefix.
         codec: The codec the split was encoded through, read in the decode direction.
-        checker: The declarative model, discovered from the train split and so the same object
-            whichever split is being scored.
+        checker: The checker of the Declare model, discovered from the train split and so the same
+            object whichever split is being scored.
         device: The device to generate on.
     Returns:
         The point, its `score` the objective and the rest recorded beside it.
@@ -197,7 +197,7 @@ def run(
         num_workers=config.dataloader.num_workers,
     )
 
-    with step('Reading the declarative model'):
+    with step('Reading the Declare model'):
         checker = ConformanceChecker(DeclareModel.load(config.data.name), codec.activity_codes)
 
     points = []

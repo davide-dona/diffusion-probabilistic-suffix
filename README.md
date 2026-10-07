@@ -70,7 +70,7 @@ uv run python -m pipelines.preprocess dataset=sepsis
 ```
 
 The original log is read from `data/sepsis/original.csv`. The out-of-time splits, fitted codec,
-declarative model, and dataset manifest are written under `data/sepsis/`. The manifest records the
+Declare model, and dataset manifest are written under `data/sepsis/`. The manifest records the
 hash of each bundle file and one fingerprint for the complete bundle. Invocation records, including
 the resolved preprocessing configuration, are written under `outputs/preprocess/sepsis/<timestamp>/`.
 

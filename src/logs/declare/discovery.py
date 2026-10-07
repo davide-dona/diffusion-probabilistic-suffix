@@ -1,5 +1,5 @@
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from itertools import permutations
 from typing import NamedTuple
 
@@ -7,14 +7,13 @@ from omegaconf import DictConfig
 
 from src.datasets.codec import ActivityCodec
 from src.logs.declare.model import DeclareModel
-from src.logs.declare.templates import TEMPLATES, Constraint, Positions, positions_of
+from src.logs.declare.templates import TEMPLATES, Constraint, Trace
 
 
 class _Variant(NamedTuple):
-    """One distinct trace of the log, with its activity positions and how many traces share it."""
+    """One distinct trace of the log, with how many traces share it."""
 
-    trace: str
-    positions: Positions
+    trace: Trace
     count: int
 
 
@@ -40,8 +39,7 @@ def discover_declare_model(
     """
     # Count the sequence variants and their frequencies
     variants = [
-        _Variant(trace=trace, positions=positions_of(trace), count=count)
-        for trace, count in Counter(traces).items()
+        _Variant(trace=Trace(trace), count=count) for trace, count in Counter(traces).items()
     ]
     n_traces = sum(variant.count for variant in variants)
 
@@ -49,71 +47,60 @@ def discover_declare_model(
         """Whether `count` traces make up at least `threshold` of the log."""
         return count / n_traces >= threshold
 
-    # Count the activities that occur in at least `itemsets_support` of the traces
-    present = _trace_counts(variants, lambda variant: variant.positions.keys())
-    frequent = sorted(
-        code for code, count in present.items() if is_frequent(count, settings.itemsets_support)
-    )
+    # Keep the activities that occur in at least `itemsets_support` of the traces
+    activity_traces: Counter[str] = Counter()
+    for variant in variants:
+        for activity in variant.trace.positions:
+            activity_traces[activity] += variant.count
+    frequent = {
+        activity
+        for activity, count in activity_traces.items()
+        if is_frequent(count, settings.itemsets_support)
+    }
 
-    # Count the pairs of activities that occur together in at least `itemsets_support` of the traces
-    frequent_set = set(frequent)
-    together = _trace_counts(
-        variants, lambda variant: permutations(variant.positions.keys() & frequent_set, 2)
+    # Keep the ordered pairs of frequent activities that occur together in at least
+    # `itemsets_support` of the traces
+    pair_traces: Counter[tuple[str, str]] = Counter()
+    for variant in variants:
+        for pair in permutations(variant.trace.positions.keys() & frequent, 2):
+            pair_traces[pair] += variant.count
+    pairs = sorted(
+        pair for pair, count in pair_traces.items() if is_frequent(count, settings.itemsets_support)
     )
-    pairs = [
-        pair
-        for pair in permutations(frequent, 2)
-        if is_frequent(together[pair], settings.itemsets_support)
-    ]
 
     # Keep the candidates that at least `min_support` of the traces satisfy
     mined = [
         constraint
-        for constraint in _candidates(frequent, pairs, settings.max_cardinality)
+        for constraint in _candidates(sorted(frequent), pairs, settings.max_cardinality)
         if is_frequent(
             _support(constraint, variants, vacuity=settings.consider_vacuity),
             settings.min_support,
         )
     ]
+    names = codes.names
     return DeclareModel(
         settings=settings,
-        constraints=tuple(constraint.relabel(codes.names) for constraint in mined),
+        constraints=tuple(constraint.relabel(names) for constraint in mined),
     )
-
-
-def _trace_counts[T](
-    variants: list[_Variant], items_of: Callable[[_Variant], Iterable[T]]
-) -> Counter[T]:
-    """Count the traces each item occurs in, given the distinct items of each variant."""
-    counts: Counter[T] = Counter()
-    for variant in variants:
-        for item in items_of(variant):
-            counts[item] += variant.count
-    return counts
 
 
 def _candidates(
     frequent: list[str], pairs: list[tuple[str, str]], max_cardinality: int
 ) -> Iterator[Constraint]:
-    """Yield the unary candidates, then the binary ones, each in `TEMPLATES` order."""
-    unary = [template for template in TEMPLATES.values() if not template.is_binary]
-    binary = [template for template in TEMPLATES.values() if template.is_binary]
-
-    for template in unary:
-        cardinalities = range(1, max_cardinality + 1) if template.supports_cardinality else (1,)
-        for activity in frequent:
-            for n in cardinalities:
-                yield Constraint(template=template, first=activity, second=None, n=n)
-
-    for template in binary:
-        for first, second in pairs:
-            yield Constraint(template=template, first=first, second=second, n=1)
+    """Yield the candidates of each template, in `TEMPLATES` order."""
+    for template in TEMPLATES.values():
+        if template.is_binary:
+            for first, second in pairs:
+                yield Constraint(template=template, first=first, second=second, n=1)
+        else:
+            cardinalities = range(1, max_cardinality + 1) if template.supports_cardinality else (1,)
+            for activity in frequent:
+                for n in cardinalities:
+                    yield Constraint(template=template, first=activity, second=None, n=n)
 
 
 def _support(constraint: Constraint, variants: list[_Variant], *, vacuity: bool) -> int:
     """Count the traces that satisfy a constraint."""
     return sum(
-        variant.count
-        for variant in variants
-        if constraint.holds(variant.trace, variant.positions, vacuity=vacuity)
+        variant.count for variant in variants if constraint.holds(variant.trace, vacuity=vacuity)
     )

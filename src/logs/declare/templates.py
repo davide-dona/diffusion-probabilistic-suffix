@@ -2,21 +2,27 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Literal
 
-# Where each activity occurs in a trace, keyed by its character.
-Positions = dict[str, list[int]]
 
+class Trace:
+    """A finished trace, with where each of its activities occurs.
 
-def positions_of(trace: str) -> Positions:
-    """Map each activity of a trace, one character per event, to its ascending positions."""
-    positions: Positions = {}
-    for index, activity in enumerate(trace):
-        positions.setdefault(activity, []).append(index)
-    return positions
+    - activities: One character per event, encoding the event's activity.
+    - positions: Each activity that occurs, to its ascending positions in `activities`.
+    """
+
+    def __init__(self, activities: str) -> None:
+        self.activities = activities
+        self.positions: dict[str, list[int]] = {}
+        for index, activity in enumerate(activities):
+            self.positions.setdefault(activity, []).append(index)
 
 
 @dataclass(frozen=True, slots=True)
 class Constraint:
-    """A template instantiated on one or two activities."""
+    """A template instantiated on one or two activities, written `Template(a, b)`.
+
+    `first` is `a` and `second` is `b`, the names every template check is documented with.
+    """
 
     template: '_Template'
     first: str
@@ -25,21 +31,25 @@ class Constraint:
     # The count of a cardinality template, and 1 for the rest
     n: int
 
-    def holds(self, trace: str, positions: Positions, *, vacuity: bool) -> bool:
+    def holds(self, trace: Trace, *, vacuity: bool) -> bool:
         """
         Whether a finished trace satisfies this constraint.
 
         Args:
-            trace: One character per activity.
-            positions: The trace's `positions_of`.
-            vacuity: Whether a trace that never activates the constraint satisfies it.
+            trace: The trace to check.
+            vacuity: Whether a trace without the constraint's activation satisfies it.
         """
         activation = self.template.activation
         if vacuity and activation is not None:
-            activator = self.first if activation == 'first' else self.second
-            if activator not in positions:
+            activity = self.first if activation == 'first' else self.second
+            if activity not in trace.positions:
                 return True
-        return self.template.holds(self, trace, positions)
+        return self.template.holds(self, trace)
+
+    @property
+    def activities(self) -> tuple[str, ...]:
+        """The one or two activities the constraint is on, in template order."""
+        return (self.first,) if self.second is None else (self.first, self.second)
 
     def relabel(self, labels: Mapping[str, str]) -> 'Constraint':
         """
@@ -60,277 +70,166 @@ class _Template:
     """A Declare template: its check and the shape of its constraints."""
 
     name: str
-    holds: Callable[[Constraint, str, Positions], bool]
-    is_binary: bool
-    supports_cardinality: bool
-    # Which activity activates the constraint, or None if every trace does
-    activation: Literal['first', 'second'] | None
+    # The check of a trace that contains the activation; `Constraint.holds` applies vacuity
+    holds: Callable[[Constraint, Trace], bool]
+    is_binary: bool = True
+    supports_cardinality: bool = False
+    # Which of `first` and `second` is the activation, or None for a template without one, which
+    # vacuity never affects
+    activation: Literal['first', 'second'] | None = None
 
 
-def _existence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _existence(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs at least `n` times."""
-    return len(positions.get(constraint.first, ())) >= constraint.n
+    return len(trace.positions.get(constraint.first, ())) >= constraint.n
 
 
-def _absence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _absence(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs fewer than `n` times."""
-    return len(positions.get(constraint.first, ())) < constraint.n
+    return len(trace.positions.get(constraint.first, ())) < constraint.n
 
 
-def _exactly(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _exactly(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs exactly `n` times."""
-    return len(positions.get(constraint.first, ())) == constraint.n
+    return len(trace.positions.get(constraint.first, ())) == constraint.n
 
 
-def _init(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _init(constraint: Constraint, trace: Trace) -> bool:
     """`a` is the first event of the trace."""
-    return bool(trace) and trace[0] == constraint.first
+    return trace.activities.startswith(constraint.first)
 
 
-def _end(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _end(constraint: Constraint, trace: Trace) -> bool:
     """`a` is the last event of the trace."""
-    return bool(trace) and trace[-1] == constraint.first
+    return trace.activities.endswith(constraint.first)
 
 
-def _choice(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _choice(constraint: Constraint, trace: Trace) -> bool:
     """`a` or `b` occurs."""
-    return constraint.first in positions or constraint.second in positions
+    return constraint.first in trace.positions or constraint.second in trace.positions
 
 
-def _exclusive_choice(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _exclusive_choice(constraint: Constraint, trace: Trace) -> bool:
     """`a` or `b` occurs, and never both."""
-    return (constraint.first in positions) != (constraint.second in positions)
+    return (constraint.first in trace.positions) != (constraint.second in trace.positions)
 
 
-def _responded_existence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _responded_existence(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs, and so does `b`."""
-    return constraint.first in positions and constraint.second in positions
+    return constraint.first in trace.positions and constraint.second in trace.positions
 
 
-def _not_responded_existence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _not_responded_existence(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs, and `b` does not."""
-    return constraint.first in positions and constraint.second not in positions
+    return constraint.first in trace.positions and constraint.second not in trace.positions
 
 
-def _response(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _response(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs, and every occurrence of it is followed by a `b`."""
-    activations = positions.get(constraint.first)
-    targets = positions.get(constraint.second)
+    activations = trace.positions.get(constraint.first)
+    targets = trace.positions.get(constraint.second)
     return bool(activations) and bool(targets) and activations[-1] < targets[-1]
 
 
-def _precedence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _precedence(constraint: Constraint, trace: Trace) -> bool:
     """`b` occurs, and every occurrence of it is preceded by an `a`."""
-    activations = positions.get(constraint.second)
-    earlier = positions.get(constraint.first)
-    return bool(activations) and bool(earlier) and earlier[0] < activations[0]
+    activations = trace.positions.get(constraint.second)
+    targets = trace.positions.get(constraint.first)
+    return bool(activations) and bool(targets) and targets[0] < activations[0]
 
 
-def _not_response(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _not_response(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs, and no occurrence of it is followed by a `b`."""
-    activations = positions.get(constraint.first)
-    targets = positions.get(constraint.second)
+    activations = trace.positions.get(constraint.first)
+    targets = trace.positions.get(constraint.second)
     return bool(activations) and (not targets or activations[0] > targets[-1])
 
 
-def _not_precedence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _not_precedence(constraint: Constraint, trace: Trace) -> bool:
     """`b` occurs, and no occurrence of it is preceded by an `a`."""
-    activations = positions.get(constraint.second)
-    earlier = positions.get(constraint.first)
-    return bool(activations) and (not earlier or earlier[0] > activations[-1])
+    activations = trace.positions.get(constraint.second)
+    targets = trace.positions.get(constraint.first)
+    return bool(activations) and (not targets or targets[0] > activations[-1])
 
 
-def _chain_response(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _adjacent(constraint: Constraint) -> str:
+    """`a` immediately followed by `b`, as it reads in `Trace.activities`.
+
+    The two activities of a binary constraint differ, so its occurrences never overlap.
+    """
+    return constraint.first + constraint.second
+
+
+def _chain_response(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs, and a `b` follows it immediately every time."""
-    activations = positions.get(constraint.first)
-    last = len(trace) - 1
-    return bool(activations) and all(
-        index < last and trace[index + 1] == constraint.second for index in activations
-    )
+    activations = trace.positions.get(constraint.first)
+    return bool(activations) and trace.activities.count(_adjacent(constraint)) == len(activations)
 
 
-def _chain_precedence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _chain_precedence(constraint: Constraint, trace: Trace) -> bool:
     """`b` occurs, and an `a` precedes it immediately every time."""
-    activations = positions.get(constraint.second)
-    return bool(activations) and all(
-        index > 0 and trace[index - 1] == constraint.first for index in activations
-    )
+    activations = trace.positions.get(constraint.second)
+    return bool(activations) and trace.activities.count(_adjacent(constraint)) == len(activations)
 
 
-def _not_chain_response(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _not_chain_response(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs, and a `b` never follows it immediately."""
-    activations = positions.get(constraint.first)
-    last = len(trace) - 1
-    return bool(activations) and not any(
-        index < last and trace[index + 1] == constraint.second for index in activations
-    )
+    return constraint.first in trace.positions and _adjacent(constraint) not in trace.activities
 
 
-def _not_chain_precedence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _not_chain_precedence(constraint: Constraint, trace: Trace) -> bool:
     """`b` occurs, and an `a` never precedes it immediately."""
-    activations = positions.get(constraint.second)
-    return bool(activations) and not any(
-        index > 0 and trace[index - 1] == constraint.first for index in activations
-    )
+    return constraint.second in trace.positions and _adjacent(constraint) not in trace.activities
 
 
-def _alternate_response(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _alternate_response(constraint: Constraint, trace: Trace) -> bool:
     """`a` occurs, and a `b` follows each occurrence of it before `a` recurs."""
-    activations = fulfillments = 0
     pending = False
-    for activity in trace:
+    for activity in trace.activities:
         if activity == constraint.first:
+            if pending:
+                return False
             pending = True
-            activations += 1
-        if pending and activity == constraint.second:
+        elif activity == constraint.second:
             pending = False
-            fulfillments += 1
-    return activations > 0 and activations == fulfillments
+    return constraint.first in trace.positions and not pending
 
 
-def _alternate_precedence(constraint: Constraint, trace: str, positions: Positions) -> bool:
+def _alternate_precedence(constraint: Constraint, trace: Trace) -> bool:
     """`b` occurs, and an `a` precedes each occurrence of it since the previous `b`."""
-    activations = fulfillments = 0
-    preceding = 0
-    for activity in trace:
+    preceded = False
+    for activity in trace.activities:
         if activity == constraint.first:
-            preceding += 1
-        if activity == constraint.second:
-            activations += 1
-            if preceding:
-                fulfillments += 1
-            preceding = 0
-    return activations > 0 and activations == fulfillments
+            preceded = True
+        elif activity == constraint.second:
+            if not preceded:
+                return False
+            preceded = False
+    return constraint.second in trace.positions
 
 
 # The minable templates, keyed by the name the model file stores.
 TEMPLATES: dict[str, _Template] = {
     template.name: template
     for template in (
-        _Template(
-            name='Existence',
-            holds=_existence,
-            is_binary=False,
-            supports_cardinality=True,
-            activation=None,
-        ),
-        _Template(
-            name='Absence',
-            holds=_absence,
-            is_binary=False,
-            supports_cardinality=True,
-            activation=None,
-        ),
-        _Template(
-            name='Exactly',
-            holds=_exactly,
-            is_binary=False,
-            supports_cardinality=True,
-            activation=None,
-        ),
-        _Template(
-            name='Init', holds=_init, is_binary=False, supports_cardinality=False, activation=None
-        ),
-        _Template(
-            name='End', holds=_end, is_binary=False, supports_cardinality=False, activation=None
-        ),
-        _Template(
-            name='Choice',
-            holds=_choice,
-            is_binary=True,
-            supports_cardinality=False,
-            activation=None,
-        ),
-        _Template(
-            name='Exclusive Choice',
-            holds=_exclusive_choice,
-            is_binary=True,
-            supports_cardinality=False,
-            activation=None,
-        ),
-        _Template(
-            name='Responded Existence',
-            holds=_responded_existence,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='first',
-        ),
-        _Template(
-            name='Not Responded Existence',
-            holds=_not_responded_existence,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='first',
-        ),
-        _Template(
-            name='Response',
-            holds=_response,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='first',
-        ),
-        _Template(
-            name='Precedence',
-            holds=_precedence,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='second',
-        ),
-        _Template(
-            name='Not Response',
-            holds=_not_response,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='first',
-        ),
-        _Template(
-            name='Not Precedence',
-            holds=_not_precedence,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='second',
-        ),
-        _Template(
-            name='Chain Response',
-            holds=_chain_response,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='first',
-        ),
-        _Template(
-            name='Chain Precedence',
-            holds=_chain_precedence,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='second',
-        ),
-        _Template(
-            name='Not Chain Response',
-            holds=_not_chain_response,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='first',
-        ),
-        _Template(
-            name='Not Chain Precedence',
-            holds=_not_chain_precedence,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='second',
-        ),
-        _Template(
-            name='Alternate Response',
-            holds=_alternate_response,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='first',
-        ),
-        _Template(
-            name='Alternate Precedence',
-            holds=_alternate_precedence,
-            is_binary=True,
-            supports_cardinality=False,
-            activation='second',
-        ),
+        _Template('Existence', _existence, is_binary=False, supports_cardinality=True),
+        _Template('Absence', _absence, is_binary=False, supports_cardinality=True),
+        _Template('Exactly', _exactly, is_binary=False, supports_cardinality=True),
+        _Template('Init', _init, is_binary=False),
+        _Template('End', _end, is_binary=False),
+        _Template('Choice', _choice),
+        _Template('Exclusive Choice', _exclusive_choice),
+        _Template('Responded Existence', _responded_existence, activation='first'),
+        _Template('Not Responded Existence', _not_responded_existence, activation='first'),
+        _Template('Response', _response, activation='first'),
+        _Template('Precedence', _precedence, activation='second'),
+        _Template('Not Response', _not_response, activation='first'),
+        _Template('Not Precedence', _not_precedence, activation='second'),
+        _Template('Chain Response', _chain_response, activation='first'),
+        _Template('Chain Precedence', _chain_precedence, activation='second'),
+        _Template('Not Chain Response', _not_chain_response, activation='first'),
+        _Template('Not Chain Precedence', _not_chain_precedence, activation='second'),
+        _Template('Alternate Response', _alternate_response, activation='first'),
+        _Template('Alternate Precedence', _alternate_precedence, activation='second'),
     )
 }

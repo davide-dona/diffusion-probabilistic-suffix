@@ -27,10 +27,7 @@ class DeclareModel:
             'constraints': [
                 {
                     'template': constraint.template.name,
-                    'activities': [
-                        constraint.first,
-                        *([] if constraint.second is None else [constraint.second]),
-                    ],
+                    'activities': list(constraint.activities),
                     'n': constraint.n,
                 }
                 for constraint in self.constraints
@@ -50,12 +47,13 @@ class DeclareModel:
         """
         path = artifacts.DECLARE_MODEL.require(dataset)
         payload = json.loads(path.read_text())
-        if not isinstance(payload, dict) or set(payload) != _MODEL_KEYS:
-            raise ValueError(f'{path} is not a declarative model.')
-        if not isinstance(payload['settings'], dict) or not isinstance(
-            payload['constraints'], list
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != _MODEL_KEYS
+            or not isinstance(payload['settings'], dict)
+            or not isinstance(payload['constraints'], list)
         ):
-            raise ValueError(f'{path} is not a declarative model.')
+            raise ValueError(f'{path} is not a Declare model.')
         return cls(
             settings=OmegaConf.create(payload['settings']),
             constraints=tuple(_constraint(entry) for entry in payload['constraints']),

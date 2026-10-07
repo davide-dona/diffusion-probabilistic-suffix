@@ -6,8 +6,7 @@ from typing import Self
 import numpy as np
 
 from src.inference.generation import Generation
-from src.logs.declare import ConformanceChecker
-from src.logs.declare.checker import Conformance
+from src.logs.declare import Conformance, ConformanceChecker
 
 
 @dataclass(frozen=True, slots=True)
