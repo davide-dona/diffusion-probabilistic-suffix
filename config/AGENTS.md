@@ -7,7 +7,7 @@ groups. The result is validated at the stage boundary and stored with every dura
 
 | Path | Contract |
 | --- | --- |
-| `dataset/*.yaml` | Raw columns, split fractions, filtering, features, scaling, and Declare discovery. |
+| `dataset/*.yaml` | Raw columns, split fractions, filtering, features, scaling, and Declare mining. |
 | `model/*.yaml` | Architecture class path, dimensions, architecture parameters, and sampler where supported. |
 | `training/default.yaml` | Dataset-independent optimizer, clipping, early stopping, and sampling counts. |
 | `regime/<dataset>.yaml` | Learning rate, warmup, step budget, validation cadence and sizes, patience, and batch size for one dataset. |

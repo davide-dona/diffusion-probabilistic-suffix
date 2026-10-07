@@ -26,7 +26,7 @@ from src.logs import (
     read_original_log,
     write_log,
 )
-from src.logs.declare import discover_declare_model
+from src.logs.declare import mine_declare_model
 from src.logs.preprocessing import (
     add_calendar,
     add_case_elapsed,
@@ -149,12 +149,12 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
     The vocabularies and normalization statistics the model is built against are fit here too,
     on the train split alone, and written beside it as `dataset.json`.
 
-    The Declare model discovered from the train split follows, and is what evaluation checks
+    The Declare model mined from the train split follows, and is what evaluation checks
     conformance against.
 
     Args:
         data_config: The `data` section of this dataset's experiment config.
-        declare_config: The `declare` section, driving the discovery of the Declare model.
+        declare_config: The `declare` section, driving the mining of the Declare model.
     """
     dataset = data_config.name
 
@@ -222,12 +222,12 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
         codec = DatasetCodec.fit(train, data_config=data_config, max_trace_length=max_seq_len)
         codec.save()
 
-    with step('Discovering the Declare model'):
+    with step('Mining the Declare model'):
         codes = codec.activity_codes
         traces = train.groupby(CASE_KEY, sort=False)[ACTIVITY_KEY].agg(
             lambda activities: codes.encode(activities.astype(str))
         )
-        declare_model = discover_declare_model(traces, codes=codes, settings=declare_config)
+        declare_model = mine_declare_model(traces, codes=codes, settings=declare_config)
         declare_model.save(dataset)
     declare_summary = f'{len(declare_model.constraints)} Declare constraints'
 

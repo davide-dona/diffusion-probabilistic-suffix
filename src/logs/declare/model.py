@@ -9,6 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 from src import artifacts
 from src.logs.declare.templates import TEMPLATES, Constraint
 
+# The exact keys of a saved model and of each of its constraints
 _MODEL_KEYS = {'settings', 'constraints'}
 _CONSTRAINT_KEYS = {'template', 'activities', 'n', 'support'}
 
@@ -25,6 +26,7 @@ class DeclareModel:
     def save(self, dataset: str) -> Path:
         """Save the model among the dataset's artifacts and return its path."""
         payload = {
+            # Resolve interpolations so that the file stands alone, without the Hydra config
             'settings': OmegaConf.to_container(self.settings, resolve=True),
             'constraints': [
                 {
@@ -58,13 +60,14 @@ class DeclareModel:
         ):
             raise ValueError(f'{path} is not a Declare model.')
         constraints = dict(_constraint(entry) for entry in payload['constraints'])
+        # A repeated constraint collapses into a single key, so the dict comes out shorter
         if len(constraints) != len(payload['constraints']):
             raise ValueError(f'{path} repeats a constraint.')
         return cls(settings=OmegaConf.create(payload['settings']), constraints=constraints)
 
 
 def _constraint(entry: Any) -> tuple[Constraint, float]:
-    """Parse one saved constraint and its support, rejecting any that discovery cannot produce."""
+    """Parse one saved constraint and its support, rejecting any that mining cannot produce."""
     if not isinstance(entry, dict) or set(entry) != _CONSTRAINT_KEYS:
         raise ValueError(f'{entry} is not a constraint.')
 
@@ -84,6 +87,7 @@ def _constraint(entry: Any) -> tuple[Constraint, float]:
         raise ValueError(f'{entry} names one activity twice.')
 
     n = entry['n']
+    # Compare exact types, since `bool` is a subclass of `int`
     if type(n) is not int or n < 1 or (n != 1 and not template.supports_cardinality):
         raise ValueError(f'{entry} asks for a count its template does not take.')
 
@@ -93,8 +97,8 @@ def _constraint(entry: Any) -> tuple[Constraint, float]:
 
     constraint = Constraint(
         template=template,
-        first=activities[0],
-        second=activities[1] if template.is_binary else None,
+        a=activities[0],
+        b=activities[1] if template.is_binary else None,
         n=n,
     )
     return constraint, support

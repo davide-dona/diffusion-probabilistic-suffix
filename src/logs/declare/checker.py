@@ -42,6 +42,7 @@ class ConformanceChecker:
                 belong to different datasets.
         """
         self._vacuity: bool = model.settings.consider_vacuity
+        # Map the constraints labels to the codebook's characters
         try:
             self._constraints = tuple(
                 constraint.relabel(codes.codes) for constraint in model.constraints

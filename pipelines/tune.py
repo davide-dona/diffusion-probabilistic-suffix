@@ -48,7 +48,7 @@ def _score(
             pairing is what makes cells a few thousandths apart worth comparing at all.
         num_samples: Suffixes drawn per prefix.
         codec: The codec the split was encoded through, read in the decode direction.
-        checker: The checker of the Declare model, discovered from the train split and so the same
+        checker: The checker of the Declare model, mined from the train split and so the same
             object whichever split is being scored.
         device: The device to generate on.
     Returns:
