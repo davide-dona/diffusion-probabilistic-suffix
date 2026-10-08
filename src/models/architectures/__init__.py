@@ -4,7 +4,7 @@ ARCHITECTURES = (
     'diffusion_transformer',
     'head_sampling_transformer',
     'u_ed_sutran',
-    'prefix_retrieval',
+    'case_based',
 )
 
 _PACKAGE = 'src.models.architectures'

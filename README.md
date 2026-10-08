@@ -93,8 +93,8 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
 Available model configs are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
-(U-ED-SuTraN), `diffusion_transformer`, and `prefix_retrieval`.
-Prefix retrieval is a non-neural baseline. Training fits it once on the train split, without an
+(U-ED-SuTraN), `diffusion_transformer`, and `case_based`.
+The case-based model is a non-neural baseline. Training fits it once on the train split, without an
 optimizer: for each prefix it finds the train cut points sharing the longest run of latest
 activities, down to none, and samples their observed suffixes uniformly. It takes no settings, so
 its checkpoint goes straight to generation.

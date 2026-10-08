@@ -11,7 +11,7 @@ from src.models.contracts import GeneratedSuffix
 _START = -1
 
 
-class PrefixRetrieval(FittedSuffixModel):
+class CaseBased(FittedSuffixModel):
     """Sample real train suffixes whose preceding activities match the prefix's latest ones.
 
     A context is the run of activities right before a cut point, read backwards and closed by a
@@ -37,7 +37,7 @@ class PrefixRetrieval(FittedSuffixModel):
         """Store every case and cut point of the train split."""
         tables = dataset.case_cuts()
         if not len(tables.cuts):
-            raise ValueError('Prefix retrieval needs at least one train cut point')
+            raise ValueError('The case-based model needs at least one train cut point')
         device = self.cuts.device
         self.case_activities = tables.activities.to(device)
         self.case_inter_event_times = tables.inter_event_times.to(device)
@@ -78,7 +78,7 @@ class PrefixRetrieval(FittedSuffixModel):
             prefix width, the cap every generator shares, is cut there and marked as such.
         """
         if not len(self.cuts):
-            raise RuntimeError('Prefix retrieval must be fitted before it generates')
+            raise RuntimeError('The case-based model must be fitted before it generates')
         order, contexts = self._contexts()
         prefix_activities = item.prefix.activities.cpu().numpy()
         prefix_lengths = item.prefix.length.cpu().numpy()
