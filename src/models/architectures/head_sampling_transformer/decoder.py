@@ -3,12 +3,13 @@ from omegaconf import DictConfig
 from torch import nn
 
 from src.models.backbones.autoregressive.decoder import CausalDecoder
+from src.models.backbones.autoregressive.distributions import sample_gaussian
 from src.models.backbones.autoregressive.embeddings import EventEmbeddings
 from src.models.contracts import DecoderOutput
 
 
 class Decoder(CausalDecoder[DecoderOutput]):
-    """SuTraN-PH heads and calibrated categorical sampling policy."""
+    """SuTraN-PH heads: a categorical activity, then a Gaussian time given that activity."""
 
     def __init__(
         self,
@@ -21,7 +22,7 @@ class Decoder(CausalDecoder[DecoderOutput]):
         pad_activity_index: int,
         pad_resource_index: int,
         eot_activity_index: int,
-        sampling: DictConfig,
+        time: DictConfig,
     ) -> None:
         super().__init__(
             config=config,
@@ -32,72 +33,44 @@ class Decoder(CausalDecoder[DecoderOutput]):
             pad_resource_index=pad_resource_index,
             eot_activity_index=eot_activity_index,
         )
-        self.sampling = sampling
+        self.log_variance_min = time.log_variance_min
+        self.log_variance_max = time.log_variance_max
         self.activity_head = nn.Linear(
             in_features=config.head_hidden_dim, out_features=num_activities
         )
-        self.inter_event_time_head = nn.Linear(in_features=config.head_hidden_dim, out_features=1)
+        self.time_activity_embedding = nn.Embedding(
+            num_embeddings=num_activities, embedding_dim=config.head_hidden_dim
+        )
+        # The mean and log-variance of the standardized inter-event time.
+        self.inter_event_time_head = nn.Linear(in_features=config.head_hidden_dim, out_features=2)
 
-    def predict(self, features: torch.Tensor) -> DecoderOutput:
-        """Predict categorical logits and unit-variance Gaussian means."""
+    def predict(self, features: torch.Tensor, activities: torch.Tensor) -> DecoderOutput:
+        """Read activity logits, and the time distribution given each position's activity."""
+        means, log_variances = self._time_distribution(features, activities)
         return DecoderOutput(
             activity_logits=self.activity_head(features),
-            inter_event_times=self.inter_event_time_head(features).squeeze(dim=-1),
+            inter_event_time_means=means,
+            inter_event_time_log_variances=log_variances,
         )
 
     def sample(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Draw activities before durations from the baseline heads."""
-        activities = self._next_activity(self.activity_head(features))
-        times = self._next_time(self.inter_event_time_head(features).squeeze(dim=-1))
-        return activities, times
+        """Draw an activity, then a standardized time from its conditional Gaussian.
 
-    def read_with(self, sampling: DictConfig) -> None:
-        """Replace the sampler the activity head is drawn through.
-
-        Inference-time only: nothing here is a parameter or reaches the state dict, so swapping it
-        changes how a trained model is read and not what it learned. That is what lets
-        `pipelines.tune` search the pair over one set of weights rather than one run per value.
-
-        Args:
-            sampling: The sampler to draw with from here on.
+        PAD and SOS are masked out before the activity draw. The head learns to make them
+        unlikely rather than impossible, and no suffix can hold them.
         """
-        self.sampling = sampling
-
-    def _next_activity(self, logits: torch.Tensor) -> torch.Tensor:
-        """Read the activity head for one decode step.
-
-        The tokens no suffix can hold are masked out before sampling. The head learns to make PAD
-        unlikely rather than impossible, so masking prevents invalid emitted tokens.
-
-        A draw is then shaped by `self.sampling`: the temperature scales every step alike, the
-        nucleus reads how peaked each one is. The masked tokens leave the softmax at zero, so
-        neither knob can put them back.
-
-        Args:
-            logits: The head's output, `[batch_size, num_activities]`.
-        Returns:
-            The activity written at this position, `[batch_size]`.
-        """
-        logits = logits.index_fill(dim=-1, index=self.unemittable_activities, value=-torch.inf)
-        probabilities = (logits / self.sampling.temperature).softmax(dim=-1)
-        probabilities = self._nucleus(probabilities)
-        return torch.multinomial(input=probabilities, num_samples=1).squeeze(dim=1)  # [B, 1] -> [B]
-
-    def _nucleus(self, probabilities: torch.Tensor) -> torch.Tensor:
-        """Keep the smallest activity set reaching the configured probability mass."""
-        top_p = self.sampling.top_p
-        if top_p >= 1.0:
-            return probabilities
-
-        ordered, indices = probabilities.sort(dim=-1, descending=True)
-        preceding = ordered.cumsum(dim=-1) - ordered
-        kept = ordered.masked_fill(mask=preceding >= top_p, value=0.0)
-        probabilities = torch.zeros_like(input=probabilities).scatter(
-            dim=-1, index=indices, src=kept
+        logits = self.activity_head(features).index_fill(
+            dim=-1, index=self.unemittable_activities, value=-torch.inf
         )
-        return probabilities / probabilities.sum(dim=-1, keepdim=True)
+        activities = torch.multinomial(input=logits.softmax(dim=-1), num_samples=1).squeeze(dim=1)
+        means, log_variances = self._time_distribution(features, activities)
+        return activities, sample_gaussian(mean=means, log_variance=log_variances)
 
-    @staticmethod
-    def _next_time(mean: torch.Tensor) -> torch.Tensor:
-        """Draw a standardized time from a unit-variance Gaussian around `mean`."""
-        return mean + torch.randn_like(mean)
+    def _time_distribution(
+        self, features: torch.Tensor, activities: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Gaussian mean and bounded log-variance `[...]` for features `[..., H]` and the
+        activities `[...]` written at the same positions."""
+        time_features = features + self.time_activity_embedding(activities)
+        means, log_variances = self.inter_event_time_head(time_features).unbind(dim=-1)
+        return means, log_variances.clamp(min=self.log_variance_min, max=self.log_variance_max)

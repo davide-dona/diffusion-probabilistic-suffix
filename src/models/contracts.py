@@ -5,10 +5,11 @@ import torch
 
 @dataclass(frozen=True)
 class DecoderOutput:
-    """Predictions at every autoregressive suffix position."""
+    """Activity logits and Gaussian time parameters at every autoregressive suffix position."""
 
     activity_logits: torch.Tensor  # [B, T, V]
-    inter_event_times: torch.Tensor  # [B, T]
+    inter_event_time_means: torch.Tensor  # [B, T], standardized
+    inter_event_time_log_variances: torch.Tensor  # [B, T]
 
 
 @dataclass(frozen=True)

@@ -75,11 +75,11 @@ hash of each bundle file and one fingerprint for the complete bundle. Invocation
 the resolved preprocessing configuration, are written under `outputs/preprocess/sepsis/<timestamp>/`.
 
 > [!WARNING]
-> Training, tuning, generation, and evaluation stop if the preprocessing manifest is missing or
+> Training, generation, and evaluation stop if the preprocessing manifest is missing or
 > any dataset artifact differs from its recorded hash. Artifacts written before this format change
 > must be regenerated through their pipeline stages.
 
-Checkpoints, tuning reports, generations, and evaluation outputs carry the same `provenance`
+Checkpoints, generations, and evaluation outputs carry the same `provenance`
 record: the training run, dataset fingerprint, checkpoint hash, and immediate source file hash.
 Hashes that do not yet apply are `null`. This lets each stage reject a dataset bundle different
 from the one used for training.
@@ -98,6 +98,9 @@ The case-based model is a non-neural baseline. Training fits it once on the trai
 optimizer: for each prefix it finds the train cut points sharing the longest run of latest
 activities, down to none, and samples their observed suffixes uniformly. It takes no settings, so
 its checkpoint goes straight to generation.
+SuTraN-PH samples each activity from its categorical head, then the inter-event time from a
+Gaussian whose mean and log-variance depend on that activity. Its log-variance bounds default to
+`[-10, 10]` under `model.time`.
 U-ED-SuTraN shares SuTraN-PH's encoder and causal
 decoder, adding MC dropout and learned activity-logit and time variances. Its defaults use 20
 categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
@@ -137,22 +140,7 @@ Diffusion runs also log `train/masked_real_activity_loss`, `train/masked_eot_act
 their `val/` counterparts. Together they equal the logged activity loss; each uses the full-canvas
 denominator.
 
-### 3. Sampler tuning
-
-Tune a Head-sampling Transformer on the validation split before test generation:
-
-```bash
-uv run python -m pipelines.tune checkpoint=/path/to/best.pt device=cpu
-```
-
-The selected sampler and full search are written to
-`outputs/tune/<dataset>/<model>/<training-run-id>/<invocation-id>/tuning.json`. The same directory
-contains `tuned.pt`, a self-contained checkpoint required for Head-sampling Transformer generation.
-
-U-ED-SuTraN samples its learned distribution directly. It does not support temperature or top-p
-tuning, and its `best.pt` can be used for generation without this stage.
-
-### 4. Inference
+### 3. Inference
 
 Generate suffixes for every prefix of the test split:
 
@@ -160,16 +148,10 @@ Generate suffixes for every prefix of the test split:
 uv run python -m pipelines.generate checkpoint=/path/to/checkpoint.pt device=cpu num_samples=100
 ```
 
-For a Head-sampling Transformer, pass the checkpoint produced by sampler tuning:
-
-```bash
-uv run python -m pipelines.generate checkpoint=/path/to/tuned.pt device=cpu num_samples=100
-```
-
 The generations are written to
 `outputs/generate/<dataset>/<model>/<training-run-id>/<invocation-id>/generations.parquet`.
 
-### 5. Evaluation
+### 4. Evaluation
 
 Evaluate a generations file:
 
@@ -192,7 +174,7 @@ They are excluded from final reports, score files, and publication comparisons.
 Generation metrics are logged under `generation_<group>/<metric>`. Only model-owned metrics are
 logged during training validation; log-owned values remain in the evaluation report.
 
-### 6. Visualization
+### 5. Visualization
 
 Plot and tabulate one or more evaluation reports:
 
@@ -245,8 +227,7 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer 
 
 ### Publish a checkpoint
 
-Once a run has been evaluated, propose its generation-ready checkpoint as a published model. Use
-`tuned.pt` for a Head-sampling Transformer and `best.pt` for a diffusion model:
+Once a run has been evaluated, propose its `best.pt` checkpoint as a published model:
 
 ```bash
 uv run python -m scripts.publish -m /path/to/checkpoint.pt

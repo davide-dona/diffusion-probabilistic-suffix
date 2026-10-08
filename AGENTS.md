@@ -25,7 +25,7 @@ The guides below remain the authority for current implementation contracts and s
 
 ## Safety and Correctness
 
-- Do not run training, sampler tuning, full test generation, or full evaluation locally. Inspect
+- Do not run training, full test generation, or full evaluation locally. Inspect
   Hydra configuration and use small, disposable CPU checks instead. Full pipeline commands in the
   nested guide are execution references for suitable compute environments.
 - Never select checkpoints or tune inference settings on the test split. Training and model

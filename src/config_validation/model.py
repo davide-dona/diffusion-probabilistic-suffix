@@ -7,22 +7,6 @@ from src.config_validation.primitives import validate_number
 from src.models.architectures import architecture_of
 
 
-def validate_sampling(config: DictConfig) -> None:
-    """Validate the temperature and nucleus-sampling parameters for output heads.
-
-    Raises:
-        ValueError: If the section has missing or extra keys, or either value is out of range.
-    """
-    if set(config) != {'temperature', 'top_p'}:
-        raise ValueError('sampling must contain exactly temperature and top_p')
-
-    validate_number(config.temperature, 'sampling.temperature')
-    validate_number(config.top_p, 'sampling.top_p')
-
-    if config.top_p > 1:
-        raise ValueError('sampling.top_p must not exceed 1')
-
-
 def validate_model(model: DictConfig) -> None:
     """Validate a configured model architecture and its architecture-specific settings.
 
@@ -50,7 +34,7 @@ def validate_model(model: DictConfig) -> None:
     if architecture in {'head_sampling_transformer', 'u_ed_sutran'}:
         _validate_sutran(model)
         if architecture == 'head_sampling_transformer':
-            validate_sampling(model.sampling)
+            _validate_time(model)
         else:
             _validate_uncertainty(model)
     else:
@@ -75,13 +59,24 @@ def _validate_sutran(model: DictConfig) -> None:
     validate_number(model.decoder.head_hidden_dim, 'model.decoder.head_hidden_dim', integer=True)
 
 
+def _validate_time(model: DictConfig) -> None:
+    if 'time' not in model or set(model.time) != {'log_variance_min', 'log_variance_max'}:
+        raise ValueError('model.time must contain exactly log_variance_min and log_variance_max')
+    _validate_log_variance_bounds(model.time, 'model.time')
+
+
 def _validate_uncertainty(model: DictConfig) -> None:
-    if 'sampling' in model:
-        raise ValueError('u_ed_sutran does not support sampler tuning or sampling controls')
     config = model.uncertainty
     expected = {'log_variance_min', 'log_variance_max', 'categorical_samples'}
     if set(config) != expected:
         raise ValueError(f'model.uncertainty must contain exactly {sorted(expected)}')
+    _validate_log_variance_bounds(config, 'model.uncertainty')
+    validate_number(
+        config.categorical_samples, 'model.uncertainty.categorical_samples', integer=True
+    )
+
+
+def _validate_log_variance_bounds(config: DictConfig, name: str) -> None:
     for key in ('log_variance_min', 'log_variance_max'):
         value = config[key]
         if (
@@ -89,12 +84,9 @@ def _validate_uncertainty(model: DictConfig) -> None:
             or not isinstance(value, (float, int))
             or not math.isfinite(value)
         ):
-            raise ValueError(f'model.uncertainty.{key} must be finite')
+            raise ValueError(f'{name}.{key} must be finite')
     if config.log_variance_min >= config.log_variance_max:
-        raise ValueError('model.uncertainty.log_variance_min must be below log_variance_max')
-    validate_number(
-        config.categorical_samples, 'model.uncertainty.categorical_samples', integer=True
-    )
+        raise ValueError(f'{name}.log_variance_min must be below log_variance_max')
 
 
 def _validate_diffusion_transformer(model: DictConfig) -> None:

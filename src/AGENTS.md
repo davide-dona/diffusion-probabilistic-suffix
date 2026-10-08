@@ -11,7 +11,7 @@ points; source modules should expose typed operations that can be checked withou
 | `artifacts/` | Stored artifact locations, dataset manifests, hashes, identities, and provenance. |
 | `models/` | Shared model interface, architectures, generation helpers, and checkpoint persistence. |
 | `training/` | Optimization, validation, early stopping, and scalar records. |
-| `inference/` | Batch generation, tuning reports, decoded samples, and generations Parquet I/O. |
+| `inference/` | Batch generation, decoded samples, and generations Parquet I/O. |
 | `evaluation/` | Metric registration, prefix scoring, aggregation, and evaluation reports. |
 | `logs/` | Event-log I/O, preprocessing transforms, Declare mining, and conformance. |
 | `config_validation/` | Effective configuration and command parameter validation. |
@@ -28,8 +28,7 @@ Read the nested guides for [`datasets/`](datasets/AGENTS.md), [`models/`](models
 - Keep immutable records immutable. Dataset batches and output records use named tuples or frozen
   dataclasses so device moves and transformations return new values.
 - Keep architecture decisions behind `SuffixModel`. Training and inference must not branch on a
-  concrete model except where a capability is explicitly architecture-specific, such as sampler
-  tuning.
+  concrete model; they may branch on a capability interface such as `FittedSuffixModel`.
 - Validate external artifacts at read time: schema, required metadata, run identity, vocabulary,
   and source hashes are part of their contracts.
 - Protect replacement of an existing best checkpoint with a temporary file and `Path.replace`.

@@ -99,7 +99,7 @@ class CausalDecoder[OutputT](nn.Module, ABC):
             caches=None,
         )  # [batch_size, seq_len, d_model]
         features = self.shared_layer(hidden)  # [batch_size, seq_len, head_hidden_dim]
-        return self.predict(features)
+        return self.predict(features, suffix_activities)
 
     def _teacher_forced_input(self, suffix_activities: torch.Tensor) -> torch.Tensor:
         """Shift suffix activities `[B, T]` right behind SOS without changing the padded width."""
@@ -212,8 +212,14 @@ class CausalDecoder[OutputT](nn.Module, ABC):
         )
 
     @abstractmethod
-    def predict(self, features: torch.Tensor) -> OutputT:
-        """Read distribution parameters from shared decoder features."""
+    def predict(self, features: torch.Tensor, activities: torch.Tensor) -> OutputT:
+        """Read distribution parameters from shared decoder features.
+
+        Args:
+            features: The shared decoder features, `[batch_size, seq_len, head_hidden_dim]`.
+            activities: The target activity at each position, `[batch_size, seq_len]`, for heads
+                that condition on the activity being written there.
+        """
 
     @abstractmethod
     def sample(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

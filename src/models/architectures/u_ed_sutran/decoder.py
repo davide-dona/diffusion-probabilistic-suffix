@@ -2,8 +2,8 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 
-from src.models.architectures.u_ed_sutran.distributions import sample_gaussian
 from src.models.backbones.autoregressive.decoder import CausalDecoder
+from src.models.backbones.autoregressive.distributions import sample_gaussian
 from src.models.backbones.autoregressive.embeddings import EventEmbeddings
 from src.models.contracts import UncertaintyAwareDecoderOutput
 
@@ -46,7 +46,13 @@ class UncertaintyAwareDecoder(CausalDecoder[UncertaintyAwareDecoderOutput]):
             in_features=config.head_hidden_dim, out_features=1
         )
 
-    def predict(self, features: torch.Tensor) -> UncertaintyAwareDecoderOutput:
+    def predict(
+        self, features: torch.Tensor, activities: torch.Tensor
+    ) -> UncertaintyAwareDecoderOutput:
+        """Read the distributions at every position; they do not depend on `activities`."""
+        return self._distributions(features)
+
+    def _distributions(self, features: torch.Tensor) -> UncertaintyAwareDecoderOutput:
         """Read means and bounded log-variances from shared hidden features."""
         return UncertaintyAwareDecoderOutput(
             activity_logit_means=self.activity_head(features),
@@ -61,7 +67,7 @@ class UncertaintyAwareDecoder(CausalDecoder[UncertaintyAwareDecoderOutput]):
 
     def sample(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Draw Gaussian logits, categorical activities, and Gaussian standardized durations."""
-        output = self.predict(features)
+        output = self._distributions(features)
         logits = sample_gaussian(
             mean=output.activity_logit_means, log_variance=output.activity_log_variances
         ).index_fill(dim=-1, index=self.unemittable_activities, value=-torch.inf)

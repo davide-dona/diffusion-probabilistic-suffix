@@ -15,7 +15,6 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset
 from src.inference.generate import generate_batch, generation_batch_size
 from src.inference.generation_store import GenerationWriter
-from src.inference.tuning import require_generation_ready
 from src.logs import Split
 from src.models.base import SuffixModel
 from src.models.persistence.io import load_checkpoint
@@ -35,7 +34,6 @@ def run(
             matches every run ever started from it, and picking one of them is a decision the
             caller makes, not one to be inferred from a filename. It carries the config of the
             run that wrote it, so nothing about the model or the dataset is passed alongside it.
-            A head-sampling Transformer must use the tuned checkpoint from `pipelines.tune`.
         device: Overrides the run's own `device`, e.g. to generate on a different
             machine than the one it trained on. `None` keeps it.
         num_samples: How many suffixes to draw per prefix, or `None` for the run's own
@@ -47,7 +45,6 @@ def run(
         checkpoint = load_checkpoint(checkpoint_path)
     checkpoint_provenance = artifacts.Provenance.from_dict(checkpoint['provenance'])
     run = checkpoint_provenance.run
-    tuning = require_generation_ready(checkpoint)
     checkpoint_hash = artifacts.sha256(checkpoint_path)
     provenance = artifacts.Provenance(
         run=run,
@@ -71,7 +68,6 @@ def run(
                 'checkpoint': str(checkpoint_path.resolve()),
                 'provenance': provenance.as_dict(),
                 'effective': OmegaConf.to_container(config, resolve=True),
-                'tuning': tuning.as_dict() if tuning is not None else None,
             }
         )
     )
@@ -88,7 +84,7 @@ def run(
     )
     trained_step, score = checkpoint['step'], checkpoint['selection_score']
     diffusion = run.model == 'diffusion_transformer'
-    drawn_with = config.model.diffusion if diffusion else config.model.get('sampling')
+    drawn_with = config.model.diffusion if diffusion else None
 
     banner(
         'Generating suffixes',
@@ -102,10 +98,8 @@ def run(
             'sampling': (
                 f'{drawn_with.sampler.calls} DDIM calls from level '
                 f'{drawn_with.sampler.start_level}, eta {drawn_with.sampler.eta}'
-                if diffusion
-                else f'temperature {drawn_with.temperature}, top_p {drawn_with.top_p}'
                 if drawn_with is not None
-                else 'not configured'
+                else 'directly from the learned distribution'
             ),
             'batch': f'{batch_size} prefixes, {config.dataloader.num_workers} loader workers',
             'generations': path,

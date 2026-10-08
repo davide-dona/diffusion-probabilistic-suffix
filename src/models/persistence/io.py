@@ -44,10 +44,3 @@ def load_checkpoint(model_path: str | Path) -> dict:
     checkpoint = torch.load(f=Path(model_path), map_location='cpu', weights_only=True)
     validate_checkpoint(checkpoint, purpose='loaded', remedy='Train a new checkpoint.')
     return checkpoint
-
-
-def write_checkpoint(checkpoint: dict, path: Path) -> Path:
-    """Write a validated checkpoint that will not replace an existing best checkpoint."""
-    validate_checkpoint(checkpoint, purpose='written', remedy='Rebuild the checkpoint.')
-    torch.save(checkpoint, path)
-    return path
