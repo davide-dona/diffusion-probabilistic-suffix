@@ -7,9 +7,9 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from src.datasets.codec import DatasetCodec
-from src.datasets.dataset import TraceCut
+from src.datasets.dataset import TraceCut, TraceDataset
 from src.logs.declare import ConformanceChecker
-from src.models.base import SuffixModel
+from src.models.base import FittedSuffixModel, SuffixModel, TrainableSuffixModel
 from src.selection import selection_score
 from src.training.loss import Loss
 from src.training.validation import (
@@ -64,8 +64,9 @@ class ValidationReport:
     """Metrics and timing from one scheduled validation check."""
 
     step: int
-    train_metrics: Loss
-    val_metrics: Loss
+    # None for a fitted model, which has no loss to report.
+    train_metrics: Loss | None
+    val_metrics: Loss | None
     generation_metrics: GenerationMetrics
 
 
@@ -110,7 +111,7 @@ def _lr_factor(
 
 
 def _optimize(
-    model: SuffixModel,
+    model: TrainableSuffixModel,
     batch: TraceCut,
     optimizer: optim.AdamW,
     *,
@@ -145,7 +146,7 @@ def _optimize(
 
 def train(
     *,
-    model: SuffixModel,
+    model: TrainableSuffixModel,
     loaders: TrainingLoaders,
     codec: DatasetCodec,
     checker: ConformanceChecker,
@@ -259,4 +260,53 @@ def train(
         selection_score=best_score,
         step=step,
         reason=reason,
+    )
+
+
+def fit(
+    *,
+    model: FittedSuffixModel,
+    dataset: TraceDataset,
+    generation: DataLoader,
+    codec: DatasetCodec,
+    checker: ConformanceChecker,
+    settings: TrainingSettings,
+    observer: TrainingObserver,
+) -> TrainingResult:
+    """Fit a model on the train split once and score it with one generation validation.
+
+    The fitted model is the selected one, reported at step 0, since there is no later state to
+    choose between.
+
+    Args:
+        model: Model already on the configured device.
+        dataset: The train split to fit on.
+        generation: The validation prefixes generation is scored on.
+        codec: Fitted dataset codec.
+        checker: Declare conformance checker used for generation validation.
+        settings: Device, seed, and validation draws; the optimizer and stopping fields are unused.
+        observer: Synchronous callbacks for the validation and the selected model.
+
+    Returns:
+        The selected step and score.
+    """
+    model.fit(dataset)
+    metrics = validate_generation(
+        model=model,
+        loader=generation,
+        num_samples=settings.generation_samples,
+        codec=codec,
+        checker=checker,
+        device=settings.device,
+        seed=settings.seed,
+    )
+    observer.on_validation(
+        ValidationReport(step=0, train_metrics=None, val_metrics=None, generation_metrics=metrics)
+    )
+    score = selection_score(metrics.scores.flatten())
+    if not math.isfinite(score):
+        raise ValueError(f'Nonfinite validation energy score: {score}')
+    observer.on_best(model, 0, score)
+    return TrainingResult(
+        best_step=0, selection_score=score, step=0, reason='fitted on the train split'
     )

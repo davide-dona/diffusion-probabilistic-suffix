@@ -8,8 +8,8 @@ accuracy, diversity, calibration, time prediction, and process conformance.
 
 The main model is a diffusion Transformer with a cached prefix encoder and a bidirectional suffix
 decoder over categorical activities and continuous times. It is compared with the implemented
-probabilistic SuTraN-PH and uncertainty-aware U-ED-SuTraN baselines on Sepsis, BPIC12, BPIC17,
-and BPIC19.
+probabilistic SuTraN-PH and uncertainty-aware U-ED-SuTraN baselines, and with a non-neural
+case-based baseline, on Sepsis, BPIC12, BPIC17, and BPIC19.
 
 ## Research Knowledge
 

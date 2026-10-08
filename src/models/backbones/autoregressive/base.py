@@ -8,11 +8,11 @@ from src.datasets.dataset import TraceCut
 from src.models.backbones.autoregressive.decoder import CausalDecoder
 from src.models.backbones.autoregressive.embeddings import EventEmbeddings
 from src.models.backbones.autoregressive.trace_encoder import TraceEncoder
-from src.models.base import SuffixModel
+from src.models.base import TrainableSuffixModel
 from src.models.contracts import GeneratedSuffix
 
 
-class AutoregressiveSuffixModel[OutputT](SuffixModel):
+class AutoregressiveSuffixModel[OutputT](TrainableSuffixModel):
     """Prefix encoding, teacher forcing, and duration conversion for causal suffix models."""
 
     decoder: CausalDecoder[OutputT]

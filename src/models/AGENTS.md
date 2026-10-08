@@ -1,15 +1,18 @@
 # Model Guide
 
-All architectures implement `SuffixModel`. Training, validation, checkpoint restoration, and batch
-generation depend on this interface rather than on architecture internals.
+All architectures implement `SuffixModel`, through one of two subclasses. A
+`TrainableSuffixModel` is optimized by the training loop. A `FittedSuffixModel` is estimated once
+from the train split without an optimizer. Training, validation, checkpoint restoration, and batch
+generation depend on these interfaces rather than on architecture internals.
 
 ## Shared Interface
 
 | Operation | Contract |
 | --- | --- |
-| `forward(item)` | Run the architecture's stochastic or teacher-forced training pass and return a `ModelOutput`. |
-| `compute_loss(output, batch)` | Return a scalar mean loss for backpropagation and a `Loss` whose fields are sums over batch rows. |
 | `generate(item, num_samples=S)` | Read `item.prefix` only and return `GeneratedSuffix` with leading shape `[B, S]`. |
+| `forward(item)` | Trainable only. Run the architecture's stochastic or teacher-forced training pass and return a `ModelOutput`. |
+| `compute_loss(output, batch)` | Trainable only. Return a scalar mean loss for backpropagation and a `Loss` whose fields are sums over batch rows. |
+| `fit(dataset)` | Fitted only. Estimate the model from every cut of the train split and keep everything it learns in persistent buffers. |
 | `pad_activity_index` | Activity index ignored by reconstruction loss and used after generated termination. |
 | `eot_activity_index` | Activity token that terminates a suffix. |
 
@@ -68,6 +71,7 @@ and standardized time means and log-variances `[B, T]`.
 | `diffusion_transformer` | [`architectures/diffusion_transformer/AGENTS.md`](architectures/diffusion_transformer/AGENTS.md) | Implemented main model |
 | `head_sampling_transformer` | [`architectures/head_sampling_transformer/AGENTS.md`](architectures/head_sampling_transformer/AGENTS.md) | Implemented SuTraN-PH baseline |
 | `u_ed_sutran` | [`architectures/u_ed_sutran/AGENTS.md`](architectures/u_ed_sutran/AGENTS.md) | Implemented uncertainty-aware SuTraN |
+| `case_based` | `architectures/case_based/model.py` | Implemented non-neural case-based baseline |
 
 For local verification, use small inputs and reduced diffusion steps under the root guide's
 disposable-check policy. Do not start training.

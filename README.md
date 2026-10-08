@@ -93,7 +93,11 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
 Available model configs are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
-(U-ED-SuTraN), and `diffusion_transformer`.
+(U-ED-SuTraN), `diffusion_transformer`, and `case_based`.
+The case-based model is a non-neural baseline. Training fits it once on the train split, without an
+optimizer: for each prefix it finds the train cut points sharing the longest run of latest
+activities, down to none, and samples their observed suffixes uniformly. It takes no settings, so
+its checkpoint goes straight to generation.
 U-ED-SuTraN shares SuTraN-PH's encoder and causal
 decoder, adding MC dropout and learned activity-logit and time variances. Its defaults use 20
 categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
