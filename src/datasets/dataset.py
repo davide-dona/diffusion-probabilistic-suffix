@@ -103,6 +103,16 @@ class TraceCut(NamedTuple):
 
 
 @dataclass(frozen=True)
+class CaseCuts:
+    """A split's activity and time channels per case, with every cut point taken from them."""
+
+    activities: torch.Tensor  # int64, [num_cases, max_trace_length], PAD past each case's end
+    inter_event_times: torch.Tensor  # float32, standardized, [num_cases, max_trace_length]
+    lengths: torch.Tensor  # int64, events per case, [num_cases]
+    cuts: torch.Tensor  # int64, (case, prefix length) of each `TraceDataset` item, [N, 2]
+
+
+@dataclass(frozen=True)
 class _Case:
     """One complete encoded case, shared by every split trace cut from it."""
 
@@ -197,6 +207,22 @@ class TraceDataset(Dataset):
             `[max_trace_length]`, zero-filled past the suffix's content, which the loss masks out.
         """
         return F.pad(input=target, pad=(0, self.max_len - target.size(dim=0)))
+
+    def case_cuts(self) -> CaseCuts:
+        """Return the split's cases, padded to `max_trace_length`, and the cut points
+        `__getitem__` indexes, in the same order."""
+        return CaseCuts(
+            activities=torch.stack(
+                tensors=[case.events.padded(to=self.max_len).activities for case in self._cases]
+            ),
+            inter_event_times=torch.stack(
+                tensors=[
+                    case.events.padded(to=self.max_len).inter_event_times for case in self._cases
+                ]
+            ),
+            lengths=torch.stack(tensors=[case.events.length for case in self._cases]),
+            cuts=torch.tensor(data=self._case_cuts, dtype=torch.long).view(-1, 2),
+        )
 
     def length_sorted_indices(self) -> list[int]:
         """Order this split's traces by how many positions their suffix takes to decode.

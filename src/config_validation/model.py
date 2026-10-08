@@ -38,6 +38,11 @@ def validate_model(model: DictConfig) -> None:
     if not issubclass(get_class(model._target_), SuffixModel):
         raise ValueError('model._target_ must implement SuffixModel')
 
+    if architecture == 'prefix_retrieval':
+        if set(model) != {'_target_'}:
+            raise ValueError('prefix_retrieval takes no model settings besides _target_')
+        return
+
     validate_number(model.d_model, 'model.d_model', integer=True)
     for key, value in model.embeddings.items():
         validate_number(value, f'model.embeddings.{key}', integer=True)

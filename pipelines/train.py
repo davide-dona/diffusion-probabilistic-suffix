@@ -4,6 +4,7 @@ from pathlib import Path
 import hydra
 import torch
 import wandb
+from hydra.utils import get_class
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
@@ -19,7 +20,7 @@ from src.inference.generate import generation_batch_size
 from src.logs import Split
 from src.logs.declare import ConformanceChecker, DeclareModel
 from src.models.architectures import architecture_of
-from src.models.base import SuffixModel
+from src.models.base import FittedSuffixModel, SuffixModel
 from src.models.persistence.io import save_checkpoint
 from src.selection import SELECTION_METRIC
 from src.training.loss import Loss
@@ -29,6 +30,7 @@ from src.training.train import (
     TrainingResult,
     TrainingSettings,
     ValidationReport,
+    fit,
     train,
 )
 
@@ -64,15 +66,20 @@ class _TrainingReporter:
             for key, metric in METRICS.diagnostics.items()
             if metric.owner is Owner.MODEL
         }
-        wandb.log(
+        val_values = (
             {f'val/{key}': value for key, value in report.val_metrics.as_metrics().items()}
-            | model_values,
-            step=report.step,
+            if report.val_metrics is not None
+            else {}
+        )
+        wandb.log(val_values | model_values, step=report.step)
+        losses = (
+            f'train {report.train_metrics.loss:.4f}  val {report.val_metrics.loss:.4f}  '
+            if report.train_metrics is not None and report.val_metrics is not None
+            else ''
         )
         print(
             f'Step {report.step:>{len(str(self.max_steps))}}/{self.max_steps}  '
-            f'train {report.train_metrics.loss:.4f}  '
-            f'val {report.val_metrics.loss:.4f}  '
+            f'{losses}'
             f'gen_dls {generation.diagnostics["dls_sample_mean"]:.4f} mean / '
             f'energy {generation.scores.activity["energy_score_dls"]:.4f}  '
             f'generation {generation.generation_seconds:.1f}s  '
@@ -128,27 +135,40 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
     # Seeded before anything is built, so weight initialization and shuffling are both reproducible.
     torch.manual_seed(config.seed)
     generator = torch.Generator().manual_seed(config.seed)
+    fitted = issubclass(get_class(config.model._target_), FittedSuffixModel)
 
+    generation_validation = (
+        f'{config.training.generation_pairs:,} generation prefixes with '
+        f'{config.inference.validation_samples} draws each'
+    )
     banner(
-        'Training a suffix-prediction model',
+        'Fitting a suffix-prediction model' if fitted else 'Training a suffix-prediction model',
         {
             'output': output_path('best.pt').parent,
             'run': run,
             'dataset': config.data.name,
             'model': run.model,
             'device': config.device,
-            'steps': f'at most {config.training.max_steps:,}, validating every '
-            f'{config.training.val_every_n_steps:,}',
-            'batch': f'{config.dataloader.batch_size} pairs, '
-            f'{config.dataloader.num_workers} loader workers',
-            'validation': f'{config.training.validation_pairs:,} loss pairs, '
-            f'{config.training.generation_pairs:,} generation prefixes with '
-            f'{config.inference.validation_samples} draws each',
-            'optimizer': f'AdamW, lr {config.optimizer.lr} after '
-            f'{config.optimizer.warmup_steps:,} warmup steps, cosine decay, '
-            f'weight decay {config.optimizer.weight_decay}',
-            'checkpoints': output_path('best.pt'),
-        },
+        }
+        | (
+            {
+                'fitting': 'once on the train split, without an optimizer',
+                'validation': generation_validation,
+            }
+            if fitted
+            else {
+                'steps': f'at most {config.training.max_steps:,}, validating every '
+                f'{config.training.val_every_n_steps:,}',
+                'batch': f'{config.dataloader.batch_size} pairs, '
+                f'{config.dataloader.num_workers} loader workers',
+                'validation': f'{config.training.validation_pairs:,} loss pairs, '
+                f'{generation_validation}',
+                'optimizer': f'AdamW, lr {config.optimizer.lr} after '
+                f'{config.optimizer.warmup_steps:,} warmup steps, cosine decay, '
+                f'weight decay {config.optimizer.weight_decay}',
+            }
+        )
+        | {'checkpoints': output_path('best.pt')},
     )
 
     with step('Loading the dataset codec'):
@@ -263,14 +283,25 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
         max_steps=settings.max_steps,
     )
     try:
-        result = train(
-            model=model,
-            loaders=loaders,
-            codec=codec,
-            checker=checker,
-            settings=settings,
-            observer=reporter,
-        )
+        if isinstance(model, FittedSuffixModel):
+            result = fit(
+                model=model,
+                dataset=train_dataset,
+                generation=loaders.generation,
+                codec=codec,
+                checker=checker,
+                settings=settings,
+                observer=reporter,
+            )
+        else:
+            result = train(
+                model=model,
+                loaders=loaders,
+                codec=codec,
+                checker=checker,
+                settings=settings,
+                observer=reporter,
+            )
         reporter.report_result(result)
     finally:
         wandb.finish()

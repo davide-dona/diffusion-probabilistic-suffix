@@ -23,4 +23,7 @@ MODELS = {
         label='Diffusion Transformer', color='#2A7F9E', marker='^', linestyle='-'
     ),
     'u_ed_sutran': ModelStyle(label='U-ED-SuTraN', color='#57834B', marker='P', linestyle='--'),
+    'prefix_retrieval': ModelStyle(
+        label='Prefix Retrieval', color='#8A6FA8', marker='s', linestyle='-'
+    ),
 }

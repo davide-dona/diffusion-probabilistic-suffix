@@ -10,12 +10,12 @@ from src.models.architectures.diffusion_transformer.process import (
     CategoricalDiffusion,
     GaussianDiffusion,
 )
-from src.models.base import SuffixModel
+from src.models.base import TrainableSuffixModel
 from src.models.contracts import DiffusionOutput, GeneratedSuffix
 from src.training.loss import Loss
 
 
-class DiffusionTransformer(SuffixModel):
+class DiffusionTransformer(TrainableSuffixModel):
     """Diffuse suffix activities and durations conditioned on a clean prefix."""
 
     def __init__(self, config: DictConfig, codec: DatasetCodec):

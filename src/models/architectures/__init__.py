@@ -1,6 +1,11 @@
 """Selectable suffix-model architectures, one package each."""
 
-ARCHITECTURES = ('diffusion_transformer', 'head_sampling_transformer', 'u_ed_sutran')
+ARCHITECTURES = (
+    'diffusion_transformer',
+    'head_sampling_transformer',
+    'u_ed_sutran',
+    'prefix_retrieval',
+)
 
 _PACKAGE = 'src.models.architectures'
 

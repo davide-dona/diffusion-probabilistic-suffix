@@ -11,7 +11,7 @@ from src.evaluation import PrefixSummary, ScoreGroups
 from src.evaluation.metrics import METRICS
 from src.inference.generate import generate_batch
 from src.logs.declare import ConformanceChecker
-from src.models.base import SuffixModel
+from src.models.base import SuffixModel, TrainableSuffixModel
 from src.training.loss import Loss
 
 
@@ -60,7 +60,11 @@ def validation_randomness(*, seed: int | None, device: torch.device) -> Iterator
 
 @torch.no_grad()
 def validate(
-    model: SuffixModel, loader: DataLoader, *, device: torch.device, seed: int | None = None
+    model: TrainableSuffixModel,
+    loader: DataLoader,
+    *,
+    device: torch.device,
+    seed: int | None = None,
 ) -> Loss:
     """Average teacher-forced loss over validation traces with isolated random draws.
 
