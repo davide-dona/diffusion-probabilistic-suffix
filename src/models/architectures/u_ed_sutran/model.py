@@ -9,9 +9,9 @@ from torch import nn
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut
 from src.models.architectures.u_ed_sutran.decoder import UncertaintyAwareDecoder
-from src.models.architectures.u_ed_sutran.distributions import sample_gaussian
 from src.models.backbones.autoregressive.attention import MultiHeadAttention
 from src.models.backbones.autoregressive.base import AutoregressiveSuffixModel
+from src.models.backbones.autoregressive.distributions import sample_gaussian
 from src.models.backbones.autoregressive.loss import reconstruction_loss
 from src.models.contracts import GeneratedSuffix, UncertaintyAwareDecoderOutput
 from src.training.loss import Loss

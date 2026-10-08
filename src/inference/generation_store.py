@@ -166,7 +166,8 @@ class GenerationWriter:
             vocabulary: The activity names the suffixes are spelled on, in code order, from
                 `ActivityCodec.vocabulary`. Written into the file so it says what its own
                 characters mean.
-            sampling: The activity-head controls or diffusion schedules and sampler settings.
+            sampling: The diffusion schedules and sampler settings, or None for a model sampled
+                directly from its learned distribution.
                 Written so the checkpoint hash alone need not identify inference settings.
         """
         provenance.require_checkpoint_source()

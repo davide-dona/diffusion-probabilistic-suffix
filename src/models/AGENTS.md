@@ -20,7 +20,8 @@ generation depend on these interfaces rather than on architecture internals.
 `used_sentinel` have shape `[B, S]`. Length counts real generated
 events before EOT, or the generated canvas length when no EOT appears.
 
-`DecoderOutput` holds activity logits `[B, T, V]` and standardized time predictions `[B, T]`.
+`DecoderOutput` holds activity logits `[B, T, V]` and standardized time means and log-variances
+`[B, T]`, each time conditioned on the activity at its position.
 `DiffusionOutput` also carries the clean and noisy states, sampled timesteps, Gaussian noise, and
 the real-event mask needed to evaluate one stochastic diffusion pass. Its activity and time losses
 span the full fixed canvas, including trailing EOT targets with standardized zero time.
@@ -37,15 +38,13 @@ and standardized time means and log-variances `[B, T]`.
 - Checkpoints contain the resolved run configuration, provenance, state dictionary, optimizer
   step, selection score, selection metric, and direction. `persistence.io.load_checkpoint` loads
   plain data and tensors on CPU; `persistence.validation` checks the stored model configuration,
-  provenance, run identity, and tuning evidence.
+  provenance, and run identity.
 - `SuffixModel.from_checkpoint` rebuilds from the stored model configuration, loads weights, moves
   to the requested device, and returns evaluation mode. Do not reconstruct from a current YAML file.
-- `src.artifacts` owns `RunIdentity` and `Provenance`. `src.inference.tuning` owns the sampler
-  readiness rule and the tuned checkpoint payload; persistence owns its file write.
+- `src.artifacts` owns `RunIdentity` and `Provenance`.
 - Diffusion checkpoints require the current prefix encoder configuration and an explicit sampler
   start level.
-- Save the repeatedly replaced best checkpoint through a temporary `.pt.tmp` file. Checkpoints
-  written once may be written directly to their final destination.
+- Save the repeatedly replaced best checkpoint through a temporary `.pt.tmp` file.
 
 ## Shared Semantics
 

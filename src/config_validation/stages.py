@@ -1,12 +1,10 @@
 import re
-from collections.abc import Sequence
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from src.config_validation.data import validate_data, validate_declare
-from src.config_validation.model import validate_model, validate_sampling
+from src.config_validation.model import validate_model
 from src.config_validation.primitives import validate_number, validate_string_list
-from src.models.architectures import architecture_of
 
 
 def validate_preprocess_config(config: DictConfig) -> None:
@@ -86,23 +84,6 @@ def validate_experiment_config(config: DictConfig) -> None:
     experiment = config.get('experiment')
     if experiment is not None and (not isinstance(experiment, str) or not experiment.strip()):
         raise ValueError('experiment must be null or a nonempty string')
-
-
-def validate_tuning_config(
-    config: DictConfig, *, temperatures: Sequence[object], top_ps: Sequence[object]
-) -> None:
-    """Validate effective tuning configuration and the Cartesian sampler grid."""
-    validate_experiment_config(config)
-    architecture = architecture_of(config.model._target_)
-    if architecture != 'head_sampling_transformer':
-        raise ValueError(f'{architecture} does not support sampler tuning')
-
-    if not temperatures or not top_ps:
-        raise ValueError('Sampler grid cannot be empty')
-
-    for temperature in temperatures:
-        for top_p in top_ps:
-            validate_sampling(OmegaConf.create({'temperature': temperature, 'top_p': top_p}))
 
 
 def validate_evaluation_config(*, workers: object) -> None:

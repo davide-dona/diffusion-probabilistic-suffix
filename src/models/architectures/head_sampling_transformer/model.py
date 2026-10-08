@@ -26,7 +26,7 @@ class HeadSamplingTransformer(AutoregressiveSuffixModel[DecoderOutput]):
             pad_activity_index=codec.activity.pad_index,
             pad_resource_index=codec.resource.pad_index,
             eot_activity_index=codec.activity.eot_index,
-            sampling=config.sampling,
+            time=config.time,
         )
 
     @torch.no_grad()
@@ -71,9 +71,16 @@ class HeadSamplingTransformer(AutoregressiveSuffixModel[DecoderOutput]):
             reduction='none',
         ).sum(dim=1)
 
+        log_variances = output.inter_event_time_log_variances
         inter_event_time_loss = (
-            (output.inter_event_times - batch.inter_event_times)
-            .square()
+            (
+                0.5
+                * (
+                    (-log_variances).exp()
+                    * (batch.inter_event_times - output.inter_event_time_means).square()
+                    + log_variances
+                )
+            )
             .masked_fill(mask=~batch.timed_positions(), value=0.0)
             .sum(dim=1)
         )

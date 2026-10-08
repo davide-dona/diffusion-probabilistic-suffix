@@ -18,6 +18,6 @@ decoder:
   dropout: 0.1
   activity_dropout: 0.3
   head_hidden_dim: 128
-sampling:
-  temperature: 1.0
-  top_p: 1.0
+time:
+  log_variance_min: -10.0
+  log_variance_max: 10.0
