@@ -3,12 +3,12 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import torch
+from fcfdeclare import Checker
 from torch import optim
 from torch.utils.data import DataLoader
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut, TraceDataset
-from src.logs.declare import ConformanceChecker
 from src.models.base import FittedSuffixModel, SuffixModel, TrainableSuffixModel
 from src.selection import selection_score
 from src.training.loss import Loss
@@ -149,7 +149,7 @@ def train(
     model: TrainableSuffixModel,
     loaders: TrainingLoaders,
     codec: DatasetCodec,
-    checker: ConformanceChecker,
+    checker: Checker,
     settings: TrainingSettings,
     observer: TrainingObserver,
 ) -> TrainingResult:
@@ -269,7 +269,7 @@ def fit(
     dataset: TraceDataset,
     generation: DataLoader,
     codec: DatasetCodec,
-    checker: ConformanceChecker,
+    checker: Checker,
     settings: TrainingSettings,
     observer: TrainingObserver,
 ) -> TrainingResult:

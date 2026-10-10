@@ -19,7 +19,7 @@ def conformance_sample_mean(context: PreparedPrefix) -> float:
     Returns:
         The draw-weighted mean share of satisfied constraints. No sampled draws score zero.
     """
-    return context.generation.samples.mean([check.share for check in context.sample_conformance])
+    return context.generation.samples.mean(context.sample_conformance_share)
 
 
 @METRICS.register(
@@ -38,7 +38,7 @@ def conformance_observed(context: PreparedPrefix) -> float:
     Returns:
         The satisfied-constraint share of the observed continuation.
     """
-    return context.observed_conformance.share
+    return context.observed_conformance_share
 
 
 @METRICS.register(
@@ -58,7 +58,7 @@ def full_conformance_sample_rate(context: PreparedPrefix) -> float:
         The draw-weighted rate of fully conformant sampled suffixes. No sampled draws score
         zero.
     """
-    return context.generation.samples.mean([check.full for check in context.sample_conformance])
+    return context.generation.samples.mean(context.sample_full_conformance)
 
 
 @METRICS.register(
@@ -77,4 +77,4 @@ def full_conformance_observed(context: PreparedPrefix) -> float:
     Returns:
         Whether the observed continuation fully conforms.
     """
-    return context.observed_conformance.full
+    return context.observed_full_conformance

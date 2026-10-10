@@ -1,11 +1,12 @@
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
+from fcfdeclare import Checker
+
 from src.evaluation.metrics import METRICS
 from src.evaluation.metrics.metadata import MetricGroup
 from src.evaluation.prepared import PreparedPrefix
 from src.inference.generation import Generation
-from src.logs.declare import ConformanceChecker
 
 
 @dataclass(frozen=True)
@@ -94,7 +95,7 @@ class PrefixSummary:
         cls,
         generation: Generation,
         *,
-        checker: ConformanceChecker,
+        checker: Checker,
         include_diagnostics: bool = False,
     ) -> 'PrefixSummary':
         """Score one generated suffix against truth and constraints.

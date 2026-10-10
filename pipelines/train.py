@@ -18,7 +18,7 @@ from src.evaluation.metrics import METRICS
 from src.evaluation.metrics.metadata import Owner
 from src.inference.generate import generation_batch_size
 from src.logs import Split
-from src.logs.declare import ConformanceChecker, DeclareModel
+from src.logs.declare import code_checker, load_model
 from src.models.architectures import architecture_of
 from src.models.base import FittedSuffixModel, SuffixModel
 from src.models.persistence.io import save_checkpoint
@@ -236,7 +236,7 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
         validation=val_loader,
         generation=generation_loader,
     )
-    checker = ConformanceChecker(DeclareModel.load(run.dataset), codec.activity_codes)
+    checker = code_checker(load_model(run.dataset), codec.activity_codes)
     settings = TrainingSettings(
         optimizer=OptimizerSettings(
             lr=config.optimizer.lr,

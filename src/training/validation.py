@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from time import perf_counter
 
 import torch
+from fcfdeclare import Checker
 from torch.utils.data import DataLoader
 
 from src.datasets.codec import DatasetCodec
 from src.evaluation import PrefixSummary, ScoreGroups
 from src.evaluation.metrics import METRICS
 from src.inference.generate import generate_batch
-from src.logs.declare import ConformanceChecker
 from src.models.base import SuffixModel, TrainableSuffixModel
 from src.training.loss import Loss
 
@@ -98,7 +98,7 @@ def validate_generation(
     *,
     num_samples: int,
     codec: DatasetCodec,
-    checker: ConformanceChecker,
+    checker: Checker,
     device: torch.device,
     seed: int | None = None,
 ) -> GenerationMetrics:

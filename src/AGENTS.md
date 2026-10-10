@@ -13,7 +13,7 @@ points; source modules should expose typed operations that can be checked withou
 | `training/` | Optimization, validation, early stopping, and scalar records. |
 | `inference/` | Batch generation, decoded samples, and generations Parquet I/O. |
 | `evaluation/` | Metric registration, prefix scoring, aggregation, and evaluation reports. |
-| `logs/` | Event-log I/O, preprocessing transforms, Declare mining, and conformance. |
+| `logs/` | Event-log I/O, preprocessing transforms, and the FCFDeclare adapter for Declare mining and conformance. |
 | `config_validation/` | Effective configuration and command parameter validation. |
 | `visualization/` | Figure and table catalogues, labels, and rendering. |
 | `uncertainty/` | Case-level resampling and significance comparisons. |

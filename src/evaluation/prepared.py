@@ -4,19 +4,21 @@ from itertools import chain, islice, repeat
 from typing import Self
 
 import numpy as np
+from fcfdeclare import Checker
 
 from src.inference.generation import Generation
-from src.logs.declare import Conformance, ConformanceChecker
 
 
 @dataclass(frozen=True, slots=True)
 class PreparedPrefix:
     """Decoded values and constraint checks shared by every metric for one prefix.
 
-    Sample conformance follows distinct suffix order; generation sample counts give its draw
-    multiplicities. Numeric arrays retain every draw: suffix lengths and remaining times have
-    shape [S, 1], and inter-event times have shape [S, T], where T is the observed suffix
-    length. Truth arrays have shape [1] or [T]. Times are in minutes.
+    Sample conformance arrays have shape [U], one entry per distinct suffix in suffix order;
+    generation sample counts give their draw multiplicities. A conformance share is the fraction
+    of constraints the full trace satisfies, and full conformance is 1.0 when it satisfies them
+    all. Numeric arrays retain every draw: suffix lengths and remaining times have shape [S, 1],
+    and inter-event times have shape [S, T], where T is the observed suffix length. Truth arrays
+    have shape [1] or [T]. Times are in minutes.
     """
 
     generation: Generation
@@ -26,11 +28,13 @@ class PreparedPrefix:
     true_suffix_length: np.ndarray
     true_remaining_time: np.ndarray
     true_inter_event_times: np.ndarray
-    sample_conformance: tuple[Conformance, ...]
-    observed_conformance: Conformance
+    sample_conformance_share: np.ndarray
+    sample_full_conformance: np.ndarray
+    observed_conformance_share: float
+    observed_full_conformance: float
 
     @classmethod
-    def of(cls, generation: Generation, *, checker: ConformanceChecker) -> Self:
+    def of(cls, generation: Generation, *, checker: Checker) -> Self:
         """Prepare the shared draw and observation arrays for one prefix.
 
         Args:
@@ -60,8 +64,11 @@ class PreparedPrefix:
             ],
             dtype=np.float64,
         ).reshape(draws, truth_length)
-        sample_conformance = tuple(checker.check(prefix + suffix) for suffix in samples.suffixes)
-        observed_conformance = checker.check(prefix + truth.activities)
+        # Check the sampled traces and the observed one in a single batch, the observed one last
+        conformance = checker.check(
+            [*(prefix + suffix for suffix in samples.suffixes), prefix + truth.activities]
+        )
+        share, full = conformance.share, conformance.full
 
         return cls(
             generation=generation,
@@ -71,8 +78,10 @@ class PreparedPrefix:
             true_suffix_length=np.array([float(truth_length)], dtype=np.float64),
             true_remaining_time=np.array([truth.remaining_time_minutes], dtype=np.float64),
             true_inter_event_times=np.array(truth.inter_event_time_minutes, dtype=np.float64),
-            sample_conformance=sample_conformance,
-            observed_conformance=observed_conformance,
+            sample_conformance_share=share[:-1],
+            sample_full_conformance=full[:-1],
+            observed_conformance_share=float(share[-1]),
+            observed_full_conformance=float(full[-1]),
         )
 
 

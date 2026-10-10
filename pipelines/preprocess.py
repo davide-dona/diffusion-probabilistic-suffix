@@ -26,7 +26,7 @@ from src.logs import (
     read_original_log,
     write_log,
 )
-from src.logs.declare import mine_declare_model
+from src.logs.declare import mine_model, save_model
 from src.logs.preprocessing import (
     add_calendar,
     add_case_elapsed,
@@ -223,12 +223,9 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
         codec.save()
 
     with step('Mining the Declare model'):
-        codes = codec.activity_codes
-        traces = train.groupby(CASE_KEY, sort=False)[ACTIVITY_KEY].agg(
-            lambda activities: codes.encode(activities.astype(str))
-        )
-        declare_model = mine_declare_model(traces, codes=codes, settings=declare_config)
-        declare_model.save(dataset)
+        traces = train[ACTIVITY_KEY].astype(str).groupby(train[CASE_KEY], sort=False).agg(list)
+        declare_model = mine_model(traces, settings=declare_config)
+        save_model(declare_model, dataset)
     declare_summary = f'{len(declare_model.constraints)} Declare constraints'
 
     with step('Writing the dataset manifest'):
