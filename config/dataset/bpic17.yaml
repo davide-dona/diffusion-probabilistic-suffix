@@ -33,7 +33,7 @@ data:
   log_scaled_features: []
   log_scaled_inter_event_time: false
 declare:
-  consider_vacuity: true
+  vacuity: true
   min_support: 0.99
-  itemsets_support: 0.1
+  activity_support: 0.1
   max_cardinality: 2

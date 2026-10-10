@@ -77,7 +77,7 @@ class Draws:
         """
         return np.bincount(self.taken, minlength=len(self.suffixes)).astype(np.float64)
 
-    def mean(self, values: Sequence[float]) -> float:
+    def mean(self, values: Sequence[float] | np.ndarray) -> float:
         """Return the draw-weighted mean of values for distinct sampled suffixes.
 
         Args:
@@ -86,7 +86,7 @@ class Draws:
             The mean across draws, or zero when there are no values or draws.
         """
         draw_count = len(self)
-        return float(self.counts @ values) / draw_count if values and draw_count else 0.0
+        return float(self.counts @ values) / draw_count if len(values) and draw_count else 0.0
 
 
 @dataclass(frozen=True)

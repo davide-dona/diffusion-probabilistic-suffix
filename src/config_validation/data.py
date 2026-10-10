@@ -1,3 +1,4 @@
+from fcfdeclare import MiningSettings
 from omegaconf import DictConfig
 
 from src.artifacts.provenance import validate_dataset
@@ -37,14 +38,9 @@ def validate_declare(config: DictConfig) -> None:
     """Validate the Declare-mining settings used during preprocessing.
 
     Raises:
-        ValueError: If a support threshold, cardinality limit, or vacuity flag is invalid.
+        ValueError: If a setting is missing, unknown, or invalid.
     """
-    for key in ('min_support', 'itemsets_support'):
-        validate_number(config[key], f'declare.{key}')
-        if config[key] > 1:
-            raise ValueError(f'declare.{key} must not exceed 1')
-
-    validate_number(config.max_cardinality, 'declare.max_cardinality', integer=True)
-
-    if not isinstance(config.consider_vacuity, bool):
-        raise ValueError('declare.consider_vacuity must be boolean')
+    try:
+        MiningSettings(**config)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f'Invalid declare settings: {error}') from error

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import hydra
+from fcfdeclare import Checker, DeclareModel
 from omegaconf import DictConfig
 from tqdm import tqdm
 
@@ -16,7 +17,7 @@ from src.config_validation import validate_evaluation_config
 from src.datasets.codec import ActivityCodec
 from src.evaluation import EvaluationReport, EvaluationSummary, PrefixSummary, stream_prefix_scores
 from src.inference.generation_store import Generations
-from src.logs.declare import ConformanceChecker, DeclareModel
+from src.logs.declare import code_checker, load_model
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ class _Worker:
     """What one pool process holds for the whole of its life, rather than per block."""
 
     generations: Generations
-    checker: ConformanceChecker
+    checker: Checker
 
 
 # Set by `_init_worker` in each pool process, and read by `_score_block` there. Left
@@ -44,7 +45,7 @@ def _init_worker(generations_file: Path, model: DeclareModel) -> None:
     vocabulary = generations.vocabulary
     _worker = _Worker(
         generations=generations,
-        checker=ConformanceChecker(model, ActivityCodec.from_vocabulary(vocabulary)),
+        checker=code_checker(model, ActivityCodec.from_vocabulary(vocabulary)),
     )
 
 
@@ -72,8 +73,8 @@ def _score_in_parallel(
 ) -> Iterator[PrefixSummary]:
     """Score a generations file across a pool of processes, a block at a time.
 
-    A prefix's score depends on nothing but the prefix, and the conformance checks that dominate
-    it are pure Python that holds the GIL. Each prefix is scored down to a handful of floats and
+    A prefix's score depends on nothing but the prefix, and scoring it runs many small numpy and
+    Python steps that hold the GIL. Each prefix is scored down to a handful of floats and
     its generation dropped in the worker, so a split of hundreds of thousands of them never brings
     more than a block's objects back here.
 
@@ -139,10 +140,10 @@ def run(generations_file: Path, workers: int | None) -> None:
 
     # What the model being checked against was mined under, so a report is never read without
     # knowing which constraints it holds.
-    model = DeclareModel.load(dataset)
+    model = load_model(dataset)
     model_path = artifacts.DECLARE_MODEL.path(dataset)
     mined = model.settings
-    mined_under = f'min support {mined.min_support:.0%}, consider_vacuity={mined.consider_vacuity}'
+    mined_under = f'min support {mined.min_support:.0%}, vacuity={mined.vacuity}'
 
     banner(
         'Scoring generated suffixes',
