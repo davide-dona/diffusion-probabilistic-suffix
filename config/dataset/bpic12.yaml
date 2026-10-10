@@ -18,8 +18,10 @@ data:
   - day_cos
   - seconds_sin
   - seconds_cos
-  log_scaled_features: []
-  log_scaled_inter_event_time: false
+  log_scaled_features:
+  - (case) AMOUNT_REQ
+  - ts_start
+  log_scaled_inter_event_time: true
 declare:
   vacuity: true
   min_support: 0.99

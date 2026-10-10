@@ -51,8 +51,11 @@ and standardized time means and log-variances `[B, T]`.
 - Generation must be invariant to every true suffix field for all architectures.
 - PAD and SOS are structural tokens and cannot be sampled as suffix activities. EOT determines
   generated length. UNK remains a valid modeled activity.
-- Inter-event times are modeled in the codec's standardized space. Models do not produce remaining
-  time; evaluation derives it by summing decoded, nonnegative inter-event minutes. Do not add an
+- Inter-event times are modeled in the codec's standardized space, which is log-scaled on every
+  dataset. A standardized sample beyond the train range therefore decodes to an exponentially
+  large duration; decoding clips generated times to the train range, and the diffusion sampler
+  clips its clean time estimates to the same range. Models do not produce remaining time;
+  evaluation derives it by summing decoded, nonnegative inter-event minutes. Do not add an
   independent remaining-time head.
 - `src/models/embeddings.py` holds event-content and positional embeddings used across model
   families. `src/models/backbones/autoregressive` holds the causal prefix encoder, decoder trunk,

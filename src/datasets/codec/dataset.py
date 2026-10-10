@@ -167,11 +167,12 @@ def _fit_event_features(
         train: The split every vocabulary and statistic is fit on.
         columns: The configured columns, in the order they will occupy the shared table and the
             embedding projection's input.
-        log_scaled: Which of them take a log1p before the standardization. A name in here that
-            turns out categorical simply never comes up, the column having nothing to scale.
+        log_scaled: Which of them take a log1p before the standardization.
     Returns:
         The categorical features with their table offsets assigned, and the numeric features
         with their fitted statistics.
+    Raises:
+        ValueError: If a log-scaled column turns out categorical.
     """
     categorical: list[CategoricalColumn] = []
     numeric: list[NumericColumn] = []
@@ -181,6 +182,8 @@ def _fit_event_features(
     for column in columns:
         if is_numeric_dtype(train[column]):
             numeric.append(NumericColumn.fit(train, column=column, log=column in log_scaled))
+        elif column in log_scaled:
+            raise ValueError(f'column "{column}" is log-scaled but holds categorical values')
         else:
             feature = CategoricalColumn.fit(
                 train, column=column, special_tokens=FEATURE_TOKENS, offset=offset

@@ -79,7 +79,7 @@ def generate_batch(
                         inter_event_times=inter_event_times[position, sample],
                         length=lengths[position, sample],
                         used_eot_sentinel=used_sentinel[position, sample],
-                        clamp=True,
+                        bounded=True,
                     )
                     for sample in range(num_samples)
                 ]
@@ -104,7 +104,7 @@ def _decode(
     inter_event_times: np.ndarray,
     length: int,
     used_eot_sentinel: bool = False,
-    clamp: bool = False,
+    bounded: bool = False,
 ) -> DecodedEvents:
     """One run of events, back in the log's own units.
 
@@ -115,14 +115,14 @@ def _decode(
         inter_event_times: The run's standardized inter-event time before each activity,
             `[steps]`.
         length: How many of them are events, the rest being the EOT and the padding behind it.
-        clamp: Whether to floor the denormalized times at 0, matching the baselines' behaviour on
-            a model prediction. Left off for ground truth, which is never negative to begin with.
+        bounded: Whether to clip the times to the train range, as a model prediction needs.
+            Left off for ground truth, which is decoded exactly.
     Returns:
         The run as the report and the generations file hold it.
     """
-    inter_event_time_minutes = codec.inter_event_time.denormalize(inter_event_times[:length])
-    if clamp:
-        inter_event_time_minutes = np.maximum(inter_event_time_minutes, 0.0)
+    inter_event_time_minutes = codec.inter_event_time.denormalize(
+        inter_event_times[:length], bounded=bounded
+    )
     return DecodedEvents(
         activities=activity_codec.encode(codec.activity.decode(activities, length=length)),
         inter_event_time_minutes=inter_event_time_minutes.tolist(),

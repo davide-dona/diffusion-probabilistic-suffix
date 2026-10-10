@@ -47,7 +47,9 @@ change prefix identity. `fixed_subset()` selects a reproducible random subset fr
 
 - Activity and resource vocabularies with stable special token indices.
 - Categorical feature vocabularies and non-overlapping offsets into one shared embedding table.
-- Mean, standard deviation, and optional log scaling for numeric features and inter-event time.
+- Mean, standard deviation, train minimum and maximum, and optional log scaling for numeric
+  features and inter-event time. Statistics are stored after the log transform. Only numeric
+  columns may be log-scaled, and a log-scaled column rejects negative values.
 - The maximum retained trace length and the dataset configuration used to locate split artifacts.
 
 Activity special tokens are PAD, UNK, EOT, and SOS. The activity codec used by evaluation maps
@@ -56,6 +58,8 @@ Never change special token order or fitted offsets without an explicit artifact 
 
 Numeric encoding replaces non-finite normalized values with zero and supplies a separate presence
 channel. Decoding inter-event times must use the exact fitted column, including its log transform.
+Generated times are decoded with `bounded=True`, which clips them to the train range before the
+inverse transform; ground truth is decoded unbounded.
 
 ## Changes
 

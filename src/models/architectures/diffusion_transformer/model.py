@@ -32,7 +32,9 @@ class DiffusionTransformer(TrainableSuffixModel):
             codec=codec, steps=self.steps, cosine_offset=config.diffusion.cosine_offset
         )
         self.times = GaussianDiffusion(
-            steps=self.steps, cosine_offset=config.diffusion.cosine_offset
+            steps=self.steps,
+            cosine_offset=config.diffusion.cosine_offset,
+            clean_range=codec.inter_event_time.normalized_range(),
         )
         self.denoiser = DiffusionDenoiser(
             config=config, codec=codec, num_activities=self.activities.num_activities

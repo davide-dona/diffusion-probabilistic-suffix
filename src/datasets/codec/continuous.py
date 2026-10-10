@@ -9,6 +9,8 @@ class NumericColumn(BaseModel):
     - log: Whether the values pass through a log1p before the standardization.
     - mean: The mean of the train values, after the log1p if there is one.
     - std: The standard deviation of the same, 1.0 for a channel that never varies.
+    - minimum: The smallest train value, after the log1p if there is one.
+    - maximum: The largest train value, after the log1p if there is one.
     """
 
     model_config = ConfigDict(frozen=True, extra='forbid')
@@ -17,6 +19,8 @@ class NumericColumn(BaseModel):
     log: bool
     mean: float
     std: float
+    minimum: float
+    maximum: float
 
     @classmethod
     def fit(cls, train: pd.DataFrame, *, column: str, log: bool) -> 'NumericColumn':
@@ -54,12 +58,18 @@ class NumericColumn(BaseModel):
             log=log,
             mean=float(scaled.mean()),
             std=std if std > 0 else 1.0,
+            minimum=float(scaled.min()),
+            maximum=float(scaled.max()),
         )
 
     @staticmethod
     def _scale(values: np.ndarray, *, log: bool) -> np.ndarray:
         """Apply this channel's transform to the raw values."""
         return np.log1p(values) if log else values
+
+    def normalized_range(self) -> tuple[float, float]:
+        """Return the smallest and largest train values in standardized units."""
+        return (self.minimum - self.mean) / self.std, (self.maximum - self.mean) / self.std
 
     def normalize(self, values: np.ndarray) -> np.ndarray:
         """Standardize raw values against the train split's mean and deviation.
@@ -70,13 +80,32 @@ class NumericColumn(BaseModel):
             The same values standardized, as float32. Nothing bounds them: a val/test value
             beyond anything the train split held keeps its distance rather than being pulled
             back to a range.
+        Raises:
+            ValueError: If the channel is log-scaled and a value is negative, which the train
+                split never held and log1p cannot represent faithfully.
         """
+        if self.log and (values < 0).any():
+            raise ValueError(
+                f'column "{self.column}" is log-scaled but holds negative values '
+                f'(min {values.min()}), which log1p cannot represent'
+            )
         return ((self._scale(values, log=self.log) - self.mean) / self.std).astype(np.float32)
 
-    def denormalize(self, normalized: np.ndarray) -> np.ndarray:
-        """Read standardized values back as the raw quantity they came from, exactly: the
-        transform loses nothing on the way in."""
+    def denormalize(self, normalized: np.ndarray, *, bounded: bool = False) -> np.ndarray:
+        """Read standardized values back as the raw quantity they came from.
+
+        Args:
+            normalized: Standardized values.
+            bounded: Whether to clip the values to the train range before inverting the
+                transform. A model's prediction needs it: on a log-scaled channel, an unbounded
+                standardized value becomes an exponentially large raw one. Observed values are
+                read unbounded, since the inverse is exact.
+        Returns:
+            The raw values, as float64.
+        """
         scaled = np.asarray(normalized, dtype=np.float64) * self.std + self.mean
+        if bounded:
+            scaled = np.clip(scaled, self.minimum, self.maximum)
         return np.expm1(scaled) if self.log else scaled
 
     def encode(self, log: pd.DataFrame) -> np.ndarray:
