@@ -35,7 +35,7 @@ def energy_score(
         if draw_counts is None
         else np.asarray(draw_counts, dtype=np.float64)
     )
-    draw_count = counts.sum()
+    draw_count = float(counts.sum())
     if draw_count <= 0.0:
         return 1.0
     # Compute pairwise distances between distinct draws and the truth
