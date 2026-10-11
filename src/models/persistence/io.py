@@ -1,11 +1,15 @@
 from pathlib import Path
 
+import numpy as np
 import torch
 from torch import nn
 
 from src.artifacts import Provenance, RunIdentity
 from src.models.persistence.validation import validate_checkpoint
 from src.selection import SELECTION_METRIC
+
+# Checkpoints may store NumPy float64 metadata, which weights-only unpickling rejects by default.
+_SAFE_GLOBALS = [np._core.multiarray.scalar, np.dtype, np.dtypes.Float64DType]
 
 
 def save_checkpoint(
@@ -41,6 +45,7 @@ def save_checkpoint(
 
 def load_checkpoint(model_path: str | Path) -> dict:
     """Load and validate a model checkpoint on the CPU."""
-    checkpoint = torch.load(f=Path(model_path), map_location='cpu', weights_only=True)
+    with torch.serialization.safe_globals(_SAFE_GLOBALS):
+        checkpoint = torch.load(f=Path(model_path), map_location='cpu', weights_only=True)
     validate_checkpoint(checkpoint, purpose='loaded', remedy='Train a new checkpoint.')
     return checkpoint
