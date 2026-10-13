@@ -1,12 +1,11 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from itertools import chain, islice, repeat
 from typing import Self
 
 import numpy as np
 from fcfdeclare import Checker
 
-from src.inference.generation import Generation
+from src.inference.generation import Draws, Generation
 
 # The nominal probabilities of the central intervals that coverage metrics read.
 COVERAGE_LEVELS = (0.50, 0.75, 0.95)
@@ -81,22 +80,10 @@ class PreparedPrefix:
         """Prepare one prefix from the conformance of its sampled traces, then its observed one."""
         samples = generation.samples
         truth = generation.truth
-        draws = len(samples)
-        truth_length = len(truth)
 
-        suffix_lengths = np.array(
-            [float(len(events)) for events in samples.events], dtype=np.float64
-        ).reshape(draws, 1)
-        remaining_times = np.array(
-            [events.remaining_time_minutes for events in samples.events], dtype=np.float64
-        ).reshape(draws, 1)
-        inter_event_times = np.array(
-            [
-                aligned_inter_event_times(events.inter_event_time_minutes, length=truth_length)
-                for events in samples.events
-            ],
-            dtype=np.float64,
-        ).reshape(draws, truth_length)
+        suffix_lengths = samples.lengths.astype(np.float64)[:, None]  # [S, 1]
+        remaining_times = samples.remaining_time_minutes[:, None]  # [S, 1]
+        inter_event_times = _aligned_inter_event_times(samples, width=len(truth))  # [S, T]
 
         return cls(
             generation=generation,
@@ -106,9 +93,9 @@ class PreparedPrefix:
             suffix_length_intervals=_central_intervals(suffix_lengths),
             remaining_time_intervals=_central_intervals(remaining_times),
             inter_event_time_intervals=_central_intervals(inter_event_times),
-            true_suffix_length=np.array([float(truth_length)], dtype=np.float64),
+            true_suffix_length=np.array([float(len(truth))], dtype=np.float64),
             true_remaining_time=np.array([truth.remaining_time_minutes], dtype=np.float64),
-            true_inter_event_times=np.array(truth.inter_event_time_minutes, dtype=np.float64),
+            true_inter_event_times=truth.inter_event_time_minutes,
             sample_conformance_share=share[:-1],
             sample_full_conformance=full[:-1],
             observed_conformance_share=float(share[-1]),
@@ -129,14 +116,12 @@ def _central_intervals(draws: np.ndarray) -> dict[float, np.ndarray]:
     return {level: bounds[2 * index : 2 * index + 2] for index, level in enumerate(COVERAGE_LEVELS)}
 
 
-def aligned_inter_event_times(predicted: Sequence[float], *, length: int) -> list[float]:
-    """Pad or truncate inter-event times to the observed suffix length.
-
-    Args:
-        predicted: Sampled inter-event times in minutes.
-        length: Nonnegative number of observed suffix events.
-
-    Returns:
-        Exactly length values, retaining leading times and filling missing events with zero.
-    """
-    return list(islice(chain(predicted, repeat(0.0)), length))
+def _aligned_inter_event_times(samples: Draws, *, width: int) -> np.ndarray:
+    """Return [S, width] draw times, keeping each draw's leading times and padding with zero."""
+    lengths = samples.lengths
+    draw_of_event = np.repeat(np.arange(len(samples)), lengths)  # [E]
+    position = np.arange(len(draw_of_event)) - np.repeat(samples.offsets[:-1], lengths)  # [E]
+    kept = position < width
+    aligned = np.zeros((len(samples), width), dtype=np.float64)
+    aligned[draw_of_event[kept], position[kept]] = samples.inter_event_time_minutes[kept]
+    return aligned

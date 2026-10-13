@@ -6,7 +6,7 @@ from functools import cached_property
 import numpy as np
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class DecodedEvents:
     """Set of predicted events, in the log's own units. Any new addition
     to the model's output must be added here"""
@@ -16,10 +16,13 @@ class DecodedEvents:
     # as a string rather than a list of names so a suffix is one object to compare, to hash and to
     # store, which is what the evaluation metrics measure edit distances over.
     activities: str
-    # The minutes of inter-event time before each activity, in the same order, so a run's
+    # [L] float64 minutes of inter-event time before each activity, in the same order, so a run's
     # timestamps are these accumulated from the last prefix event on.
-    inter_event_time_minutes: list[float]
-    used_eot_sentinel: bool = False
+    inter_event_time_minutes: np.ndarray
+
+    def __post_init__(self) -> None:
+        if self.inter_event_time_minutes.shape != (len(self.activities),):
+            raise ValueError('Decoded inter-event times do not match their activities')
 
     def __len__(self) -> int:
         return len(self.activities)
@@ -31,13 +34,14 @@ class DecodedEvents:
         return math.fsum(self.inter_event_time_minutes)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Draws:
     """One prefix's drawn suffixes, held as the distinct ones and which draw took each.
 
     Activity suffixes are written once and `taken` records which suffix each draw produced.
-    Inter-event times do not collapse with activities, so `events` stays one entry per draw and
-    pairs with `suffixes[taken[draw]]`.
+    Inter-event times do not collapse with activities, so they stay one run per draw, held back
+    to back in one flat array: draw `i` has `suffixes[taken[i]]` as its activities and
+    `inter_event_time_minutes[offsets[i]:offsets[i + 1]]` as their times.
 
     Keeping the draws folded is what lets conformance and the transport cost be solved over the
     distinct suffixes rather than over every draw, which on a collapsed run is most of the work.
@@ -45,28 +49,69 @@ class Draws:
 
     # The distinct suffixes, in the order they were first drawn
     suffixes: tuple[str, ...]
-    # Which of them each draw took, one entry per draw in draw order.
-    taken: tuple[int, ...]
-    # The inter-event times of each draw, in the same order as `taken`. The activities of draw
-    # `i` are `suffixes[taken[i]]`.
-    events: list[DecodedEvents]
+    # [S] Which of them each draw took, in draw order.
+    taken: np.ndarray
+    # [E] float64 inter-event minutes of every draw, draw after draw, E being the summed lengths.
+    inter_event_time_minutes: np.ndarray
+    # [S] Whether each draw had to be closed by the EOT sentinel.
+    used_eot_sentinel: np.ndarray
+
+    def __post_init__(self) -> None:
+        draws = len(self.taken)
+        if self.taken.ndim != 1 or self.used_eot_sentinel.shape != (draws,):
+            raise ValueError('Generation draws disagree on how many draws were taken')
+        if draws and (self.taken.min() < 0 or self.taken.max() >= len(self.suffixes)):
+            raise ValueError('Generation draw references an unknown suffix')
+        if self.inter_event_time_minutes.shape != (int(self.offsets[-1]),):
+            raise ValueError('Generation draw times do not match their suffix lengths')
 
     @classmethod
-    def of(cls, drawn: list[DecodedEvents]) -> 'Draws':
+    def of(cls, drawn: Sequence[DecodedEvents], *, used_eot_sentinel: Sequence[bool]) -> 'Draws':
         """Fold one prefix's draws, in the order they were drawn.
 
         Args:
             drawn: One entry per generated draw, already decoded.
+            used_eot_sentinel: Whether each draw had to be closed by the EOT sentinel.
         Returns:
             The draws with their distinct suffixes pulled out.
         """
         rows: dict[str, int] = {}
-        taken = tuple(rows.setdefault(events.activities, len(rows)) for events in drawn)
-        return cls(suffixes=tuple(rows), taken=taken, events=drawn)
+        taken = np.fromiter(
+            (rows.setdefault(events.activities, len(rows)) for events in drawn),
+            dtype=np.int64,
+            count=len(drawn),
+        )
+        return cls(
+            suffixes=tuple(rows),
+            taken=taken,
+            inter_event_time_minutes=np.concatenate(
+                [np.zeros(0), *(events.inter_event_time_minutes for events in drawn)]
+            ),
+            used_eot_sentinel=np.asarray(used_eot_sentinel, dtype=bool),
+        )
 
     def __len__(self) -> int:
         """How many draws were taken, which is what every mean over them divides by."""
         return len(self.taken)
+
+    @cached_property
+    def lengths(self) -> np.ndarray:
+        """[S] How many events each draw holds, the length of the suffix it took."""
+        suffix_lengths = np.fromiter(map(len, self.suffixes), np.int64, len(self.suffixes))
+        return suffix_lengths[self.taken]
+
+    @cached_property
+    def offsets(self) -> np.ndarray:
+        """[S + 1] Where each draw's run starts in `inter_event_time_minutes`, then its end."""
+        return np.concatenate([np.zeros(1, np.int64), np.cumsum(self.lengths)])
+
+    @property
+    def remaining_time_minutes(self) -> np.ndarray:
+        """[S] Each draw's inter-event minutes summed in event order, its remaining time."""
+        draw_of_event = np.repeat(np.arange(len(self)), self.lengths)  # [E]
+        return np.bincount(
+            draw_of_event, weights=self.inter_event_time_minutes, minlength=len(self)
+        )
 
     @cached_property
     def counts(self) -> np.ndarray:
@@ -89,7 +134,7 @@ class Draws:
         return float(self.counts @ values) / draw_count if len(values) and draw_count else 0.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Generation:
     """One prefix's generated suffixes and the truth they were generated for.
     - case_id is used to identify the case in the log the prefix was cut from;

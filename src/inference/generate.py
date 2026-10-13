@@ -78,11 +78,11 @@ def generate_batch(
                         activities=activities[position, sample],
                         inter_event_times=inter_event_times[position, sample],
                         length=lengths[position, sample],
-                        used_eot_sentinel=used_sentinel[position, sample],
                         clamp=True,
                     )
                     for sample in range(num_samples)
-                ]
+                ],
+                used_eot_sentinel=used_sentinel[position],
             ),
             truth=_decode(
                 codec,
@@ -103,7 +103,6 @@ def _decode(
     activities: np.ndarray,
     inter_event_times: np.ndarray,
     length: int,
-    used_eot_sentinel: bool = False,
     clamp: bool = False,
 ) -> DecodedEvents:
     """One run of events, back in the log's own units.
@@ -125,6 +124,5 @@ def _decode(
         inter_event_time_minutes = np.maximum(inter_event_time_minutes, 0.0)
     return DecodedEvents(
         activities=activity_codec.encode(codec.activity.decode(activities, length=length)),
-        inter_event_time_minutes=inter_event_time_minutes.tolist(),
-        used_eot_sentinel=used_eot_sentinel,
+        inter_event_time_minutes=inter_event_time_minutes,
     )
