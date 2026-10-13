@@ -136,8 +136,9 @@ def validate_generation(
             synchronize_device(device)
             generation_seconds += perf_counter() - started
             started = perf_counter()
-            for generation in generations:
-                summary = PrefixSummary.of(generation, checker=checker, include_diagnostics=True)
+            for summary in PrefixSummary.of_batch(
+                generations, checker=checker, include_diagnostics=True
+            ):
                 for key, value in summary.scores.flatten().items():
                     totals[key] += value
                 for key, value in summary.diagnostics.items():

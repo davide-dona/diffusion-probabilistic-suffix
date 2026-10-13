@@ -1,13 +1,13 @@
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 import numpy as np
 
 
-def energy_score(
-    distinct_draw_values: Sequence[Sequence[Hashable]],
-    truth: Sequence[Hashable],
+def energy_score[T](
+    distinct_draw_values: Sequence[T],
+    truth: T,
     *,
-    distance: Callable[[Sequence[Sequence[Hashable]], Sequence[Sequence[Hashable]]], np.ndarray],
+    distance: Callable[[Sequence[T], Sequence[T]], np.ndarray],
     draw_counts: Sequence[float] | None = None,
 ) -> float:
     """Return the fair energy score using distances between distinct draw values.
@@ -99,22 +99,24 @@ def mae(draws: np.ndarray, truth: np.ndarray) -> float:
     return float(np.abs(draws - truth).mean())
 
 
-def coverage_gap(draws: np.ndarray, truth: np.ndarray, *, level: float) -> float:
+def coverage_gap(
+    intervals: Mapping[float, np.ndarray], truth: np.ndarray, *, level: float
+) -> float:
     """Return empirical minus nominal central-interval coverage.
 
     Args:
-        draws: Numeric samples shaped [S, D], with repeated draws retained.
+        intervals: Each prepared nominal level mapped to the [2, D] lower and upper quantile
+            bounds of the draws, or empty when there are no draws.
         truth: Observed quantities shaped [D].
-        level: Nominal central-interval probability between zero and one.
+        level: Nominal central-interval probability, one of the prepared levels.
 
     Returns:
         Share of observed quantities within the inclusive quantile bounds minus level.
         Returns zero with no columns, or negative level with columns but no draws.
     """
-    draw_count, columns = draws.shape
-    if columns == 0:
+    if truth.size == 0:
         return 0.0
-    if draw_count == 0:
+    if not intervals:
         return -level
-    low, high = np.quantile(draws, [(1.0 - level) / 2.0, (1.0 + level) / 2.0], axis=0)
+    low, high = intervals[level]
     return float(((low <= truth) & (truth <= high)).mean()) - level

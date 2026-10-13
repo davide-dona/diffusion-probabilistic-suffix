@@ -57,10 +57,7 @@ def _score_block(block: int) -> list[PrefixSummary]:
     Returns:
         One entry per prefix of the block, in the order it was written.
     """
-    return [
-        PrefixSummary.of(generation, checker=_worker.checker)
-        for generation in _worker.generations.block(block)
-    ]
+    return PrefixSummary.of_batch(_worker.generations.block(block), checker=_worker.checker)
 
 
 def _score_in_parallel(

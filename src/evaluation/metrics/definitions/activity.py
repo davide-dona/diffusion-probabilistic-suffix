@@ -13,21 +13,16 @@ from src.evaluation.metrics.registry import METRICS
 from src.evaluation.prepared import PreparedPrefix
 
 
-def sequence_similarity(predicted: Sequence[Hashable], true: Sequence[Hashable]) -> float:
+def sequence_similarity(predicted: str, true: str) -> float:
     """Return normalized DLD similarity with the shared terminal token."""
-    return DamerauLevenshtein.normalized_similarity(
-        (*predicted, END_CODE),
-        (*true, END_CODE),
-    )
+    return DamerauLevenshtein.normalized_similarity(predicted + END_CODE, true + END_CODE)
 
 
-def _dld(
-    queries: Sequence[Sequence[Hashable]], choices: Sequence[Sequence[Hashable]]
-) -> np.ndarray:
+def _dld(queries: Sequence[str], choices: Sequence[str]) -> np.ndarray:
     """Return pairwise normalized Damerau-Levenshtein distances."""
     similarities = process.cdist(
-        queries=[(*sequence, END_CODE) for sequence in queries],
-        choices=[(*sequence, END_CODE) for sequence in choices],
+        queries=[sequence + END_CODE for sequence in queries],
+        choices=[sequence + END_CODE for sequence in choices],
         scorer=DamerauLevenshtein.normalized_similarity,
         dtype=np.float64,
     )
