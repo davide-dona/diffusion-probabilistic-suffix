@@ -21,8 +21,6 @@ class DiffusionTransformer(TrainableSuffixModel):
     def __init__(self, config: DictConfig, codec: DatasetCodec):
         """Build the denoiser, activity process, and time process."""
         super().__init__(codec=codec)
-        if 'denoiser' in config:
-            raise ValueError('model.denoiser is not supported')
         self.canvas_length = codec.max_trace_length - 1
         self.steps = config.diffusion.steps
         self.sampling_calls = config.diffusion.sampler.calls
@@ -181,8 +179,6 @@ class DiffusionTransformer(TrainableSuffixModel):
 
     def _reverse_grid(self) -> list[tuple[int, int]]:
         """Return descending sampling levels and their preceding endpoints, ending at zero."""
-        if not 1 <= self.sampling_calls <= self.sampling_start_level <= self.steps:
-            raise ValueError('Sampling calls and start level must fit within the noise levels')
         levels = (
             torch.linspace(self.sampling_start_level, 1, self.sampling_calls, dtype=torch.float64)
             .round()

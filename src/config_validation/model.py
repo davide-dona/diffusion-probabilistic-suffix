@@ -90,8 +90,9 @@ def _validate_log_variance_bounds(config: DictConfig, name: str) -> None:
 
 
 def _validate_diffusion_transformer(model: DictConfig) -> None:
-    if 'denoiser' in model:
-        raise ValueError('model.denoiser is not supported')
+    expected = {'_target_', 'd_model', 'embeddings', 'transformer', 'prefix_encoder', 'diffusion'}
+    if set(model) != expected:
+        raise ValueError(f'diffusion_transformer must contain exactly {sorted(expected)}')
     if 'prefix_encoder' not in model or set(model.prefix_encoder) != {'num_layers'}:
         raise ValueError('model.prefix_encoder must contain exactly num_layers')
     validate_number(
