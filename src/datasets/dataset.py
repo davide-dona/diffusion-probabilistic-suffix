@@ -227,10 +227,9 @@ class TraceDataset(Dataset):
     def length_sorted_indices(self) -> list[int]:
         """Order this split's traces by how many positions their suffix takes to decode.
 
-        `Decoder.generate` runs a batch until every one of its rows has emitted EOT, so a batch
-        of similarly-long suffixes finishes together; unsorted, almost every batch contains one
-        early-cut, long-suffix straggler and decodes to nearly the cap regardless of its other
-        rows. Sorting the whole split first is what lets that early exit actually save time.
+        A batch of similarly long suffixes lets a model whose decoding cost follows the longest
+        row in the batch, such as an autoregressive decoder that stops once every row has emitted
+        EOT, finish all rows together.
 
         Returns:
             TraceCut indices, ascending by suffix length. Passed as a `DataLoader` sampler.
