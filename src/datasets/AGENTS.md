@@ -12,7 +12,7 @@ the prediction.
 | --- | --- |
 | `activities` | Integer activity vocabulary indices. |
 | `resources` | Integer resource vocabulary indices. |
-| `inter_event_times` | Standardized minutes since the preceding event. |
+| `inter_event_times` | Minutes since the preceding event, in the always log-scaled input encoding. |
 | `categorical_attributes` | Integer feature indices, shape `[..., C]`. |
 | `numeric_attributes` | Standardized numeric features, shape `[..., N]`. |
 | `numeric_attributes_present` | Float presence indicators paired with numeric features. |
@@ -23,8 +23,8 @@ the same width and rejects truncation. `Events.cut(index)` and `Events.to(device
 channel alignment.
 
 `TraceCut` contains `case_id`, `prefix`, `suffix`, and `inter_event_times`. The separate time
-target holds standardized values used by model losses. A collated batch has prefix and suffix
-events padded independently. Remaining time is not a dataset field: cases are dropped rather than
+target holds values in the target encoding used by model losses and generation. A collated batch
+has prefix and suffix events padded independently. Remaining time is not a dataset field: cases are dropped rather than
 truncated, so it always equals the sum of the suffix inter-event times.
 
 ## Prefix and Suffix Enumeration
@@ -47,7 +47,11 @@ change prefix identity. `fixed_subset()` selects a reproducible random subset fr
 
 - Activity and resource vocabularies with stable special token indices.
 - Categorical feature vocabularies and non-overlapping offsets into one shared embedding table.
-- Mean, standard deviation, and optional log scaling for numeric features and inter-event time.
+- Mean, standard deviation, and optional log scaling for numeric features.
+- Two inter-event time columns. `input_inter_event_time` is always log-scaled and encodes the time
+  channel of `Events`. `inter_event_time` encodes the target, `TraceCut.inter_event_times` and
+  `CaseCuts.inter_event_times`, and is log-scaled only under
+  `data.log_scaled_target_inter_event_time`.
 - The maximum retained trace length and the dataset configuration used to locate split artifacts.
 
 Activity special tokens are PAD, UNK, EOT, and SOS. The activity codec used by evaluation maps
@@ -55,7 +59,8 @@ activity names to Unicode private-use characters so sequence metrics can operate
 Never change special token order or fitted offsets without an explicit artifact migration.
 
 Numeric encoding replaces non-finite normalized values with zero and supplies a separate presence
-channel. Decoding inter-event times must use the exact fitted column, including its log transform.
+channel. Decoding generated inter-event times must use the fitted target column, including its log
+transform.
 
 ## Changes
 

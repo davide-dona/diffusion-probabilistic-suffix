@@ -15,7 +15,7 @@ class Events(NamedTuple):
 
     activities: torch.Tensor  # int64, [..., seq_len]
     resources: torch.Tensor  # int64, [..., seq_len]
-    inter_event_times: torch.Tensor  # float32, standardized, [..., seq_len]
+    inter_event_times: torch.Tensor  # float32, standardized input encoding, [..., seq_len]
     categorical_attributes: torch.Tensor  # int64, [..., seq_len, num_categorical]
     numeric_attributes: torch.Tensor  # float32, standardized, [..., seq_len, num_numeric]
     numeric_attributes_present: (
@@ -107,7 +107,8 @@ class CaseCuts:
     """A split's activity and time channels per case, with every cut point taken from them."""
 
     activities: torch.Tensor  # int64, [num_cases, max_trace_length], PAD past each case's end
-    inter_event_times: torch.Tensor  # float32, standardized, [num_cases, max_trace_length]
+    # float32, standardized target encoding, [num_cases, max_trace_length]
+    inter_event_times: torch.Tensor
     lengths: torch.Tensor  # int64, events per case, [num_cases]
     cuts: torch.Tensor  # int64, (case, prefix length) of each `TraceDataset` item, [N, 2]
 
@@ -118,6 +119,8 @@ class _Case:
 
     case_id: str  # which case of the log this is
     events: Events  # the case's events, unpadded
+    # The case's inter-event times in the target encoding, which `events` does not use.
+    target_inter_event_times: torch.Tensor  # float32, standardized, [length]
     # The lower bound for the case cut points,
     # which the preprocessing step computed and stored in the log.
     min_prefix_len: int
@@ -148,7 +151,13 @@ class TraceDataset(Dataset):
         # would be repeated for every cut point of every case.
         split_dataset = codec.read_split(split)
 
-        self._cases = _group_cases(split_dataset, events=self._encode_events(split_dataset))
+        self._cases = _group_cases(
+            split_dataset,
+            events=self._encode_events(split_dataset),
+            target_inter_event_times=torch.from_numpy(
+                self.codec.inter_event_time.encode(split_dataset)
+            ),
+        )
 
         self._case_cuts: list[tuple[int, int]] = [
             (case_idx, k)
@@ -163,7 +172,7 @@ class TraceDataset(Dataset):
             # Pandas can expose a read-only view, so these integer channels need a copy.
             activities=torch.tensor(data=self.codec.activity.encode(log), dtype=torch.long),
             resources=torch.tensor(data=self.codec.resource.encode(log), dtype=torch.long),
-            inter_event_times=torch.from_numpy(self.codec.inter_event_time.encode(log)),
+            inter_event_times=torch.from_numpy(self.codec.input_inter_event_time.encode(log)),
             categorical_attributes=self.codec.encode_categorical_features(log),
             numeric_attributes=numeric_attributes,
             numeric_attributes_present=numeric_attributes_present,
@@ -195,7 +204,7 @@ class TraceDataset(Dataset):
             case_id=case.case_id,
             prefix=prefix,
             suffix=suffix,
-            inter_event_times=self._pad_target(case.events.inter_event_times[k : k + suffix_len]),
+            inter_event_times=self._pad_target(case.target_inter_event_times[k : k + suffix_len]),
         )
 
     def _pad_target(self, target: torch.Tensor) -> torch.Tensor:
@@ -216,9 +225,7 @@ class TraceDataset(Dataset):
                 tensors=[case.events.padded(to=self.max_len).activities for case in self._cases]
             ),
             inter_event_times=torch.stack(
-                tensors=[
-                    case.events.padded(to=self.max_len).inter_event_times for case in self._cases
-                ]
+                tensors=[self._pad_target(case.target_inter_event_times) for case in self._cases]
             ),
             lengths=torch.stack(tensors=[case.events.length for case in self._cases]),
             cuts=torch.tensor(data=self._case_cuts, dtype=torch.long).view(-1, 2),
@@ -262,13 +269,17 @@ def fixed_subset(dataset: Dataset, *, size: int, generator: torch.Generator) -> 
     return Subset(dataset=dataset, indices=indices.tolist())
 
 
-def _group_cases(split_dataset: pd.DataFrame, *, events: Events) -> list[_Case]:
+def _group_cases(
+    split_dataset: pd.DataFrame, *, events: Events, target_inter_event_times: torch.Tensor
+) -> list[_Case]:
     """Group a split's already-encoded events into per-case runs.
 
     Args:
         split_dataset: The split, from `_read_split`; only its case column and row order are
             read here, the values themselves already encoded into `events`.
         events: The split's events, encoded whole, indexed the same as `split_dataset`.
+        target_inter_event_times: The split's inter-event times in the target encoding,
+            `[len(split_dataset)]`, indexed the same.
     Returns:
         One `_Case` per case of the split, each of them whole: preprocessing dropped the cases
         that do not fit `max_trace_length`, so nothing is cut short here.
@@ -283,6 +294,7 @@ def _group_cases(split_dataset: pd.DataFrame, *, events: Events) -> list[_Case]:
             _Case(
                 case_id=str(case_id),
                 events=events.cut(positions),
+                target_inter_event_times=target_inter_event_times[positions],
                 min_prefix_len=int(bounds[MIN_PREFIX_KEY]),
             )
         )

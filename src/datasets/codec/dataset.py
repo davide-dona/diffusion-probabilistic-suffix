@@ -38,7 +38,9 @@ class DatasetCodec(BaseModel):
 
     activity: CategoricalColumn
     resource: CategoricalColumn
-    # Read by both the encoders and the decoder.
+    # The time channel every event carries as model input. Always log-scaled.
+    input_inter_event_time: NumericColumn
+    # The time models predict and generations are decoded through.
     inter_event_time: NumericColumn
 
     # The columns `data.event_features` names, sorted by dtype into the two kinds.
@@ -78,7 +80,7 @@ class DatasetCodec(BaseModel):
         Args:
             train: The train split, as `pipelines/preprocess.py` holds it before writing.
             data_config: The `data` section, for the feature columns, which of them are
-                log-scaled, and whether the inter-event time is.
+                log-scaled, and whether the target inter-event time is.
             max_trace_length: The sequence length splits were preprocessed to, from
                 `pipelines.preprocess.case_length_cutoff`.
         Returns:
@@ -96,8 +98,11 @@ class DatasetCodec(BaseModel):
             resource=CategoricalColumn.fit(
                 train, column=RESOURCE_KEY, special_tokens=RESOURCE_TOKENS
             ),
+            input_inter_event_time=NumericColumn.fit(train, column=INTER_EVENT_TIME_KEY, log=True),
             inter_event_time=NumericColumn.fit(
-                train, column=INTER_EVENT_TIME_KEY, log=data_config.log_scaled_inter_event_time
+                train,
+                column=INTER_EVENT_TIME_KEY,
+                log=data_config.log_scaled_target_inter_event_time,
             ),
             categorical_features=categorical_features,
             numeric_features=numeric_features,

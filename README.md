@@ -207,9 +207,8 @@ Datasets, models, training defaults, and runtime profiles live in the correspond
 `config/`. Training duration, warmup, and validation cadence are expressed in optimizer steps;
 early stopping is expressed in validation checks. The `regime` group holds each dataset's learning
 rate, schedule, validation sizes, patience, and batch size, and is selected by the `dataset` choice.
-All model configs use activity/resource/attribute embedding widths of 32/16/8. The wider
-diffusion variant projects these to width 48; the other configs project to width 32. Checkpoints
-retain their own embedding configuration.
+All neural model configs use activity/resource/attribute embedding widths of 32/16/8, project
+them to width 64, and attend with 4 heads. Checkpoints retain their own model configuration.
 Override individual settings with dotted keys:
 
 ```bash

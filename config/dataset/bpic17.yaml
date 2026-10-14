@@ -30,8 +30,13 @@ data:
   - day_cos
   - seconds_sin
   - seconds_cos
-  log_scaled_features: []
-  log_scaled_inter_event_time: false
+  log_scaled_features:
+  - case:RequestedAmount
+  - FirstWithdrawalAmount
+  - MonthlyCost
+  - OfferedAmount
+  - ts_start
+  log_scaled_target_inter_event_time: false
 declare:
   vacuity: true
   min_support: 0.99
