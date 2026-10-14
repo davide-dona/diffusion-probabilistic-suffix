@@ -62,7 +62,7 @@ def suffix_length_coverage_gap_50(context: PreparedPrefix) -> float:
         The 50% suffix-length central-interval coverage gap. No draws give negative nominal
         coverage; no quantities give zero.
     """
-    return coverage_gap(context.suffix_lengths, context.true_suffix_length, level=0.50)
+    return coverage_gap(context.suffix_length_intervals, context.true_suffix_length, level=0.50)
 
 
 @METRICS.register(
@@ -82,7 +82,7 @@ def suffix_length_coverage_gap_75(context: PreparedPrefix) -> float:
         The 75% suffix-length central-interval coverage gap. No draws give negative nominal
         coverage; no quantities give zero.
     """
-    return coverage_gap(context.suffix_lengths, context.true_suffix_length, level=0.75)
+    return coverage_gap(context.suffix_length_intervals, context.true_suffix_length, level=0.75)
 
 
 @METRICS.register(
@@ -102,4 +102,4 @@ def suffix_length_coverage_gap_95(context: PreparedPrefix) -> float:
         The 95% suffix-length central-interval coverage gap. No draws give negative nominal
         coverage; no quantities give zero.
     """
-    return coverage_gap(context.suffix_lengths, context.true_suffix_length, level=0.95)
+    return coverage_gap(context.suffix_length_intervals, context.true_suffix_length, level=0.95)

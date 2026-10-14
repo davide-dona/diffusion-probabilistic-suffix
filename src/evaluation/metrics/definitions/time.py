@@ -62,7 +62,7 @@ def remaining_time_coverage_gap_50(context: PreparedPrefix) -> float:
         The 50% remaining-time central-interval coverage gap. No draws give negative nominal
         coverage; no quantities give zero.
     """
-    return coverage_gap(context.remaining_times, context.true_remaining_time, level=0.50)
+    return coverage_gap(context.remaining_time_intervals, context.true_remaining_time, level=0.50)
 
 
 @METRICS.register(
@@ -81,7 +81,7 @@ def remaining_time_coverage_gap_75(context: PreparedPrefix) -> float:
         The 75% remaining-time central-interval coverage gap. No draws give negative nominal
         coverage; no quantities give zero.
     """
-    return coverage_gap(context.remaining_times, context.true_remaining_time, level=0.75)
+    return coverage_gap(context.remaining_time_intervals, context.true_remaining_time, level=0.75)
 
 
 @METRICS.register(
@@ -100,7 +100,7 @@ def remaining_time_coverage_gap_95(context: PreparedPrefix) -> float:
         The 95% remaining-time central-interval coverage gap. No draws give negative nominal
         coverage; no quantities give zero.
     """
-    return coverage_gap(context.remaining_times, context.true_remaining_time, level=0.95)
+    return coverage_gap(context.remaining_time_intervals, context.true_remaining_time, level=0.95)
 
 
 @METRICS.register(
@@ -119,7 +119,9 @@ def inter_event_time_coverage_gap_50(context: PreparedPrefix) -> float:
         The 50% inter-event-time central-interval coverage gap. No draws give negative
         nominal coverage; no quantities give zero.
     """
-    return coverage_gap(context.inter_event_times, context.true_inter_event_times, level=0.50)
+    return coverage_gap(
+        context.inter_event_time_intervals, context.true_inter_event_times, level=0.50
+    )
 
 
 @METRICS.register(
@@ -138,7 +140,9 @@ def inter_event_time_coverage_gap_75(context: PreparedPrefix) -> float:
         The 75% inter-event-time central-interval coverage gap. No draws give negative
         nominal coverage; no quantities give zero.
     """
-    return coverage_gap(context.inter_event_times, context.true_inter_event_times, level=0.75)
+    return coverage_gap(
+        context.inter_event_time_intervals, context.true_inter_event_times, level=0.75
+    )
 
 
 @METRICS.register(
@@ -157,4 +161,6 @@ def inter_event_time_coverage_gap_95(context: PreparedPrefix) -> float:
         The 95% inter-event-time central-interval coverage gap. No draws give negative
         nominal coverage; no quantities give zero.
     """
-    return coverage_gap(context.inter_event_times, context.true_inter_event_times, level=0.95)
+    return coverage_gap(
+        context.inter_event_time_intervals, context.true_inter_event_times, level=0.95
+    )

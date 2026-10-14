@@ -91,36 +91,37 @@ class PrefixSummary:
     diagnostics: dict[str, float] = field(default_factory=dict)
 
     @classmethod
-    def of(
+    def of_batch(
         cls,
-        generation: Generation,
+        generations: Sequence[Generation],
         *,
         checker: Checker,
         include_diagnostics: bool = False,
-    ) -> 'PrefixSummary':
-        """Score one generated suffix against truth and constraints.
+    ) -> list['PrefixSummary']:
+        """Score a batch of generated suffixes against truth and constraints.
 
         Args:
-            generation: One observed prefix with its sampled and true suffixes.
-            checker: Declare checker for full traces formed from the prefix and each suffix.
+            generations: Observed prefixes with their sampled and true suffixes.
+            checker: Declare checker for full traces formed from each prefix and its suffixes.
             include_diagnostics: Whether to compute validation-only metrics alongside report scores.
 
         Returns:
-            Report scores and sequence lengths for the prefix, with diagnostics stored separately.
+            Report scores and sequence lengths for each prefix in input order, with diagnostics
+            stored separately. Empty input gives an empty list.
         """
-        context = PreparedPrefix.of(generation, checker=checker)
-        scores = {key: metric.compute(context) for key, metric in METRICS.report.items()}
-        diagnostics = {}
-        if include_diagnostics:
-            diagnostics = {
-                key: metric.compute(context) for key, metric in METRICS.diagnostics.items()
-            }
-        return cls(
-            prefix_len=generation.prefix_len,
-            suffix_len=len(generation.truth),
-            scores=ScoreGroups.of(scores),
-            diagnostics=diagnostics,
-        )
+        report = METRICS.report
+        diagnostic = METRICS.diagnostics if include_diagnostics else {}
+        return [
+            cls(
+                prefix_len=context.generation.prefix_len,
+                suffix_len=len(context.generation.truth),
+                scores=ScoreGroups.of(
+                    {key: metric.compute(context) for key, metric in report.items()}
+                ),
+                diagnostics={key: metric.compute(context) for key, metric in diagnostic.items()},
+            )
+            for context in PreparedPrefix.of_batch(generations, checker=checker)
+        ]
 
 
 @dataclass(frozen=True)

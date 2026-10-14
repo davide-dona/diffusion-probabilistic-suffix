@@ -1,4 +1,5 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
 
 from src.evaluation.metrics.metadata import (
     Direction,
@@ -14,6 +15,8 @@ class MetricRegistry:
 
     def __init__(self) -> None:
         self.entries: dict[str, Metric] = {}
+        self._report: dict[str, Metric] = {}
+        self._diagnostics: dict[str, Metric] = {}
 
     def register(
         self,
@@ -51,7 +54,7 @@ class MetricRegistry:
         def decorator(compute: MetricCompute) -> MetricCompute:
             if key in self.entries:
                 raise ValueError(f'metric {key!r} is registered more than once.')
-            self.entries[key] = Metric(
+            metric = Metric(
                 key=key,
                 label=label,
                 group=group,
@@ -63,27 +66,29 @@ class MetricRegistry:
                 diagnostic=diagnostic,
                 compute=compute,
             )
+            self.entries[key] = metric
+            (self._diagnostics if diagnostic else self._report)[key] = metric
             return compute
 
         return decorator
 
     @property
-    def report(self) -> dict[str, Metric]:
+    def report(self) -> Mapping[str, Metric]:
         """Return reportable metrics in declaration order.
 
         Returns:
-            A new mapping containing only metrics without the diagnostic flag.
+            A read-only view of the metrics without the diagnostic flag.
         """
-        return {key: metric for key, metric in self.entries.items() if not metric.diagnostic}
+        return MappingProxyType(self._report)
 
     @property
-    def diagnostics(self) -> dict[str, Metric]:
+    def diagnostics(self) -> Mapping[str, Metric]:
         """Return validation-only metrics in declaration order.
 
         Returns:
-            A new mapping containing only metrics with the diagnostic flag.
+            A read-only view of the metrics with the diagnostic flag.
         """
-        return {key: metric for key, metric in self.entries.items() if metric.diagnostic}
+        return MappingProxyType(self._diagnostics)
 
     def __getitem__(self, key: str) -> Metric:
         """Look up a registered metric.

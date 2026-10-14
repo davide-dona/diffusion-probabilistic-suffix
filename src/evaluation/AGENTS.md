@@ -31,10 +31,15 @@ and empty-input behavior where they affect the result; keep private documentatio
 `GenerationWriter` stores one Parquet row per `(case_id, prefix_len)`. Repeated activity suffixes
 are folded into distinct strings plus draw records containing the suffix index, times, and sentinel
 flag. The file also stores truth, activity vocabulary, sampler settings, and provenance.
+`Generations.block` decodes a row group column by column: a prefix's `Draws` holds its draw
+times as one flat float64 array, a view of the block's, rather than one object per draw.
 
-`PreparedPrefix` expands shared values: suffix lengths, aligned inter-event times, remaining times,
-and Declare conformance. Remaining time is `DecodedEvents.remaining_time_minutes`, the sum of the
-decoded inter-event minutes; the generations file does not store it. The validation-only DLS similarity is computed only when requested.
+`PreparedPrefix.of_batch` expands shared values: suffix lengths, aligned inter-event times,
+remaining times, the central-interval bounds at each `COVERAGE_LEVELS` level, and Declare
+conformance. It checks every full trace of a batch in one checker call, since the checker's fixed
+cost per call outweighs its work per trace; score batches rather than single prefixes. Remaining
+time is the sum of the decoded inter-event minutes, `Draws.remaining_time_minutes` for draws and
+`DecodedEvents.remaining_time_minutes` for truth; the generations file does not store it. The validation-only DLS similarity is computed only when requested.
 Preserve draw multiplicity when working with folded suffixes.
 
 ## Metric Semantics
@@ -86,7 +91,8 @@ difference from it; it does not establish equivalence.
 ## Parallelism
 
 Evaluation assigns Parquet row groups to worker processes. Each worker opens its own file and
-Declare checker, returns compact `PrefixSummary` values, and preserves row-group order. Stream
+Declare checker, scores each row group as one batch, returns compact `PrefixSummary` values, and
+preserves row-group order. Stream
 scores to Parquet while aggregating so full decoded generations never accumulate in the parent.
 
 Metric formulas must handle folded-draw weighting, empty or degenerate cases, schema rejection,

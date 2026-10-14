@@ -4,7 +4,9 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
+import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 from omegaconf import DictConfig, OmegaConf
 
@@ -95,53 +97,106 @@ _FLOAT_LEAVES = [
 
 
 def _generation_row(generation: Generation) -> dict:
+    samples = generation.samples
+    times = samples.inter_event_time_minutes
     return {
         'case_id': generation.case_id,
         'prefix_len': generation.prefix_len,
         'prefix_activities': generation.prefix_activities,
-        'generated_suffixes': list(generation.samples.suffixes),
+        'generated_suffixes': list(samples.suffixes),
         'generated_draws': [
             {
-                'suffix_index': index,
-                'inter_event_time_minutes': events.inter_event_time_minutes,
-                'used_eot_sentinel': events.used_eot_sentinel,
+                'suffix_index': int(index),
+                'inter_event_time_minutes': times[start:stop].tolist(),
+                'used_eot_sentinel': bool(sentinel),
             }
-            for index, events in zip(
-                generation.samples.taken, generation.samples.events, strict=True
+            for index, start, stop, sentinel in zip(
+                samples.taken,
+                samples.offsets[:-1],
+                samples.offsets[1:],
+                samples.used_eot_sentinel,
+                strict=True,
             )
         ],
         'truth': {
             'activities': generation.truth.activities,
-            'inter_event_time_minutes': generation.truth.inter_event_time_minutes,
+            'inter_event_time_minutes': generation.truth.inter_event_time_minutes.tolist(),
         },
     }
 
 
-def _generation_from_row(row: dict) -> Generation:
-    suffixes = tuple(row['generated_suffixes'])
-    draws = row['generated_draws']
-    taken = tuple(draw['suffix_index'] for draw in draws)
-    if any(index < 0 or index >= len(suffixes) for index in taken):
-        raise ValueError('Generation draw references an unknown suffix')
-    if row['prefix_len'] != len(row['prefix_activities']):
-        raise ValueError('Generation prefix length does not match its activities')
-    return Generation(
-        case_id=row['case_id'],
-        prefix_activities=row['prefix_activities'],
-        samples=Draws(
-            suffixes=suffixes,
-            taken=taken,
-            events=[
-                DecodedEvents(
-                    activities=suffixes[index],
-                    inter_event_time_minutes=draw['inter_event_time_minutes'],
-                    used_eot_sentinel=draw['used_eot_sentinel'],
-                )
-                for index, draw in zip(taken, draws, strict=True)
-            ],
-        ),
-        truth=DecodedEvents(**row['truth']),
-    )
+def _require_values(*arrays: pa.Array | pa.ChunkedArray) -> None:
+    """Raise a `ValueError` if any of the arrays holds a null."""
+    if any(array.null_count for array in arrays):
+        raise ValueError('Generations contain a null value')
+
+
+def _flat_times(lists: pa.ListArray) -> tuple[np.ndarray, np.ndarray]:
+    """Return a list column's values widened to float64 and its offsets into them."""
+    _require_values(lists, lists.values)
+    return lists.values.to_numpy().astype(np.float64), lists.offsets.to_numpy()
+
+
+def _generations_from_table(table: pa.Table) -> list[Generation]:
+    """Decode a block column by column, each prefix's arrays being views of the block's.
+
+    Raises:
+        ValueError: If a value is null or the rows contradict themselves.
+    """
+    _require_values(*table.columns)
+    suffixes = table.column('generated_suffixes').combine_chunks()
+    _require_values(suffixes.values)
+    suffix_offsets = suffixes.offsets.to_numpy()
+    suffix_values = suffixes.values.to_pylist()
+    draws = table.column('generated_draws').combine_chunks()
+    draw_offsets = draws.offsets.to_numpy()
+    taken = pc.struct_field(draws.values, 'suffix_index')
+    sentinel = pc.struct_field(draws.values, 'used_eot_sentinel')
+    _require_values(taken, sentinel)
+    taken = taken.to_numpy()
+    sentinel = sentinel.to_numpy(zero_copy_only=False)
+    times, time_offsets = _flat_times(pc.struct_field(draws.values, 'inter_event_time_minutes'))
+    truth = table.column('truth').combine_chunks()
+    truth_times, truth_offsets = _flat_times(pc.struct_field(truth, 'inter_event_time_minutes'))
+    truth_activities = pc.struct_field(truth, 'activities')
+    _require_values(truth_activities)
+
+    generations = []
+    for row, (case_id, prefix_len, prefix, true_activities) in enumerate(
+        zip(
+            table.column('case_id').to_pylist(),
+            table.column('prefix_len').to_pylist(),
+            table.column('prefix_activities').to_pylist(),
+            truth_activities.to_pylist(),
+            strict=True,
+        )
+    ):
+        if prefix_len != len(prefix):
+            raise ValueError('Generation prefix length does not match its activities')
+        first, last = draw_offsets[row], draw_offsets[row + 1]
+        row_time_offsets = time_offsets[first : last + 1]
+        samples = Draws(
+            suffixes=tuple(suffix_values[suffix_offsets[row] : suffix_offsets[row + 1]]),
+            taken=taken[first:last],
+            inter_event_time_minutes=times[row_time_offsets[0] : row_time_offsets[-1]],
+            used_eot_sentinel=sentinel[first:last],
+        )
+        if not np.array_equal(row_time_offsets - row_time_offsets[0], samples.offsets):
+            raise ValueError('Generation draw times do not match their suffix lengths')
+        generations.append(
+            Generation(
+                case_id=case_id,
+                prefix_activities=prefix,
+                samples=samples,
+                truth=DecodedEvents(
+                    activities=true_activities,
+                    inter_event_time_minutes=truth_times[
+                        truth_offsets[row] : truth_offsets[row + 1]
+                    ],
+                ),
+            )
+        )
+    return generations
 
 
 class GenerationWriter:
@@ -321,6 +376,4 @@ class Generations:
             The generation for each prefix of the block, in the order they were written, exactly as
             `generate_batch` produced them.
         """
-        return [
-            _generation_from_row(row) for row in self._parquet.read_row_group(block).to_pylist()
-        ]
+        return _generations_from_table(self._parquet.read_row_group(block))

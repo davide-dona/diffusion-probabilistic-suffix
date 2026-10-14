@@ -156,15 +156,16 @@ def run(
                 torch.cuda.synchronize(device)
             generation_seconds += perf_counter() - started
             sentinel_required += sum(
-                event.used_eot_sentinel
-                for generation in generations
-                for event in generation.samples.events
+                int(generation.samples.used_eot_sentinel.sum()) for generation in generations
             )
             generated_samples += sum(len(generation.samples) for generation in generations)
             excess_total_length += sum(
-                generation.prefix_len + len(event.activities) > codec.max_trace_length
+                int(
+                    (
+                        generation.prefix_len + generation.samples.lengths > codec.max_trace_length
+                    ).sum()
+                )
                 for generation in generations
-                for event in generation.samples.events
             )
             # Write the generations to the Parquet file in a single block, one row per prefix.
             writer.write(generations)
