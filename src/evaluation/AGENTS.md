@@ -121,5 +121,6 @@ cancel overall and are read per length bucket.
 
 `SuffixModel.generation_diagnostics` returns a model's own per-prefix values, empty by default.
 Training validation averages them over the generation prefixes and logs them as
-`diagnostic_model/<key>`. The case-based model reports its retrieval: matched depth and its share
-of the prefix, exact and fallback match rates, log10 candidate count, and single-candidate rate.
+`diagnostic_model/<key>`. The case-based model reports its retrieval: matched depth, its share of
+the prefix, dropped prefix activities, exact and fallback match rates, log10 candidate count, and
+single-candidate rate.

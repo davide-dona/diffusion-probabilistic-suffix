@@ -101,10 +101,12 @@ class CaseBased(FittedSuffixModel):
         Returns:
             Per-prefix values, `[batch_size]` each: `match_depth`, how many of the latest prefix
             activities matched; `match_depth_share`, that count over the prefix length, zero for
-            an empty prefix; `exact_match`, 1.0 when the whole prefix matched from the trace
-            start; `fallback`, 1.0 when not even the last activity matched; `log10_candidates`,
-            the base-10 log of how many cut points matched; and `single_candidate`, 1.0 when one
-            cut point matched, so every draw repeats its suffix.
+            an empty prefix; `dropped_activities`, how many of the oldest prefix activities were
+            left out of the match, zero when all of them matched; `exact_match`, 1.0 when the
+            whole prefix matched from the trace start; `fallback`, 1.0 when not even the last
+            activity matched; `log10_candidates`, the base-10 log of how many cut points matched;
+            and `single_candidate`, 1.0 when one cut point matched, so every draw repeats its
+            suffix.
         """
         matches = self._matches(item)  # [B, 3]
         prefix_lengths = item.prefix.length.cpu().numpy()  # [B]
@@ -113,6 +115,7 @@ class CaseBased(FittedSuffixModel):
         values = {
             'match_depth': depth,
             'match_depth_share': depth / np.maximum(prefix_lengths, 1),
+            'dropped_activities': prefix_lengths - depth,
             'exact_match': matches[:, 2] > prefix_lengths,
             'fallback': depth == 0,
             'log10_candidates': np.log10(candidates),
