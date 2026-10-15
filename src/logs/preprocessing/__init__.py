@@ -7,6 +7,7 @@ from src.logs.preprocessing.cases import (
     case_durations,
     drop_cases_by_duration,
     drop_cases_by_length,
+    drop_cases_starting_late,
     out_of_time_split,
     sort_log,
 )
@@ -18,6 +19,7 @@ __all__ = [
     'case_durations',
     'drop_cases_by_duration',
     'drop_cases_by_length',
+    'drop_cases_starting_late',
     'out_of_time_split',
     'sort_log',
 ]

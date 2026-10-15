@@ -10,8 +10,8 @@ def validate_data(data: DictConfig) -> None:
     """Validate the data section used to preprocess an event log.
 
     Raises:
-        ValueError: If a split, percentile, feature relationship, separator, or dataset name is
-            invalid.
+        ValueError: If a split, seed, percentile, feature relationship, separator, or dataset
+            name is invalid.
     """
     validate_dataset(data.name)
 
@@ -19,8 +19,13 @@ def validate_data(data: DictConfig) -> None:
         validate_number(data[key], f'data.{key}')
     if data.val_split + data.test_split >= 1:
         raise ValueError('data.val_split and data.test_split must leave a train split')
+    validate_number(data.split_seed, 'data.split_seed', inclusive=True, integer=True)
 
-    for key in ('max_seq_len_percentile', 'max_case_duration_percentile'):
+    for key in (
+        'max_seq_len_percentile',
+        'max_case_duration_percentile',
+        'min_observed_duration_percentile',
+    ):
         validate_number(data[key], f'data.{key}')
         if data[key] > 100:
             raise ValueError(f'data.{key} must not exceed 100')
