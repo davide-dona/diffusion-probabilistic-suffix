@@ -34,6 +34,7 @@ from src.logs.preprocessing import (
     case_durations,
     drop_cases_by_duration,
     drop_cases_by_length,
+    drop_cases_starting_late,
     out_of_time_split,
     sort_log,
 )
@@ -65,6 +66,20 @@ def case_duration_cutoff(log: pd.DataFrame, *, data_config: DictConfig) -> float
     """
     durations = case_durations(log, case_key=CASE_KEY, timestamp_key=TIMESTAMP_KEY)
     return float(np.percentile(durations, data_config.max_case_duration_percentile))
+
+
+def min_observed_duration(log: pd.DataFrame, *, data_config: DictConfig) -> float:
+    """Find how long before the end of the log a case has to start to be seen finishing.
+
+    Args:
+        log: The log after the outlier filters, one row per event, before it is split.
+        data_config: The `data` section, which names the percentile of case duration to read the
+            time off at.
+    Returns:
+        The time in days.
+    """
+    durations = case_durations(log, case_key=CASE_KEY, timestamp_key=TIMESTAMP_KEY)
+    return float(np.percentile(durations, data_config.min_observed_duration_percentile))
 
 
 def report_dropped(*, before: pd.DataFrame, after: pd.DataFrame) -> None:
@@ -142,9 +157,10 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
     Preprocess and split a dataset, writing outputs next to the input.
 
     Reads `data/<dataset>/original.csv`, renames its structural columns to the canonical names
-    used throughout the codebase, drops the cases whose duration is not a real one and the cases
-    too long to fit the model's sequence tensors, sorts it, extracts the temporal features, and
-    splits what is left into train/val/test out of time.
+    used throughout the codebase, drops the cases whose duration is not a real one, the cases
+    too long to fit the model's sequence tensors and the cases starting too late to be seen
+    finishing, sorts it, extracts the temporal features, and splits what is left out of time into
+    train and test, drawing validation at random from train.
 
     The vocabularies and normalization statistics the model is built against are fit here too,
     on the train split alone, and written beside it as `dataset.json`.
@@ -164,7 +180,7 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
             'original log': artifacts.ORIGINAL_LOG.path(dataset),
             'split': f'{1 - data_config.val_split - data_config.test_split:.0%} train, '
             f'{data_config.val_split:.0%} val, '
-            f'{data_config.test_split:.0%} test, out of time',
+            f'{data_config.test_split:.0%} test, test out of time, val at random',
             'splits': artifacts.PROCESSED_SPLIT.directory(dataset),
             'codec': artifacts.CODEC.path(dataset),
             'Declare model': artifacts.DECLARE_MODEL.path(dataset),
@@ -196,6 +212,19 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
         report_dropped(before=log, after=kept)
         log = kept
 
+    # Read off the log the outlier filters left, so the observed time reflects real cases only.
+    min_observed_days = min_observed_duration(log, data_config=data_config)
+
+    with step(f'Dropping the cases starting within {min_observed_days:,.1f} days of the log end'):
+        kept = drop_cases_starting_late(
+            log,
+            case_key=CASE_KEY,
+            timestamp_key=TIMESTAMP_KEY,
+            min_observed_days=min_observed_days,
+        )
+        report_dropped(before=log, after=kept)
+        log = kept
+
     # Derive the columns the model reads, all of which are read off neighbouring rows or off the
     # size of a case, so the log has to be in order first.
     with step('Sorting the log and deriving the temporal and calendar features'):
@@ -210,6 +239,7 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
             timestamp_key=TIMESTAMP_KEY,
             val_frac=data_config.val_split,
             test_frac=data_config.test_split,
+            seed=data_config.split_seed,
         )
 
     with step('Writing the splits'):

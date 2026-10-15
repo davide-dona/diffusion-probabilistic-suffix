@@ -66,6 +66,30 @@ def drop_cases_by_duration(
     return log[log[case_key].map(durations) <= max_duration_days]
 
 
+def drop_cases_starting_late(
+    log: pd.DataFrame, *, case_key: str, timestamp_key: str, min_observed_days: float
+) -> pd.DataFrame:
+    """Drop the cases that start too close to the end of the log to have been seen finishing.
+
+    A log is a snapshot: a case still running when it was extracted ends at its last recorded
+    event, which would then be scored as the true end of the trace. Selecting on start time
+    rather than on how a case ends keeps the selection independent of the suffixes being scored.
+
+    Args:
+        log: Event log, one row per event.
+        case_key: Column identifying the case each event belongs to.
+        timestamp_key: Column holding the (already parsed) event timestamp.
+        min_observed_days: The time every kept case is observed for, from its first event to the
+            last event of the log, in days.
+    Returns:
+        A row-subset of `log` holding only the cases starting at least `min_observed_days` before
+        the last event of the log.
+    """
+    cutoff = log[timestamp_key].max() - pd.Timedelta(days=min_observed_days)
+    starts = log.groupby(case_key)[timestamp_key].min()
+    return log[log[case_key].map(starts) <= cutoff]
+
+
 def case_durations(log: pd.DataFrame, *, case_key: str, timestamp_key: str) -> pd.Series:
     """Measure how long each case runs, first event to last.
 
@@ -87,8 +111,9 @@ def out_of_time_split(
     timestamp_key: str,
     val_frac: float,
     test_frac: float,
+    seed: int,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Split a log by time, withholding the prefixes that would leak across the boundary.
+    """Split a log by time into train and test, and draw validation at random from train.
 
     The separation time is the start of the case that begins once `1 - test_frac` of them
     already have. Cutting there alone still leaks: a case running across that moment would be
@@ -97,15 +122,20 @@ def out_of_time_split(
     training run could already have seen; those prefixes are withheld from scoring rather than
     the case being dropped, which is what `MIN_PREFIX_KEY` records.
 
+    Validation is a random sample of whole training cases. A time slice ending at the separation
+    would lose every long case starting inside it to test, so its prefixes would face far shorter
+    remaining times than test's.
+
     Args:
         log: Event log, one row per event, already filtered down to the cases the model is
             trained on, sorted by case start and then by timestamp, carrying `MIN_PREFIX_KEY` at
             its full range.
         case_key: Column identifying the case each event belongs to.
         timestamp_key: Column holding the (already parsed) event timestamp.
-        val_frac: Fraction of all cases assigned to the validation set, taken from the training
-            cases as the latest-starting ones.
+        val_frac: Fraction of all cases assigned to the validation set, drawn from the training
+            cases.
         test_frac: Fraction of all cases the separation time is placed at.
+        seed: Seed of the validation draw.
     Returns:
         `(train, val, test)` DataFrames, each a row-subset of `log` with `MIN_PREFIX_KEY`
         narrowed on the crossing cases.
@@ -135,11 +165,11 @@ def out_of_time_split(
         crossing=crossing,
     )
 
-    # Validation is the tail of the training block by case start, so it stands out of time to
-    # training the same way the test block stands out of time to both.
+    # The candidates are taken in log order, so the draw depends on the seed alone.
     val_share = val_frac / (1 - test_frac)
-    train_starts = train.groupby(case_key)[timestamp_key].min().sort_values()
-    val_cases = train_starts.index[int(len(train_starts) * (1 - val_share)) :]
+    train_cases = train[case_key].unique()
+    rng = np.random.default_rng(seed)
+    val_cases = rng.choice(train_cases, size=int(len(train_cases) * val_share), replace=False)
 
     val = train[train[case_key].isin(val_cases)]
     train = train[~train[case_key].isin(val_cases)]

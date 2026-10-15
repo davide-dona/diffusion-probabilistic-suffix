@@ -9,7 +9,7 @@ The supported dataset identifiers are `sepsis`, `bpic12`, `bpic17`, and `bpic19`
 | --- | --- |
 | `original.csv` | Source event log tracked through Git LFS. |
 | `processed/train.csv` | Chronological training split written by preprocessing. |
-| `processed/val.csv` | Chronological validation split written by preprocessing. |
+| `processed/val.csv` | Validation split drawn at random from the training cases by preprocessing. |
 | `processed/test.csv` | Chronological test split written by preprocessing. |
 | `codec/dataset.json` | Vocabulary and numeric transforms fitted on the training split. |
 | `declare/model.json` | Declare constraints mined from the training split, each with its train support. |
