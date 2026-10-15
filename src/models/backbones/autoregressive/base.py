@@ -31,7 +31,7 @@ class AutoregressiveSuffixModel[OutputT](TrainableSuffixModel):
         prefix_pad_mask = item.prefix.pad_mask()
         prefix = self.encoder(events=item.prefix, pad_mask=prefix_pad_mask)
         return self.decoder(
-            suffix_activities=item.suffix.activities,
+            suffix=item.suffix,
             prefix_encoded=prefix,
             prefix_pad_mask=prefix_pad_mask,
         )

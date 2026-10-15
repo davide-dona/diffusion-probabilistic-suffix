@@ -34,6 +34,8 @@ class UEDSuTraN(AutoregressiveSuffixModel[UncertaintyAwareDecoderOutput]):
             pad_activity_index=codec.activity.pad_index,
             pad_resource_index=codec.resource.pad_index,
             eot_activity_index=codec.activity.eot_index,
+            input_inter_event_time=codec.input_inter_event_time,
+            inter_event_time=codec.inter_event_time,
             uncertainty=config.uncertainty,
         )
 

@@ -2,6 +2,7 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 
+from src.datasets.codec.continuous import NumericColumn
 from src.models.backbones.autoregressive.decoder import CausalDecoder
 from src.models.backbones.autoregressive.distributions import sample_gaussian
 from src.models.backbones.autoregressive.embeddings import EventEmbeddings
@@ -22,6 +23,8 @@ class Decoder(CausalDecoder[DecoderOutput]):
         pad_activity_index: int,
         pad_resource_index: int,
         eot_activity_index: int,
+        input_inter_event_time: NumericColumn,
+        inter_event_time: NumericColumn,
         time: DictConfig,
     ) -> None:
         super().__init__(
@@ -32,6 +35,8 @@ class Decoder(CausalDecoder[DecoderOutput]):
             pad_activity_index=pad_activity_index,
             pad_resource_index=pad_resource_index,
             eot_activity_index=eot_activity_index,
+            input_inter_event_time=input_inter_event_time,
+            inter_event_time=inter_event_time,
         )
         self.log_variance_min = time.log_variance_min
         self.log_variance_max = time.log_variance_max
