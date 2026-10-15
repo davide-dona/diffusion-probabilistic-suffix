@@ -39,7 +39,6 @@ data:
   - ts_start
   log_scaled_target_inter_event_time: false
 declare:
-  vacuity: true
-  min_support: 0.99
-  activity_support: 0.1
+  min_support: 0.05
+  min_confidence: 0.99
   max_cardinality: 2
