@@ -11,6 +11,7 @@ from src.evaluation.metrics.helpers import energy_score
 from src.evaluation.metrics.metadata import Direction, MetricGroup
 from src.evaluation.metrics.registry import METRICS
 from src.evaluation.prepared import PreparedPrefix
+from src.inference.generation import Draws
 
 
 def sequence_similarity(predicted: str, true: str) -> float:
@@ -27,6 +28,16 @@ def _dld(queries: Sequence[str], choices: Sequence[str]) -> np.ndarray:
         dtype=np.float64,
     )
     return np.subtract(1.0, similarities, out=similarities)
+
+
+def _between_draws(samples: Draws, distances: np.ndarray) -> float:
+    """Return the mean of [U, U] distances between distinct suffixes over pairs of different draws.
+
+    Two draws of the same suffix sit on the zero diagonal, so they add nothing to the sum while
+    the pair count still includes them.
+    """
+    draw_count = len(samples)
+    return float(samples.counts @ distances @ samples.counts) / (draw_count * (draw_count - 1))
 
 
 @METRICS.register(
@@ -69,12 +80,79 @@ def pairwise_activity_distance(context: PreparedPrefix) -> float:
         Mean distance over ordered pairs of distinct draws. Fewer than two draws score zero.
     """
     samples = context.generation.samples
-    draw_count = len(samples)
-    if draw_count < 2:
+    if len(samples) < 2:
         return 0.0
-    counts = np.asarray(samples.counts, dtype=np.float64)
-    distances = _dld(samples.suffixes, samples.suffixes)
-    return float(counts @ distances @ counts) / (draw_count * (draw_count - 1))
+    return _between_draws(samples, _dld(samples.suffixes, samples.suffixes))
+
+
+@METRICS.register(
+    'activity_spread_skill_gap',
+    label='Activity spread skill gap',
+    group=MetricGroup.ACTIVITY,
+    bounds=(-1.0, 1.0),
+    diagnostic=True,
+    direction=Direction.ZERO,
+)
+def activity_spread_skill_gap(context: PreparedPrefix) -> float:
+    """Return the mean DLD between draws minus their mean DLD to the observed suffix.
+
+    For a calibrated forecast the observed suffix is one more draw, so both means agree. A
+    negative gap means draws agree with each other more than with the truth, which is
+    overconfidence; a positive gap means they are more spread out than their error.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        Spread over ordered pairs of distinct draws minus draw-weighted error. Fewer than two
+        draws score zero.
+    """
+    samples, truth = context.generation.samples, context.generation.truth
+    if len(samples) < 2:
+        return 0.0
+    distances = _dld(samples.suffixes, (*samples.suffixes, truth.activities))  # [U, U + 1]
+    return _between_draws(samples, distances[:, :-1]) - samples.mean(distances[:, -1])
+
+
+@METRICS.register(
+    'distinct_suffix_share',
+    label='Distinct suffix share',
+    group=MetricGroup.ACTIVITY,
+    bounds=(0.0, 1.0),
+    diagnostic=True,
+)
+def distinct_suffix_share(context: PreparedPrefix) -> float:
+    """Return how many distinct activity suffixes the draws hold, per draw.
+
+    Args:
+        context: Prepared samples for one prefix.
+
+    Returns:
+        Distinct suffixes divided by draws, 1.0 when every draw differs. No draws score zero.
+    """
+    samples = context.generation.samples
+    return len(samples.suffixes) / len(samples) if len(samples) else 0.0
+
+
+@METRICS.register(
+    'truth_hit_rate',
+    label='Truth hit rate',
+    group=MetricGroup.ACTIVITY,
+    bounds=(0.0, 1.0),
+    diagnostic=True,
+    direction=Direction.HIGHER,
+)
+def truth_hit_rate(context: PreparedPrefix) -> float:
+    """Return whether any draw reproduces the observed activity suffix exactly.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        1.0 when the observed activity suffix is among the draws, otherwise 0.0.
+    """
+    samples, truth = context.generation.samples, context.generation.truth
+    return float(truth.activities in samples.suffixes)
 
 
 @METRICS.register(

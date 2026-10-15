@@ -73,14 +73,16 @@ direction, compute function, and visualization handling.
 
 ## Reports and Aggregation
 
-`PrefixSummary` stores prefix length, true suffix length, and grouped report scores.
+`PrefixSummary` stores prefix length, true suffix length, grouped report scores, and diagnostics.
 `EvaluationSummary` reports the unweighted mean over all prefixes and separate means bucketed by
-prefix length and true suffix length. Each summary holds one grouped `scores` record. Aggregation
-consumes summaries once, retaining only metric totals and counts overall and per length bucket.
+prefix length and true suffix length. Each summary holds one grouped `scores` record and one flat
+`diagnostics` record. Aggregation consumes summaries once, retaining only metric totals and counts
+overall and per length bucket.
 Each prefix is flattened once for aggregation; summation follows input order and length buckets
 are emitted in ascending order. Empty aggregates contain zero scores. `evaluation.json` contains
 this summary and provenance.
-`prefix_scores.parquet` stores the prefix key, lengths, and all report metric values for paired analysis.
+`prefix_scores.parquet` stores the prefix key, lengths, all report metric values for paired
+analysis, and every diagnostic value. Its default reader returns the report columns only.
 
 Keep the two files adjacent. Visualization rejects duplicate model reports within one dataset and
 requires score files for significance analysis. Comparisons align identical prefix populations,
@@ -101,9 +103,24 @@ full evaluation locally.
 
 ## Diagnostics
 
-Register validation-only metrics with `diagnostic=True`. DLS sample mean and suffix-length MAE
-are diagnostics, logged as `diagnostic_<group>/<metric>` in W&B during training validation.
-Mean pairwise activity distance is also a validation-only diagnostic and retains the multiplicity
-of repeated sampled suffixes.
-They are not computed during final evaluation and do not enter JSON reports, default Parquet
-views, publication figures or tables, or significance comparisons.
+Register debugging metrics with `diagnostic=True`. They are logged as `diagnostic_<group>/<metric>`
+in W&B during training validation, and final evaluation stores them in the `diagnostics` records
+of `evaluation.json` and in `prefix_scores.parquet`. They do not enter default Parquet views,
+publication figures or tables, or significance comparisons, and never select a checkpoint.
+
+| Group | Diagnostics |
+| --- | --- |
+| Activity | DLS sample mean; mean pairwise DLD between draws; spread skill gap, that pairwise DLD minus the mean DLD to truth, negative when overconfident; distinct suffix share; truth hit rate, whether any draw reproduces the true activities |
+| Suffix length | MAE; signed bias, sampled minus true length; EOT sentinel rate |
+| Remaining time | Signed bias of `log1p` days, sampled minus true |
+| Conformance | Signed bias of the satisfied-constraint share, sampled minus observed |
+
+Pairwise quantities retain the multiplicity of repeated sampled suffixes. Every diagnostic is
+linear in its per-prefix values, so prefix means compose across buckets; the signed biases can
+cancel overall and are read per length bucket.
+
+`SuffixModel.generation_diagnostics` returns a model's own per-prefix values, empty by default.
+Training validation averages them over the generation prefixes and logs them as
+`diagnostic_model/<key>`. The case-based model reports its retrieval: matched depth, its share of
+the prefix, dropped prefix activities, exact and fallback match rates, log10 candidate count, and
+single-candidate rate.

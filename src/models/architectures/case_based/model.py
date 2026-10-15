@@ -77,17 +77,8 @@ class CaseBased(FittedSuffixModel):
             The suffixes, `[batch_size, num_samples, steps]`. A suffix longer than the padded
             prefix width, the cap every generator shares, is cut there and marked as such.
         """
-        if not len(self.cuts):
-            raise RuntimeError('The case-based model must be fitted before it generates')
-        order, contexts = self._contexts()
-        prefix_activities = item.prefix.activities.cpu().numpy()
-        prefix_lengths = item.prefix.length.cpu().numpy()
-        bounds = np.array(
-            [
-                self._match(contexts, prefix_activities[row, :length])
-                for row, length in enumerate(prefix_lengths)
-            ]
-        )  # [B, 2]
+        bounds = self._matches(item)[:, :2]  # [B, 2]
+        order, _ = self._contexts()
         lower = torch.from_numpy(bounds[:, :1])
         span = torch.from_numpy(bounds[:, 1:] - bounds[:, :1])
         batch_size = len(bounds)
@@ -100,6 +91,56 @@ class CaseBased(FittedSuffixModel):
             ),
             batch_size=batch_size,
         )
+
+    @torch.no_grad()
+    def generation_diagnostics(self, item: TraceCut) -> dict[str, torch.Tensor]:
+        """Describe the train cut points each prefix's draws are retrieved from.
+
+        Args:
+            item: A batch from `TraceDataset`, read for its prefix activities only.
+        Returns:
+            Per-prefix values, `[batch_size]` each: `match_depth`, how many of the latest prefix
+            activities matched; `match_depth_share`, that count over the prefix length, zero for
+            an empty prefix; `dropped_activities`, how many of the oldest prefix activities were
+            left out of the match, zero when all of them matched; `exact_match`, 1.0 when the
+            whole prefix matched from the trace start; `fallback`, 1.0 when not even the last
+            activity matched; `log10_candidates`, the base-10 log of how many cut points matched;
+            and `single_candidate`, 1.0 when one cut point matched, so every draw repeats its
+            suffix.
+        """
+        matches = self._matches(item)  # [B, 3]
+        prefix_lengths = item.prefix.length.cpu().numpy()  # [B]
+        candidates = matches[:, 1] - matches[:, 0]  # [B]
+        depth = np.minimum(matches[:, 2], prefix_lengths)  # [B]
+        values = {
+            'match_depth': depth,
+            'match_depth_share': depth / np.maximum(prefix_lengths, 1),
+            'dropped_activities': prefix_lengths - depth,
+            'exact_match': matches[:, 2] > prefix_lengths,
+            'fallback': depth == 0,
+            'log10_candidates': np.log10(candidates),
+            'single_candidate': candidates == 1,
+        }
+        return {key: torch.from_numpy(value.astype(np.float64)) for key, value in values.items()}
+
+    def _matches(self, item: TraceCut) -> np.ndarray:
+        """Match every prefix of `item` against the sorted train contexts.
+
+        Returns:
+            One `[lower, upper, depth]` row per prefix, `[B, 3]`, as `_match` returns them.
+        """
+        if not len(self.cuts):
+            raise RuntimeError('The case-based model must be fitted before it generates')
+        _, contexts = self._contexts()
+        prefix_activities = item.prefix.activities.cpu().numpy()
+        prefix_lengths = item.prefix.length.cpu().numpy()
+        return np.array(
+            [
+                self._match(contexts, prefix_activities[row, :length])
+                for row, length in enumerate(prefix_lengths)
+            ],
+            dtype=np.int64,
+        ).reshape(-1, 3)
 
     def _contexts(self) -> tuple[np.ndarray, np.ndarray]:
         """Sort the train cut points by context, so each context prefix is a contiguous range.
@@ -126,7 +167,7 @@ class CaseBased(FittedSuffixModel):
         return self._index
 
     @staticmethod
-    def _match(contexts: np.ndarray, prefix: np.ndarray) -> tuple[int, int]:
+    def _match(contexts: np.ndarray, prefix: np.ndarray) -> tuple[int, int, int]:
         """Narrow the sorted contexts to the longest run shared with `prefix`.
 
         Args:
@@ -134,9 +175,11 @@ class CaseBased(FittedSuffixModel):
             prefix: One prefix's real activities, oldest first.
         Returns:
             The `[lower, upper)` range of sorted cut points sharing the longest matched context,
-            every cut point when not even the last activity matches.
+            every cut point when not even the last activity matches, and the matched depth: how
+            many context positions matched, counting the start-of-trace marker after the whole
+            prefix.
         """
-        lower, upper = 0, len(contexts)
+        lower, upper, matched = 0, len(contexts), 0
         query = np.append(prefix[::-1], _START)
         for depth, token in enumerate(query[: contexts.shape[1]]):
             column = contexts[lower:upper, depth]
@@ -144,8 +187,8 @@ class CaseBased(FittedSuffixModel):
             last = lower + int(np.searchsorted(column, token, side='right'))
             if first == last:
                 break
-            lower, upper = first, last
-        return lower, upper
+            lower, upper, matched = first, last, depth + 1
+        return lower, upper, matched
 
     def _suffixes(self, cut_ids: torch.Tensor, *, cap: int) -> GeneratedSuffix:
         """Read the observed suffix after each cut point, closed by EOT and padded.

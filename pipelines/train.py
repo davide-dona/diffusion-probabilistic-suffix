@@ -57,15 +57,22 @@ class _TrainingReporter:
         """Log and display one scheduled validation check."""
         generation = report.generation_metrics
         values = generation.scores.flatten()
-        model_values = {
-            f'generation_{metric.group}/{key}': values[key]
-            for key, metric in METRICS.report.items()
-            if metric.owner is Owner.MODEL
-        } | {
-            f'diagnostic_{metric.group}/{key}': generation.diagnostics[key]
-            for key, metric in METRICS.diagnostics.items()
-            if metric.owner is Owner.MODEL
-        }
+        model_values = (
+            {
+                f'generation_{metric.group}/{key}': values[key]
+                for key, metric in METRICS.report.items()
+                if metric.owner is Owner.MODEL
+            }
+            | {
+                f'diagnostic_{metric.group}/{key}': generation.diagnostics[key]
+                for key, metric in METRICS.diagnostics.items()
+                if metric.owner is Owner.MODEL
+            }
+            | {
+                f'diagnostic_model/{key}': value
+                for key, value in generation.model_diagnostics.items()
+            }
+        )
         val_values = (
             {f'val/{key}': value for key, value in report.val_metrics.as_metrics().items()}
             if report.val_metrics is not None

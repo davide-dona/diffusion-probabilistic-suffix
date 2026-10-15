@@ -18,7 +18,7 @@ _PREFIX_SCORE_SCHEMA = pa.schema(
         ('case_id', pa.large_string()),
         ('prefix_len', pa.int64()),
         ('suffix_len', pa.int64()),
-        *((key, pa.float64()) for key in METRICS.report),
+        *((key, pa.float64()) for key in METRICS.entries),
     ]
 )
 
@@ -30,7 +30,7 @@ def stream_prefix_scores(
     path: Path,
     provenance: Provenance,
 ) -> Iterator[PrefixSummary]:
-    """Write per-prefix scores while yielding the original summaries.
+    """Write per-prefix report scores and diagnostics while yielding the original summaries.
 
     Args:
         summaries: Scores in the same prefix order as keys, consumed once.
@@ -63,7 +63,7 @@ def stream_prefix_scores(
                 columns['case_id'].append(case_id)
                 columns['prefix_len'].append(prefix_len)
                 columns['suffix_len'].append(summary.suffix_len)
-                for name, value in summary.scores.flatten().items():
+                for name, value in (summary.scores.flatten() | summary.diagnostics).items():
                     columns[name].append(value)
                 if len(columns['case_id']) >= BLOCK:
                     flush(writer)
@@ -96,7 +96,7 @@ def read_prefix_scores(path: Path, *, columns: Sequence[str] | None = None) -> p
     Args:
         path: Parquet score file to read.
         columns: Requested columns in output order. Defaults to prefix identifiers, lengths,
-            and registered report metrics; historical diagnostic columns are not required.
+            and registered report metrics, leaving out the diagnostic columns.
 
     Returns:
         Selected columns as a dataframe, retaining the stored row order.

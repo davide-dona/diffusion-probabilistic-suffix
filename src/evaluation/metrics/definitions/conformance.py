@@ -23,6 +23,27 @@ def conformance_sample_mean(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
+    'conformance_share_bias',
+    label='Conformance share bias',
+    group=MetricGroup.CONFORMANCE,
+    bounds=(-1.0, 1.0),
+    diagnostic=True,
+    direction=Direction.ZERO,
+)
+def conformance_share_bias(context: PreparedPrefix) -> float:
+    """Return the draw-weighted satisfied-constraint share minus the observed trace's.
+
+    Args:
+        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+
+    Returns:
+        The signed share difference, positive when draws conform more than the truth. No
+        sampled draws score the negated observed share.
+    """
+    return conformance_sample_mean(context) - context.observed_conformance_share
+
+
+@METRICS.register(
     'conformance_observed',
     label='Conformance observed',
     group=MetricGroup.CONFORMANCE,
