@@ -17,14 +17,14 @@ def mine_model(traces: Iterable[Sequence[str]], *, settings: DictConfig) -> Decl
         settings: The `declare` config section.
 
     Returns:
-        The mined model, its constraints on activity names and each with its support.
+        The mined model, its constraints on activity names and each with its support and
+        confidence.
     """
     return mine(
         traces,
-        activity_support=settings.activity_support,
         min_support=settings.min_support,
+        min_confidence=settings.min_confidence,
         max_cardinality=settings.max_cardinality,
-        vacuity=settings.vacuity,
     )
 
 
@@ -50,7 +50,7 @@ def code_checker(model: DeclareModel, codes: ActivityCodec) -> Checker:
     A checker of traces encoded with `codes`, one character per event.
 
     Args:
-        model: The model to check against, under the vacuity it was mined with.
+        model: The model to check against.
         codes: The codebook the traces are encoded with.
 
     Raises:
@@ -63,8 +63,8 @@ def code_checker(model: DeclareModel, codes: ActivityCodec) -> Checker:
                 constraint.template,
                 tuple(codes.codes[name] for name in constraint.activities),
                 constraint.n,
-            ): support
-            for constraint, support in model.constraints.items()
+            ): measures
+            for constraint, measures in model.constraints.items()
         }
     except KeyError as error:
         raise ValueError(

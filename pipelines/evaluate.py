@@ -140,7 +140,7 @@ def run(generations_file: Path, workers: int | None) -> None:
     model = load_model(dataset)
     model_path = artifacts.DECLARE_MODEL.path(dataset)
     mined = model.settings
-    mined_under = f'min support {mined.min_support:.0%}, vacuity={mined.vacuity}'
+    mined_under = f'min support {mined.min_support:.0%}, min confidence {mined.min_confidence:.0%}'
 
     banner(
         'Scoring generated suffixes',

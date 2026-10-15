@@ -532,7 +532,7 @@ wheels = [
 [[package]]
 name = "fcfdeclare"
 version = "0.1.0"
-source = { git = "https://github.com/davide-dona/FCFDeclare?branch=main#50c9c5022bdd28494a417d2a206b72f3fc1603b6" }
+source = { git = "https://github.com/davide-dona/FCFDeclare?branch=main#6120825dcd1d03dea0879b51d05a20744769edd5" }
 dependencies = [
     { name = "numpy" },
 ]

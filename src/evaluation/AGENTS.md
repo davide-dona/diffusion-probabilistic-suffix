@@ -60,10 +60,11 @@ coverage minus its nominal level. Inter-event metrics compare against the observ
 sampled time sequences are truncated or zero-padded to that width during preparation.
 
 Declare checks evaluate the full trace formed by prefix plus suffix against constraints mined from
-the training split by the FCFDeclare library, which `src/logs/declare.py` wraps. The checker
-reads `vacuity` from the model's `settings`: a model mined with vacuity counts a trace without a constraint's activation as satisfying it. Unary and
-choice templates have no activation, so vacuity never affects them. Observed conformance metrics belong to the
-log and have no model ranking direction. Training validation logs only model-owned report and diagnostic metrics to W&B.
+the training split by the FCFDeclare library, which `src/logs/declare.py` wraps. A constraint
+is kept when its non-vacuous support and its confidence reach `min_support` and `min_confidence`.
+The checker counts a trace without a constraint's activation as satisfying it. Unary and choice
+templates have no activation, so their confidence equals their support. Observed conformance
+metrics belong to the log and have no model ranking direction. Training validation logs only model-owned report and diagnostic metrics to W&B.
 Log-owned metrics are still computed during validation and remain in report scores, JSON reports,
 and Parquet columns; ownership filtering applies only to metric logging.
 
