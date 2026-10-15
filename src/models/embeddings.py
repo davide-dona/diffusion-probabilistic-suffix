@@ -65,25 +65,40 @@ class EventContentEmbedding(nn.Module):
         return self.projection(event)  # [B, T, projection.in_features] -> [B, T, D]
 
 
-def sinusoidal_encoding(length: int, d_model: int) -> torch.Tensor:
-    """Build the fixed position table, `[length, d_model]`.
-    Args:
-        length: How many positions to build, i.e. the longest sequence the model will see.
-        d_model: The width to build them at; an odd width leaves the last channel a sine.
-    Returns:
-        The table, ready to be added to a `[..., length, d_model]` batch of embedded events.
-    """
-    positions = torch.arange(end=length, dtype=torch.float32).unsqueeze(dim=1)  # [length, 1]
-    # exp(-log(10000) * 2i / d_model) is 10000^(-2i/d_model) computed in log space, which keeps
-    # the smallest frequency from underflowing at wide `d_model`.
-    frequencies = torch.exp(
-        input=torch.arange(start=0, end=d_model, step=2, dtype=torch.float32)
-        * (-math.log(10000.0) / d_model)
-    )  # [ceil(d_model / 2)]
+def sinusoidal_encoding(values: torch.Tensor, width: int, *, base: float) -> torch.Tensor:
+    """Encode each value as interleaved sines and cosines at geometrically spaced frequencies.
 
-    encoding = torch.zeros(size=(length, d_model), dtype=torch.float32)
-    angles = positions * frequencies  # [length, ceil(d_model / 2)]
-    encoding[:, 0::2] = torch.sin(input=angles)
-    # An odd `d_model` leaves the cosine half one channel short of the sine half.
-    encoding[:, 1::2] = torch.cos(input=angles[:, : d_model // 2])
+    Frequencies run from 1 down to `base^(-(width - 2) / width)`. With `base` set to the largest
+    value encoded, the slowest pair turns about one radian across the whole range, so no channel
+    stays near constant over the values the model actually sees.
+
+    Args:
+        values: The values to encode, `[...]`.
+        width: The width to encode them at; an odd width leaves the last channel a sine.
+        base: The spread of the frequencies, the largest value encoded.
+    Returns:
+        The encoding, `[..., width]`, in float32.
+    """
+    # exp(-log(base) * 2i / width) is base^(-2i/width) computed in log space, which keeps the
+    # smallest frequency from underflowing at wide `width`.
+    frequencies = torch.exp(
+        input=torch.arange(start=0, end=width, step=2, dtype=torch.float32, device=values.device)
+        * (-math.log(base) / width)
+    )  # [ceil(width / 2)]
+    angles = values.float().unsqueeze(dim=-1) * frequencies  # [..., 1] * [W] -> [..., W]
+
+    encoding = torch.zeros(size=(*values.shape, width), dtype=torch.float32, device=values.device)
+    encoding[..., 0::2] = torch.sin(input=angles)
+    # An odd `width` leaves the cosine half one channel short of the sine half.
+    encoding[..., 1::2] = torch.cos(input=angles[..., : width // 2])
     return encoding
+
+
+def position_table(max_trace_length: int, d_model: int) -> torch.Tensor:
+    """Build the fixed table of trace positions, `[2 * max_trace_length, d_model]`.
+
+    A suffix continues the positions of its prefix, and its padded width can extend up to one
+    trace length past the longest prefix, so the table covers two trace lengths.
+    """
+    length = 2 * max_trace_length
+    return sinusoidal_encoding(values=torch.arange(end=length), width=d_model, base=float(length))

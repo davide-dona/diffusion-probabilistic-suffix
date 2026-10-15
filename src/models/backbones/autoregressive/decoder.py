@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 
 import torch
+import torch.nn.functional as F
 from omegaconf import DictConfig
 from torch import nn
 
+from src.datasets.codec.continuous import NumericColumn
 from src.datasets.dataset import Events
 from src.models.backbones.autoregressive.cache import LayerCache
 from src.models.backbones.autoregressive.decoder_layer import DecoderLayer
@@ -24,6 +26,8 @@ class CausalDecoder[OutputT](nn.Module, ABC):
         pad_activity_index: int,
         pad_resource_index: int,
         eot_activity_index: int,
+        input_inter_event_time: NumericColumn,
+        inter_event_time: NumericColumn,
     ) -> None:
         """
         Args:
@@ -36,6 +40,9 @@ class CausalDecoder[OutputT](nn.Module, ABC):
             pad_resource_index: The resource row every decoder input carries, the channel being
                 one the decoder never feeds itself.
             eot_activity_index: What ends a generated suffix.
+            input_inter_event_time: The encoding of the time channel the decoder reads.
+            inter_event_time: The encoding of the times the decoder predicts, which `generate`
+                re-encodes through `input_inter_event_time` before feeding them back.
         """
         super().__init__()
         self.embeddings = embeddings
@@ -49,6 +56,8 @@ class CausalDecoder[OutputT](nn.Module, ABC):
         self.pad_activity_index = pad_activity_index
         self.pad_resource_index = pad_resource_index
         self.eot_activity_index = eot_activity_index
+        self.input_inter_event_time = input_inter_event_time
+        self.inter_event_time = inter_event_time
 
         self.layers = nn.ModuleList(
             DecoderLayer(config=config, d_model=d_model) for _ in range(config.num_layers)
@@ -73,45 +82,40 @@ class CausalDecoder[OutputT](nn.Module, ABC):
 
     def forward(
         self,
-        suffix_activities: torch.Tensor,
+        suffix: Events,
         prefix_encoded: torch.Tensor,
         prefix_pad_mask: torch.Tensor,
     ) -> OutputT:
         """Predict an event for every position of a suffix at once.
 
         Args:
-            suffix_activities: The ground-truth suffix activities, `[batch_size, seq_len]`. Read
-                one step behind, so the decoder sees the truth up to each position rather than
-                its own predictions.
+            suffix: The ground-truth suffix events, `[batch_size, seq_len]` per field. Their
+                activities and input-encoded times are read one step behind, so the decoder sees
+                the truth up to each position rather than its own predictions.
             prefix_encoded: The encoded prefix events, `[batch_size, prefix_seq_len, d_model]`.
             prefix_pad_mask: True where a prefix position holds padding.
         Returns:
             The per-position predictions.
         """
-        decoder_input = self._teacher_forced_input(suffix_activities)
+        activities = self._teacher_forced(suffix.activities, start=self.sos_activity_index)
+        times = self._teacher_forced(suffix.inter_event_times, start=0.0)
         if self.training and self.activity_dropout > 0.0:
-            decoder_input = self._drop_activities(decoder_input)
+            activities = self._drop_activities(activities)
         hidden, _ = self._run_layers(
-            activities=decoder_input,
+            activities=activities,
+            times=times,
             prefix_encoded=prefix_encoded,
             prefix_pad_mask=prefix_pad_mask,
-            start_position=0,
+            start=prefix_pad_mask.logical_not().sum(dim=1),
             caches=None,
         )  # [batch_size, seq_len, d_model]
         features = self.shared_layer(hidden)  # [batch_size, seq_len, head_hidden_dim]
-        return self.predict(features, suffix_activities)
+        return self.predict(features, suffix.activities)
 
-    def _teacher_forced_input(self, suffix_activities: torch.Tensor) -> torch.Tensor:
-        """Shift suffix activities `[B, T]` right behind SOS without changing the padded width."""
-        start = torch.full(
-            size=(suffix_activities.size(dim=0), 1),
-            fill_value=self.sos_activity_index,
-            dtype=torch.long,
-            device=suffix_activities.device,
-        )
-        return torch.cat(
-            tensors=(start, suffix_activities[:, :-1]), dim=1
-        )  # [B, 1] + [B, T - 1] -> [B, T]
+    @staticmethod
+    def _teacher_forced(channel: torch.Tensor, *, start: float) -> torch.Tensor:
+        """Shift a suffix channel `[B, T]` right behind `start` without changing its width."""
+        return F.pad(input=channel[:, :-1], pad=(1, 0), value=start)  # [B, T - 1] -> [B, T]
 
     def _drop_activities(self, activities: torch.Tensor) -> torch.Tensor:
         """Replace teacher-forced activities with PAD at the configured rate, preserving SOS."""
@@ -124,9 +128,10 @@ class CausalDecoder[OutputT](nn.Module, ABC):
         self,
         *,
         activities: torch.Tensor,
+        times: torch.Tensor,
         prefix_encoded: torch.Tensor,
         prefix_pad_mask: torch.Tensor,
-        start_position: int,
+        start: torch.Tensor,
         caches: list[LayerCache] | None,
     ) -> tuple[torch.Tensor, list[LayerCache]]:
         """Embed a run of decoder inputs and push it through the stack.
@@ -137,18 +142,18 @@ class CausalDecoder[OutputT](nn.Module, ABC):
 
         Args:
             activities: The decoder input activities to read, `[batch_size, seq_len]`.
+            times: The decoder input times in the input encoding, `[batch_size, seq_len]`.
             prefix_encoded: The encoded prefix events, `[batch_size, prefix_seq_len, d_model]`.
             prefix_pad_mask: True where a prefix position holds padding.
-            start_position: Where in the suffix `activities` starts, for the positional encoding.
+            start: The trace position of each row's first input, `[batch_size]`. A step sits
+                at the trace position of the event it predicts.
             caches: One per layer, from a previous call, or None to read from the beginning.
         Returns:
             The stack's output for the positions read, and the caches carrying them.
         """
         hidden = self.embedding_norm(
             self.dropout(
-                self.embeddings(
-                    events=self._blank_events(activities), start_position=start_position
-                )
+                self.embeddings(events=self._decoder_events(activities, times), start=start)
             )
         )  # [batch_size, seq_len, d_model]
 
@@ -168,17 +173,17 @@ class CausalDecoder[OutputT](nn.Module, ABC):
 
         return self.norm(hidden), new_caches
 
-    def _blank_events(self, activities: torch.Tensor) -> Events:
-        """Wrap decoder input activities as the events `EventEmbeddings` reads.
+    def _decoder_events(self, activities: torch.Tensor, times: torch.Tensor) -> Events:
+        """Wrap decoder input activities and times as the events `EventEmbeddings` reads.
 
-        The activity is the one channel the decoder feeds itself, so it is the one channel that
-        may carry real content here: teacher forcing would otherwise hand it a ground-truth value
-        that `generate` has only its own prediction of, and the two would read different things.
-        Every other channel is blanked to the same PAD row or 0.0 scalar `generate` starts from,
-        the predicted times included.
+        Activity and time are the channels the decoder feeds itself, so they are the only ones
+        that may carry real content here: teacher forcing would otherwise hand it ground-truth
+        values that `generate` has no prediction of, and the two would read different things.
+        Every other channel is blanked to a PAD row or 0.0 scalar.
 
         Args:
             activities: Vocabulary indices to read as the activity channel, `[batch_size, seq_len]`.
+            times: Input-encoded times to read as the time channel, `[batch_size, seq_len]`.
         Returns:
             The events, ready for `EventEmbeddings`.
         """
@@ -192,7 +197,7 @@ class CausalDecoder[OutputT](nn.Module, ABC):
                 dtype=torch.long,
                 device=device,
             ),
-            inter_event_times=torch.zeros(size=(batch_size, seq_len), device=device),
+            inter_event_times=times,
             categorical_attributes=torch.zeros(
                 size=(batch_size, seq_len, self.embeddings.num_categorical),
                 dtype=torch.long,
@@ -210,6 +215,18 @@ class CausalDecoder[OutputT](nn.Module, ABC):
                 size=(batch_size,), fill_value=seq_len, dtype=torch.long, device=device
             ),
         )
+
+    def _input_time(self, times: torch.Tensor) -> torch.Tensor:
+        """Re-encode predicted standardized times `[...]` as the input time channel.
+
+        A negative duration is read as zero minutes, since the log1p input encoding is undefined
+        below that. A log-scaled prediction is clamped in log space instead of passing through
+        expm1, which overflows on large draws.
+        """
+        target = self.inter_event_time
+        scaled = (times * target.std + target.mean).clamp_min(0.0)
+        log_minutes = scaled if target.log else scaled.log1p()
+        return (log_minutes - self.input_inter_event_time.mean) / self.input_inter_event_time.std
 
     @abstractmethod
     def predict(self, features: torch.Tensor, activities: torch.Tensor) -> OutputT:
@@ -234,14 +251,16 @@ class CausalDecoder[OutputT](nn.Module, ABC):
         """Decode independent rows until EOT or the generation cap."""
         batch_size = prefix_encoded.size(dim=0)
         device = prefix_encoded.device
-        # What the decoder reads at each step: SOS first, exactly how `_teacher_forced_input`
-        # opens, then the activity the previous step predicted.
-        next_input = torch.full(
+        prefix_length = prefix_pad_mask.logical_not().sum(dim=1)  # [batch_size]
+        # What the decoder reads at each step: SOS at time 0.0 first, exactly how teacher forcing
+        # opens, then the event the previous step predicted.
+        next_activity = torch.full(
             size=(batch_size, 1),
             fill_value=self.sos_activity_index,
             dtype=torch.long,
             device=device,
         )
+        next_time = torch.zeros(size=(batch_size, 1), device=device)
 
         generated_activities = torch.zeros(
             size=(batch_size, max_steps), dtype=torch.long, device=device
@@ -266,17 +285,19 @@ class CausalDecoder[OutputT](nn.Module, ABC):
         for position in range(max_steps):
             # Only this one position is new; everything before it is in `caches`.
             hidden, caches = self._run_layers(
-                activities=next_input,
+                activities=next_activity,
+                times=next_time,
                 prefix_encoded=prefix_encoded,
                 prefix_pad_mask=prefix_pad_mask,
-                start_position=position,
+                start=prefix_length + position,
                 caches=caches,
             )
             features = self.shared_layer(hidden[:, 0])  # [batch_size, head_hidden_dim]
             activities, times = self.sample(features)
             generated_activities[:, position] = activities
             generated_inter_event_times[:, position] = times
-            next_input = activities.unsqueeze(dim=1)  # [batch_size, 1]
+            next_activity = activities.unsqueeze(dim=1)  # [batch_size, 1]
+            next_time = self._input_time(times).unsqueeze(dim=1)  # [batch_size, 1]
 
             # A suffix ends at its first EOT, so a later one cannot move the length back.
             just_finished = ~finished & (activities == self.eot_activity_index)

@@ -1,4 +1,3 @@
-import math
 from dataclasses import dataclass
 
 import torch
@@ -9,6 +8,7 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import Events
 from src.models.embeddings import (
     EventContentEmbedding,
+    position_table,
     sinusoidal_encoding,
 )
 
@@ -47,9 +47,9 @@ class DiffusionDenoiser(nn.Module):
         self.segment_embedding = nn.Embedding(num_embeddings=2, embedding_dim=d_model)
         self.register_buffer(
             name='position_encoding',
-            tensor=sinusoidal_encoding(length=codec.max_trace_length, d_model=d_model),
-            persistent=False,
+            tensor=position_table(max_trace_length=codec.max_trace_length, d_model=d_model),
         )
+        self.steps = config.diffusion.steps
         self.timestep_projection = nn.Sequential(
             nn.Linear(in_features=d_model, out_features=d_model),
             nn.SiLU(),
@@ -111,7 +111,12 @@ class DiffusionDenoiser(nn.Module):
         timestep: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Predict both channels from a noisy suffix with full suffix self-attention."""
-        suffix = self._embed_suffix(activities=activities, times=times, timestep=timestep)
+        suffix = self._embed_suffix(
+            activities=activities,
+            times=times,
+            timestep=timestep,
+            prefix_length=prefix.padding_mask.logical_not().sum(dim=1),
+        )
         hidden = self.suffix_decoder(
             tgt=suffix,
             memory=prefix.hidden,
@@ -131,28 +136,24 @@ class DiffusionDenoiser(nn.Module):
         activities: torch.Tensor,
         times: torch.Tensor,
         timestep: torch.Tensor,
+        prefix_length: torch.Tensor,
     ) -> torch.Tensor:
-        """Combine noisy suffix content, positions, segment, and timestep."""
+        """Combine noisy suffix content, positions, segment, and timestep, with canvas slot `j`
+        at trace position `prefix_length + j`."""
         activity = self.suffix_activity_embedding(activities)  # [B, T, A]
         features = torch.cat(tensors=(activity, times.unsqueeze(dim=-1)), dim=-1)  # [B, T, A + 1]
         hidden = self.suffix_projection(features)  # [B, T, A + 1] -> [B, T, D]
-        positions = self.position_encoding[: hidden.size(dim=1)]  # [T, D]
+        slots = torch.arange(end=hidden.size(dim=1), device=hidden.device)  # [T]
+        positions = self.position_encoding[
+            prefix_length.unsqueeze(dim=1) + slots
+        ]  # [B, 1] + [T] -> [B, T] -> [B, T, D]
         segment = self.segment_embedding.weight[1]  # [D]
         step = self._timestep_embedding(timestep)  # [B, 1, D]
         return self.input_norm(self.dropout(hidden + positions + segment + step))  # [B, T, D]
 
     def _timestep_embedding(self, timestep: torch.Tensor) -> torch.Tensor:
         """Encode one diffusion step per row as `[B, 1, D]`."""
-        width = self.position_encoding.size(dim=1)
-        half = torch.arange(
-            start=0, end=width, step=2, device=timestep.device, dtype=torch.float32
-        )  # [ceil(D / 2)]
-        angles = timestep.float().unsqueeze(dim=1) * torch.exp(
-            -math.log(10000.0) * half / width
-        )  # [B, 1] * [ceil(D / 2)] -> [B, ceil(D / 2)]
-        embedding = torch.zeros(
-            size=(timestep.size(dim=0), width), device=timestep.device
-        )  # [B, D]
-        embedding[:, 0::2] = angles.sin()
-        embedding[:, 1::2] = angles.cos()[:, : width // 2]
+        embedding = sinusoidal_encoding(
+            values=timestep, width=self.position_encoding.size(dim=1), base=float(self.steps)
+        )  # [B] -> [B, D]
         return self.timestep_projection(embedding).unsqueeze(dim=1)  # [B, D] -> [B, 1, D]

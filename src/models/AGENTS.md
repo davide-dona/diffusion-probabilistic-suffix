@@ -60,6 +60,9 @@ and standardized time means and log-variances `[B, T]`.
   attention, cache, and loss normalization reused by the two SuTraN baselines. Neither location
   defines a selectable architecture. Model-specific heads, losses, and sampling policies stay in
   their architecture packages.
+- Positions are trace positions: a suffix continues its prefix, so suffix slot `j` sits at
+  position `prefix_length + j`. Fixed position tables are persistent buffers, so a checkpoint
+  built against another table fails to load.
 - Average position losses within each trace before averaging traces so long suffixes do not receive
   unintended batch weight.
 - Report finite losses and generations and keep gradients finite for every trainable model.
