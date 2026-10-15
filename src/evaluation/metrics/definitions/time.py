@@ -1,3 +1,5 @@
+import numpy as np
+
 from src.evaluation.metrics.helpers import coverage_gap, crps
 from src.evaluation.metrics.metadata import Direction, MetricGroup
 from src.evaluation.metrics.registry import METRICS
@@ -24,6 +26,32 @@ def remaining_time_crps_days(context: PreparedPrefix) -> float:
         Sampled remaining-time CRPS in days. No draws or predicted quantities score zero.
     """
     return crps(context.remaining_times, context.true_remaining_time) / MINUTES_PER_DAY
+
+
+@METRICS.register(
+    'remaining_time_log_bias',
+    label='Remaining-time log bias',
+    group=MetricGroup.REMAINING_TIME,
+    unit='log days',
+    diagnostic=True,
+    direction=Direction.ZERO,
+)
+def remaining_time_log_bias(context: PreparedPrefix) -> float:
+    """Return the mean sampled log remaining time minus the observed one.
+
+    Both times are read as `log1p` of days, so long cases do not dominate the mean.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The signed mean error in log days, positive when draws run longer than the truth. No
+        sampled draws score zero.
+    """
+    if not context.remaining_times.size:
+        return 0.0
+    sampled = np.log1p(context.remaining_times / MINUTES_PER_DAY).mean()
+    return float(sampled - np.log1p(context.true_remaining_time[0] / MINUTES_PER_DAY))
 
 
 @METRICS.register(

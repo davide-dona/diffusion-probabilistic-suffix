@@ -13,6 +13,7 @@ generation depend on these interfaces rather than on architecture internals.
 | `forward(item)` | Trainable only. Run the architecture's stochastic or teacher-forced training pass and return a `ModelOutput`. |
 | `compute_loss(output, batch)` | Trainable only. Return a scalar mean loss for backpropagation and a `Loss` whose fields are sums over batch rows. |
 | `fit(dataset)` | Fitted only. Estimate the model from every cut of the train split and keep everything it learns in persistent buffers. |
+| `generation_diagnostics(item)` | Optional. Return named per-prefix values `[B]` describing how the model generates, logged during validation. |
 | `pad_activity_index` | Activity index ignored by reconstruction loss and used after generated termination. |
 | `eot_activity_index` | Activity token that terminates a suffix. |
 

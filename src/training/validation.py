@@ -17,10 +17,14 @@ from src.training.loss import Loss
 
 @dataclass(frozen=True, slots=True)
 class GenerationMetrics:
-    """Validation metrics, with energy score averaged over every generated example."""
+    """Validation metrics, with energy score averaged over every generated example.
+
+    model_diagnostics averages the model's own `generation_diagnostics` over the same prefixes.
+    """
 
     scores: ScoreGroups
     diagnostics: dict[str, float]
+    model_diagnostics: dict[str, float]
     generation_seconds: float
     scoring_seconds: float
 
@@ -123,22 +127,26 @@ def validate_generation(
         scoring_seconds = 0.0
         totals = dict.fromkeys(METRICS.report, 0.0)
         diagnostic_totals = dict.fromkeys(METRICS.diagnostics, 0.0)
+        model_diagnostic_totals: dict[str, float] = {}
         prefixes = 0
         for batch in loader:
+            batch = batch.to(device)
             synchronize_device(device)
             started = perf_counter()
             generations = generate_batch(
                 model=model,
-                batch=batch.to(device),
+                batch=batch,
                 num_samples=num_samples,
                 codec=codec,
             )
             synchronize_device(device)
             generation_seconds += perf_counter() - started
+            for key, values in model.generation_diagnostics(batch).items():
+                model_diagnostic_totals[key] = (
+                    model_diagnostic_totals.get(key, 0.0) + values.sum().item()
+                )
             started = perf_counter()
-            for summary in PrefixSummary.of_batch(
-                generations, checker=checker, include_diagnostics=True
-            ):
+            for summary in PrefixSummary.of_batch(generations, checker=checker):
                 for key, value in summary.scores.flatten().items():
                     totals[key] += value
                 for key, value in summary.diagnostics.items():
@@ -150,6 +158,9 @@ def validate_generation(
         return GenerationMetrics(
             scores=ScoreGroups.of({key: value / prefixes for key, value in totals.items()}),
             diagnostics={key: value / prefixes for key, value in diagnostic_totals.items()},
+            model_diagnostics={
+                key: value / prefixes for key, value in model_diagnostic_totals.items()
+            },
             generation_seconds=generation_seconds,
             scoring_seconds=scoring_seconds,
         )

@@ -36,6 +36,17 @@ class SuffixModel(nn.Module, ABC):
             The suffixes, `[batch_size, num_samples, ...]`.
         """
 
+    def generation_diagnostics(self, item: TraceCut) -> dict[str, torch.Tensor]:
+        """Describe how this model generates for every prefix of a batch.
+
+        Args:
+            item: A batch from `TraceDataset`, read for its prefix only.
+        Returns:
+            Named per-prefix values, `[batch_size]` each, averaged by validation. None by
+            default.
+        """
+        return {}
+
     def _per_sample(self, generated: GeneratedSuffix, *, batch_size: int) -> GeneratedSuffix:
         """Group flat generated rows by their originating prefix.
 

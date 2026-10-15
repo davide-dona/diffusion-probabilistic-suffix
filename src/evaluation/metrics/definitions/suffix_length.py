@@ -26,6 +26,50 @@ def suffix_length_mae(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
+    'suffix_length_bias',
+    label='Suffix length bias',
+    group=MetricGroup.SUFFIX_LENGTH,
+    unit='events',
+    diagnostic=True,
+    direction=Direction.ZERO,
+)
+def suffix_length_bias(context: PreparedPrefix) -> float:
+    """Return the mean sampled suffix length minus the observed one.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The signed mean error in events, positive when draws run longer than the truth. No
+        sampled draws score zero.
+    """
+    if not context.suffix_lengths.size:
+        return 0.0
+    return float(context.suffix_lengths.mean() - context.true_suffix_length[0])
+
+
+@METRICS.register(
+    'sentinel_rate',
+    label='EOT sentinel rate',
+    group=MetricGroup.SUFFIX_LENGTH,
+    bounds=(0.0, 1.0),
+    diagnostic=True,
+    direction=Direction.LOWER,
+)
+def sentinel_rate(context: PreparedPrefix) -> float:
+    """Return the share of draws that the EOT sentinel had to close.
+
+    Args:
+        context: Prepared samples for one prefix.
+
+    Returns:
+        The share of draws that never generated EOT themselves. No sampled draws score zero.
+    """
+    used = context.generation.samples.used_eot_sentinel
+    return float(used.mean()) if used.size else 0.0
+
+
+@METRICS.register(
     'suffix_length_crps',
     label='Suffix length CRPS',
     group=MetricGroup.SUFFIX_LENGTH,

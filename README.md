@@ -165,11 +165,13 @@ The report and its per-prefix scores are written under
 `scores.suffix_length`, `scores.remaining_time`, `scores.inter_event_time`, and
 `scores.conformance`, both overall and within each length bucket.
 
-DLS sample mean, mean pairwise activity distance, and suffix-length MAE are validation diagnostics,
-logged to W&B under `diagnostic_activity/dls_sample_mean`,
-`diagnostic_activity/pairwise_activity_distance`, and
-`diagnostic_suffix_length/suffix_length_mae`.
-They are excluded from final reports, score files, and publication comparisons.
+Diagnostics expose biases the ranked metrics hide: signed suffix-length, remaining-time, and
+conformance biases, the activity spread skill gap, distinct suffix share, truth hit rate, and EOT
+sentinel rate, next to DLS sample mean, pairwise activity distance, and suffix-length MAE. They
+are logged to W&B under `diagnostic_<group>/<metric>` during validation and stored under
+`diagnostics` in `evaluation.json` and in `prefix_scores.parquet`, but never enter publication
+comparisons. A model may add its own values under `diagnostic_model/<key>`; the case-based model
+reports how deep and how widely its prefixes match the train split.
 
 Generation metrics are logged under `generation_<group>/<metric>`. Only model-owned metrics are
 logged during training validation; log-owned values remain in the evaluation report.
