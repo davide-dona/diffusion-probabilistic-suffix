@@ -82,15 +82,20 @@ _SCHEMA = pa.schema(
         ('case_id', pa.large_string()),
         ('prefix_len', pa.int64()),
         ('prefix_activities', _SUFFIX),
+        ('prefix_inter_event_time_minutes', _INTER_EVENT_TIMES),
         ('generated_suffixes', pa.list_(pa.field(name='element', type=_SUFFIX))),
         ('generated_draws', pa.list_(pa.field(name='element', type=_DRAW))),
         ('truth', _EVENTS),
+        # Row-major [S, T] teacher-forced minutes, T being the true suffix length.
+        ('forced_inter_event_time_minutes', _INTER_EVENT_TIMES),
     ]
 )
 
 # The two columns that identify a prefix, which is all `prefix_keys` reads.
 _KEY_COLUMNS = ['case_id', 'prefix_len']
 _FLOAT_LEAVES = [
+    'prefix_inter_event_time_minutes.list.element',
+    'forced_inter_event_time_minutes.list.element',
     'generated_draws.list.element.inter_event_time_minutes.list.element',
     'truth.inter_event_time_minutes.list.element',
 ]
@@ -103,6 +108,7 @@ def _generation_row(generation: Generation) -> dict:
         'case_id': generation.case_id,
         'prefix_len': generation.prefix_len,
         'prefix_activities': generation.prefix_activities,
+        'prefix_inter_event_time_minutes': generation.prefix_inter_event_time_minutes.tolist(),
         'generated_suffixes': list(samples.suffixes),
         'generated_draws': [
             {
@@ -122,6 +128,9 @@ def _generation_row(generation: Generation) -> dict:
             'activities': generation.truth.activities,
             'inter_event_time_minutes': generation.truth.inter_event_time_minutes.tolist(),
         },
+        'forced_inter_event_time_minutes': (
+            generation.forced_inter_event_time_minutes.ravel().tolist()
+        ),
     }
 
 
@@ -160,6 +169,12 @@ def _generations_from_table(table: pa.Table) -> list[Generation]:
     truth_times, truth_offsets = _flat_times(pc.struct_field(truth, 'inter_event_time_minutes'))
     truth_activities = pc.struct_field(truth, 'activities')
     _require_values(truth_activities)
+    prefix_times, prefix_offsets = _flat_times(
+        table.column('prefix_inter_event_time_minutes').combine_chunks()
+    )
+    forced_times, forced_offsets = _flat_times(
+        table.column('forced_inter_event_time_minutes').combine_chunks()
+    )
 
     generations = []
     for row, (case_id, prefix_len, prefix, true_activities) in enumerate(
@@ -183,10 +198,16 @@ def _generations_from_table(table: pa.Table) -> list[Generation]:
         )
         if not np.array_equal(row_time_offsets - row_time_offsets[0], samples.offsets):
             raise ValueError('Generation draw times do not match their suffix lengths')
+        forced = forced_times[forced_offsets[row] : forced_offsets[row + 1]]
+        if len(forced) != len(samples) * len(true_activities):
+            raise ValueError('Teacher-forced times do not match the draws and the true suffix')
         generations.append(
             Generation(
                 case_id=case_id,
                 prefix_activities=prefix,
+                prefix_inter_event_time_minutes=prefix_times[
+                    prefix_offsets[row] : prefix_offsets[row + 1]
+                ],
                 samples=samples,
                 truth=DecodedEvents(
                     activities=true_activities,
@@ -194,6 +215,7 @@ def _generations_from_table(table: pa.Table) -> list[Generation]:
                         truth_offsets[row] : truth_offsets[row + 1]
                     ],
                 ),
+                forced_inter_event_time_minutes=forced.reshape(len(samples), len(true_activities)),
             )
         )
     return generations

@@ -3,6 +3,7 @@ from collections.abc import Container, Sequence
 import pandas as pd
 
 from src.evaluation.metrics.metadata import Direction, Metric
+from src.evaluation.traces import TraceMeasure
 from src.visualization import labels
 from src.visualization.catalogue import Table
 
@@ -45,11 +46,12 @@ def _value(frame: pd.DataFrame, key: str) -> float:
 
 
 def _row(
-    columns: Sequence[Metric],
+    columns: Sequence[Metric | TraceMeasure],
     frame: pd.DataFrame,
     *,
     label: str,
     best: Container[str],
+    reference: pd.DataFrame | None,
 ) -> str:
     """Render one model row of a LaTex table.
 
@@ -58,13 +60,17 @@ def _row(
         frame: Report rows for the model.
         label: Model display label.
         best: Metrics to render in bold.
+        reference: Report rows of the skill reference, or None to render the values themselves.
 
     Returns:
         One LaTex table row.
     """
     cells = []
     for metric in columns:
-        written = f'{_value(frame, metric.key):.3f}'
+        value = _value(frame, metric.key)
+        if reference is not None:
+            value = 1.0 - value / _value(reference, metric.key)
+        written = f'{value:.3f}'
         cells.append(f'\\textbf{{{written}}}' if metric.key in best else written)
     return '   & ' + ' & '.join([_escape_latex(label), *cells]) + ' \\\\'
 
@@ -84,11 +90,19 @@ def _block(
         models: Models in display order.
 
     Returns:
-        LaTex rows for the dataset.
+        LaTex rows for the dataset, without the skill reference's own row.
+
+    Raises:
+        ValueError: If a skill table's reference has no report for the dataset.
     """
+    reference = None
+    if table.reference is not None:
+        reference = frame[frame['model'] == table.reference]
+        if reference.empty:
+            raise ValueError(f'the {table.name} table needs a {table.reference} report')
     rows = []
     for model in models:
-        if not (frame['model'] == model).any():
+        if model == table.reference or not (frame['model'] == model).any():
             continue
         marked = significance[(significance['model'] == model) & significance['best']]
         rows.append(
@@ -97,6 +111,7 @@ def _block(
                 frame[frame['model'] == model],
                 label=labels.MODELS[model].label,
                 best=set(marked['metric']),
+                reference=reference,
             )
         )
     return rows

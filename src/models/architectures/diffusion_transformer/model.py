@@ -156,6 +156,48 @@ class DiffusionTransformer(TrainableSuffixModel):
         )
         return self._per_sample(generated=generated, batch_size=batch_size)
 
+    @torch.no_grad()
+    def generate_times(self, item: TraceCut, *, num_samples: int) -> torch.Tensor:
+        """Denoise times with the activity canvas replaced by the true suffix at every level.
+
+        Before each denoiser call the activities are drawn afresh from the forward process of
+        the true canvas at that level, so the denoiser reads the same mix of revealed and MASK
+        activities it was trained on while only the times run the reverse process.
+
+        Args:
+            item: A batch from `TraceDataset`, read for its prefix and true suffix activities.
+            num_samples: How many time sequences to draw per prefix.
+        Returns:
+            Standardized times `[batch_size, num_samples, T]` over the fixed canvas, the
+            standardized zero from each true EOT on.
+        """
+        batch_size = item.prefix.activities.size(dim=0)
+        prefix = self.denoiser.encode_prefix(item.prefix).repeat_interleave(num_samples)
+        clean_activity, _, real = self._clean_canvas(item)  # [B, T]
+        clean_activity = clean_activity.repeat_interleave(num_samples, dim=0)  # [B * S, T]
+        real = real.repeat_interleave(num_samples, dim=0)  # [B * S, T]
+        rows = batch_size * num_samples
+        times = torch.randn(
+            size=(rows, self.canvas_length), device=prefix.hidden.device
+        )  # [B * S, T]
+        for step, previous_step in self._reverse_grid():
+            timestep = torch.full(
+                size=(rows,), fill_value=step, dtype=torch.long, device=times.device
+            )  # [B * S]
+            activities = self.activities.corrupt(clean=clean_activity, timestep=timestep)
+            _, noise = self.denoiser(
+                prefix=prefix, activities=activities, times=times, timestep=timestep
+            )
+            times = self.times.sample_reverse(
+                times=times,
+                noise=noise,
+                step=step,
+                previous_step=previous_step,
+                eta=self.sampling_eta,
+            )  # [B * S, T]
+        times = times.masked_fill(~real, self.standardized_zero)
+        return times.view(batch_size, num_samples, self.canvas_length)
+
     def _clean_canvas(self, batch: TraceCut) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Build fixed width clean activity and time canvases with their real-event mask."""
         lengths = batch.suffix.length - 1  # [B]

@@ -145,7 +145,7 @@ def compare_means(
     return p_values, best
 
 
-def test_significance(reports: Sequence[Path]) -> pd.DataFrame:
+def test_significance(reports: Sequence[Path], *, excluded: str | None = None) -> pd.DataFrame:
     """Compare reported means with a paired case bootstrap and all-pairs Holm correction.
 
     Calibration emphasis is descriptive: smallest absolute mean gap. Single-model
@@ -153,6 +153,8 @@ def test_significance(reports: Sequence[Path]) -> pd.DataFrame:
 
     Args:
         reports: Evaluation reports with per-prefix score files beside them.
+        excluded: A model left out of every comparison, such as a skill reference that a table
+            does not show, or None to compare all of them.
 
     Returns:
         A dataframe under `SIGNIFICANCE_COLUMNS`. `p_value` is the adjusted p-value
@@ -164,7 +166,9 @@ def test_significance(reports: Sequence[Path]) -> pd.DataFrame:
     """
     rows: list[dict[str, object]] = []
     for dataset, files in sorted(score_files(reports).items()):
-        files = dict(sorted(files.items()))
+        files = {model: path for model, path in sorted(files.items()) if model != excluded}
+        if not files:
+            continue
         models = list(files)
         if len(models) < 2:
             rows.extend(

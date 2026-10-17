@@ -68,8 +68,12 @@ class Decoder(CausalDecoder[DecoderOutput]):
             dim=-1, index=self.unemittable_activities, value=-torch.inf
         )
         activities = torch.multinomial(input=logits.softmax(dim=-1), num_samples=1).squeeze(dim=1)
+        return activities, self.sample_time(features, activities)
+
+    def sample_time(self, features: torch.Tensor, activities: torch.Tensor) -> torch.Tensor:
+        """Draw a standardized time from the Gaussian given each row's activity."""
         means, log_variances = self._time_distribution(features, activities)
-        return activities, sample_gaussian(mean=means, log_variance=log_variances)
+        return sample_gaussian(mean=means, log_variance=log_variances)
 
     def _time_distribution(
         self, features: torch.Tensor, activities: torch.Tensor

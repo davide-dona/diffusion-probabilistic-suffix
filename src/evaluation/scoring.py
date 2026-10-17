@@ -13,6 +13,7 @@ from src.inference.generation import Generation
 class ScoreGroups:
     """Report metric values for a prefix or an aggregate, grouped by evaluation question."""
 
+    joint: dict[str, float]
     activity: dict[str, float]
     suffix_length: dict[str, float]
     remaining_time: dict[str, float]
@@ -53,6 +54,7 @@ class ScoreGroups:
             A new mapping from each report metric key to its score.
         """
         groups = {
+            MetricGroup.JOINT: self.joint,
             MetricGroup.ACTIVITY: self.activity,
             MetricGroup.SUFFIX_LENGTH: self.suffix_length,
             MetricGroup.REMAINING_TIME: self.remaining_time,

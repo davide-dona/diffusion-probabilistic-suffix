@@ -36,6 +36,23 @@ class SuffixModel(nn.Module, ABC):
             The suffixes, `[batch_size, num_samples, ...]`.
         """
 
+    @abstractmethod
+    def generate_times(self, item: TraceCut, *, num_samples: int) -> torch.Tensor:
+        """Draw `num_samples` inter-event time sequences for each batch row's true activities.
+
+        The one sampling path that reads the suffix: it conditions on the prefix and on
+        `item.suffix.activities`, and never on the true times. It scores times apart from
+        activity errors and must stay out of `generate`.
+
+        Args:
+            item: A batch from `TraceDataset`, read for its prefix and true suffix activities.
+            num_samples: How many time sequences to draw per prefix.
+        Returns:
+            Standardized times `[batch_size, num_samples, T]`, with `T` at least the longest
+            true suffix of the batch; position `j` times the true activity at suffix slot `j`,
+            and positions from each row's EOT on are ignored.
+        """
+
     def generation_diagnostics(self, item: TraceCut) -> dict[str, torch.Tensor]:
         """Describe how this model generates for every prefix of a batch.
 

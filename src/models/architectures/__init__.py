@@ -5,6 +5,7 @@ ARCHITECTURES = (
     'head_sampling_transformer',
     'u_ed_sutran',
     'case_based',
+    'unconditional',
 )
 
 _PACKAGE = 'src.models.architectures'

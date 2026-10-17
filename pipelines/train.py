@@ -89,6 +89,7 @@ class _TrainingReporter:
             f'{losses}'
             f'gen_dls {generation.diagnostics["dls_sample_mean"]:.4f} mean / '
             f'energy {generation.scores.activity["energy_score_dls"]:.4f}  '
+            f'kernel {generation.scores.joint["kernel_score_joint"]:.4f}  '
             f'generation {generation.generation_seconds:.1f}s  '
             f'scoring {generation.scoring_seconds:.1f}s',
             flush=True,

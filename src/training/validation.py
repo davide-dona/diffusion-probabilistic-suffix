@@ -17,7 +17,7 @@ from src.training.loss import Loss
 
 @dataclass(frozen=True, slots=True)
 class GenerationMetrics:
-    """Validation metrics, with energy score averaged over every generated example.
+    """Validation metrics, each averaged over every generated prefix.
 
     model_diagnostics averages the model's own `generation_diagnostics` over the same prefixes.
     """

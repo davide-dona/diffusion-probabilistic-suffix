@@ -93,11 +93,13 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
 Available model configs are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
-(U-ED-SuTraN), `diffusion_transformer`, and `case_based`.
+(U-ED-SuTraN), `diffusion_transformer`, `case_based`, and `unconditional`.
 The case-based model is a non-neural baseline. Training fits it once on the train split, without an
 optimizer: for each prefix it finds the train cut points sharing the longest run of latest
 activities, down to none, and samples their observed suffixes uniformly. It takes no settings, so
-its checkpoint goes straight to generation.
+its checkpoint goes straight to generation. The unconditional model is fitted the same way but
+ignores the prefix, sampling suffixes uniformly from every train cut point; it is the reference of
+the skill table.
 SuTraN-PH samples each activity from its categorical head, then the inter-event time from a
 Gaussian whose mean and log-variance depend on that activity. Its log-variance bounds default to
 `[-10, 10]` under `model.time`.
@@ -105,7 +107,7 @@ U-ED-SuTraN shares SuTraN-PH's encoder and causal
 decoder, adding MC dropout and learned activity-logit and time variances. Its defaults use 20
 categorical likelihood draws and log-variance bounds of `[-10, 10]`; these are configurable under
 `model.uncertainty`. Both SuTraN models train on complete suffixes with activity-only decoder inputs.
-Validation uses isolated seeded draws and selects checkpoints by the existing generation metric.
+Validation uses isolated seeded draws and selects checkpoints by the minimum joint kernel score.
 The diffusion model uses absorbing MASK activity corruption and Gaussian time noise. Its default
 configuration has 1000 noise levels and 50 DDIM sampling calls starting at level 990. The activity
 and time losses supervise real events and all EOT positions in the fixed suffix canvas. A four-layer prefix
@@ -150,6 +152,8 @@ uv run python -m pipelines.generate checkpoint=/path/to/checkpoint.pt device=cpu
 
 The generations are written to
 `outputs/generate/<dataset>/<model>/<training-run-id>/<invocation-id>/generations.parquet`.
+Next to the suffixes drawn from the prefix, the file holds teacher-forced times: inter-event times
+the model draws for the true suffix activities, which score times apart from activity errors.
 
 ### 4. Evaluation
 
@@ -161,9 +165,12 @@ uv run python -m pipelines.evaluate generations=/path/to/generations.parquet wor
 
 The report and its per-prefix scores are written under
 `outputs/evaluate/<dataset>/<model>/<training-run-id>/<invocation-id>/` as `evaluation.json` and
-`prefix_scores.parquet`. The JSON summary groups scores under `scores.activity`,
+`prefix_scores.parquet`. The JSON summary groups scores under `scores.joint`, `scores.activity`,
 `scores.suffix_length`, `scores.remaining_time`, `scores.inter_event_time`, and
-`scores.conformance`, both overall and within each length bucket.
+`scores.conformance`, both overall and within each length bucket. `scores.joint` holds the joint
+kernel score, a proper score over activities and times together. Randomized PIT values of suffix
+length and remaining time are stored per prefix for calibration curves. `traces` holds the k-NN
+precision and recall of generated full traces against the observed test traces.
 
 Diagnostics expose biases the ranked metrics hide: signed suffix-length, remaining-time, and
 conformance biases, the activity spread skill gap, distinct suffix share, truth hit rate, and EOT
@@ -187,7 +194,8 @@ uv run python -m pipelines.visualize \
 
 Keep every `evaluation.json` beside its `prefix_scores.parquet`. Figures are written as PDF under
 `outputs/visualize/<date>/<time>/figures/`, and comparison tables as LaTeX under
-`outputs/visualize/<date>/<time>/tables/`.
+`outputs/visualize/<date>/<time>/tables/`. The skill table needs an `unconditional` report for
+every dataset it covers.
 
 To visualize every report below one or more directories instead:
 

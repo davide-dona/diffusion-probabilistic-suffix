@@ -83,6 +83,29 @@ def crps(draws: np.ndarray, truth: np.ndarray) -> float:
     return float((between + outside).mean())
 
 
+def pit(draws: np.ndarray, truth: float, *, generator: np.random.Generator) -> float:
+    """Return the randomized probability integral transform of an outcome among draws.
+
+    With `S` draws the value is `(below + V * (tied + 1)) / (S + 1)` for `V` uniform on
+    [0, 1], `below` and `tied` counting draws under and equal to the outcome. Under a calibrated
+    forecast the outcome is exchangeable with the draws, so the value is uniform on [0, 1] even
+    with ties, as on integer lengths or zero durations.
+
+    Args:
+        draws: Numeric samples of any shape, with repeated draws retained.
+        truth: The observed value.
+        generator: Source of the uniform tie break.
+
+    Returns:
+        The transform in [0, 1]. No draws give 0.5.
+    """
+    if draws.size == 0:
+        return 0.5
+    below = int(np.count_nonzero(draws < truth))
+    tied = int(np.count_nonzero(draws == truth))
+    return (below + generator.random() * (tied + 1)) / (draws.size + 1)
+
+
 def mae(draws: np.ndarray, truth: np.ndarray) -> float:
     """Return mean absolute error over draws and predicted quantities.
 

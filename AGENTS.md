@@ -9,7 +9,8 @@ accuracy, diversity, calibration, time prediction, and process conformance.
 The main model is a diffusion Transformer with a cached prefix encoder and a bidirectional suffix
 decoder over categorical activities and continuous times. It is compared with the implemented
 probabilistic SuTraN-PH and uncertainty-aware U-ED-SuTraN baselines, and with a non-neural
-case-based baseline, on Sepsis, BPIC12, BPIC17, and BPIC19.
+case-based baseline, on Sepsis, BPIC12, BPIC17, and BPIC19. A non-neural unconditional model that
+ignores the prefix is the reference of the skill scores.
 
 ## Research Knowledge
 
@@ -31,7 +32,9 @@ The guides below remain the authority for current implementation contracts and s
 - Never select checkpoints or tune inference settings on the test split. Training and model
   selection use train and validation data; final generation uses test prefixes.
 - Generation must depend only on the observed prefix. Never expose the true suffix to a sampling
-  path.
+  path. The one exception is `SuffixModel.generate_times`, which reads the true suffix activities,
+  never their times, to score inter-event times apart from activity errors; keep it separate from
+  `generate`.
 - Preserve chronological splits, fitted codecs, seeds, resolved configurations, checkpoint hashes,
   and run identity across artifact handoffs.
 - Do not add retrocompatibility for superseded model names, configuration fields, class paths,

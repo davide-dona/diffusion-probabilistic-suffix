@@ -10,6 +10,7 @@ generation depend on these interfaces rather than on architecture internals.
 | Operation | Contract |
 | --- | --- |
 | `generate(item, num_samples=S)` | Read `item.prefix` only and return `GeneratedSuffix` with leading shape `[B, S]`. |
+| `generate_times(item, num_samples=S)` | Read `item.prefix` and the true `item.suffix.activities`, never true times, and return standardized times `[B, S, T]` for those activities. |
 | `forward(item)` | Trainable only. Run the architecture's stochastic or teacher-forced training pass and return a `ModelOutput`. |
 | `compute_loss(output, batch)` | Trainable only. Return a scalar mean loss for backpropagation and a `Loss` whose fields are sums over batch rows. |
 | `fit(dataset)` | Fitted only. Estimate the model from every cut of the train split and keep everything it learns in persistent buffers. |
@@ -49,12 +50,18 @@ and standardized time means and log-variances `[B, T]`.
 
 ## Shared Semantics
 
-- Generation must be invariant to every true suffix field for all architectures.
+- Generation must be invariant to every true suffix field for all architectures. Teacher-forced
+  times must be invariant to every true suffix field except its activities. Autoregressive models
+  feed back their own drawn times; the diffusion model redraws the activity canvas from the
+  forward process of the true one at every level; the fitted models draw each activity's time
+  from the train times of that activity.
 - PAD and SOS are structural tokens and cannot be sampled as suffix activities. EOT determines
   generated length. UNK remains a valid modeled activity.
 - Inter-event times are modeled in the codec's standardized space. Models do not produce remaining
   time; evaluation derives it by summing decoded, nonnegative inter-event minutes. Do not add an
   independent remaining-time head.
+- `src/models/backbones/retrieval.py` holds the train tables, suffix reading, and teacher-forced
+  time draws shared by the fitted models.
 - `src/models/embeddings.py` holds event-content and positional embeddings used across model
   families. `src/models/backbones/autoregressive` holds the causal prefix encoder, decoder trunk,
   attention, cache, and loss normalization reused by the two SuTraN baselines. Neither location
@@ -75,6 +82,7 @@ and standardized time means and log-variances `[B, T]`.
 | `head_sampling_transformer` | [`architectures/head_sampling_transformer/AGENTS.md`](architectures/head_sampling_transformer/AGENTS.md) | Implemented SuTraN-PH baseline |
 | `u_ed_sutran` | [`architectures/u_ed_sutran/AGENTS.md`](architectures/u_ed_sutran/AGENTS.md) | Implemented uncertainty-aware SuTraN |
 | `case_based` | `architectures/case_based/model.py` | Implemented non-neural case-based baseline |
+| `unconditional` | `architectures/unconditional/model.py` | Implemented skill reference that ignores the prefix |
 
 For local verification, use small inputs and reduced diffusion steps under the root guide's
 disposable-check policy. Do not start training.

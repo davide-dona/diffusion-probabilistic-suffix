@@ -1,3 +1,4 @@
+import zlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Self
@@ -19,16 +20,19 @@ class PreparedPrefix:
     generation sample counts give their draw multiplicities. A conformance share is the fraction
     of constraints the full trace satisfies, and full conformance is 1.0 when it satisfies them
     all. Numeric arrays retain every draw: suffix lengths and remaining times have shape [S, 1],
-    and inter-event times have shape [S, T], where T is the observed suffix length. Truth arrays
-    have shape [1] or [T]. Times are in minutes. Each intervals mapping gives, for every level of
-    `COVERAGE_LEVELS`, the [2, D] lower and upper bounds of the central interval of its draws,
-    and is empty when they have no draws or columns.
+    and inter-event times have shape [S, T], where T is the observed suffix length. The
+    teacher-forced arrays hold the times drawn for the true suffix activities, [S, T] per event
+    and [S, 1] summed. Truth arrays have shape [1] or [T]. Times are in minutes. Each intervals
+    mapping gives, for every level of `COVERAGE_LEVELS`, the [2, D] lower and upper bounds of
+    the central interval of its draws, and is empty when they have no draws or columns.
     """
 
     generation: Generation
     suffix_lengths: np.ndarray
     remaining_times: np.ndarray
     inter_event_times: np.ndarray
+    forced_inter_event_times: np.ndarray
+    forced_remaining_times: np.ndarray
     suffix_length_intervals: dict[float, np.ndarray]
     remaining_time_intervals: dict[float, np.ndarray]
     inter_event_time_intervals: dict[float, np.ndarray]
@@ -39,6 +43,27 @@ class PreparedPrefix:
     sample_full_conformance: np.ndarray
     observed_conformance_share: float
     observed_full_conformance: float
+
+    def generator(self, purpose: str) -> np.random.Generator:
+        """Return a random source fixed by this prefix's key and the purpose it serves.
+
+        The same prefix and purpose give the same draws in every run, process, and batch, and
+        different purposes give independent ones.
+
+        Args:
+            purpose: Names what the draws are for, such as the metric key.
+
+        Returns:
+            A fresh generator.
+        """
+        generation = self.generation
+        return np.random.default_rng(
+            [
+                zlib.crc32(purpose.encode()),
+                zlib.crc32(generation.case_id.encode()),
+                generation.prefix_len,
+            ]
+        )
 
     @classmethod
     def of_batch(cls, generations: Sequence[Generation], *, checker: Checker) -> list[Self]:
@@ -84,12 +109,15 @@ class PreparedPrefix:
         suffix_lengths = samples.lengths.astype(np.float64)[:, None]  # [S, 1]
         remaining_times = samples.remaining_time_minutes[:, None]  # [S, 1]
         inter_event_times = _aligned_inter_event_times(samples, width=len(truth))  # [S, T]
+        forced = generation.forced_inter_event_time_minutes  # [S, T]
 
         return cls(
             generation=generation,
             suffix_lengths=suffix_lengths,
             remaining_times=remaining_times,
             inter_event_times=inter_event_times,
+            forced_inter_event_times=forced,
+            forced_remaining_times=forced.sum(axis=1, keepdims=True),  # [S, 1]
             suffix_length_intervals=_central_intervals(suffix_lengths),
             remaining_time_intervals=_central_intervals(remaining_times),
             inter_event_time_intervals=_central_intervals(inter_event_times),

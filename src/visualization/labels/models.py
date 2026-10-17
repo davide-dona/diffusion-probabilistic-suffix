@@ -24,4 +24,5 @@ MODELS = {
     ),
     'u_ed_sutran': ModelStyle(label='U-ED-SuTraN', color='#57834B', marker='P', linestyle='--'),
     'case_based': ModelStyle(label='Case-Based', color='#8A6FA8', marker='s', linestyle='-'),
+    'unconditional': ModelStyle(label='Unconditional', color='#B8862B', marker='v', linestyle=':'),
 }

@@ -3,15 +3,15 @@ import torch
 from omegaconf import DictConfig
 
 from src.datasets.codec import DatasetCodec
-from src.datasets.dataset import TraceCut, TraceDataset
-from src.models.base import FittedSuffixModel
+from src.datasets.dataset import TraceCut
+from src.models.backbones.retrieval import TrainCutModel
 from src.models.contracts import GeneratedSuffix
 
 # Marks the start of a trace in a context, below every activity index.
 _START = -1
 
 
-class CaseBased(FittedSuffixModel):
+class CaseBased(TrainCutModel):
     """Sample real train suffixes whose preceding activities match the prefix's latest ones.
 
     A context is the run of activities right before a cut point, read backwards and closed by a
@@ -20,50 +20,17 @@ class CaseBased(FittedSuffixModel):
     activities, otherwise its last k activities for the largest k some cut point shares, and
     every cut point when not even the last activity was seen. Each sample is then the observed
     suffix, activities and inter-event times, of a cut point drawn uniformly from those matches.
+    Teacher-forced times ignore the match and draw from the train times of each activity.
     """
 
     def __init__(self, config: DictConfig, codec: DatasetCodec) -> None:
         """Create empty train tables, filled by `fit` or by loading a checkpoint."""
         super().__init__(codec=codec)
-        self.register_buffer(
-            name='case_activities', tensor=torch.zeros(size=(0, 0), dtype=torch.long)
-        )
-        self.register_buffer(name='case_inter_event_times', tensor=torch.zeros(size=(0, 0)))
-        self.register_buffer(name='case_lengths', tensor=torch.zeros(size=(0,), dtype=torch.long))
-        self.register_buffer(name='cuts', tensor=torch.zeros(size=(0, 2), dtype=torch.long))
         self._index: tuple[np.ndarray, np.ndarray] | None = None
 
-    def fit(self, dataset: TraceDataset) -> None:
-        """Store every case and cut point of the train split."""
-        tables = dataset.case_cuts()
-        if not len(tables.cuts):
-            raise ValueError('The case-based model needs at least one train cut point')
-        device = self.cuts.device
-        self.case_activities = tables.activities.to(device)
-        self.case_inter_event_times = tables.inter_event_times.to(device)
-        self.case_lengths = tables.lengths.to(device)
-        self.cuts = tables.cuts.to(device)
+    def _invalidate(self) -> None:
+        super()._invalidate()
         self._index = None
-
-    def _load_from_state_dict(
-        self,
-        state_dict: dict,
-        prefix: str,
-        local_metadata: dict,
-        strict: bool,
-        missing_keys: list[str],
-        unexpected_keys: list[str],
-        error_msgs: list[str],
-    ) -> None:
-        """Resize the train tables to the stored ones, whose sizes depend on the split."""
-        for name, buffer in self._buffers.items():
-            stored = state_dict.get(prefix + name)
-            if buffer is not None and stored is not None:
-                self._buffers[name] = torch.empty_like(stored, device=buffer.device)
-        self._index = None
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
 
     @torch.no_grad()
     def generate(self, item: TraceCut, *, num_samples: int) -> GeneratedSuffix:
@@ -129,8 +96,7 @@ class CaseBased(FittedSuffixModel):
         Returns:
             One `[lower, upper, depth]` row per prefix, `[B, 3]`, as `_match` returns them.
         """
-        if not len(self.cuts):
-            raise RuntimeError('The case-based model must be fitted before it generates')
+        self._require_fitted()
         _, contexts = self._contexts()
         prefix_activities = item.prefix.activities.cpu().numpy()
         prefix_lengths = item.prefix.length.cpu().numpy()
@@ -189,40 +155,3 @@ class CaseBased(FittedSuffixModel):
                 break
             lower, upper, matched = first, last, depth + 1
         return lower, upper, matched
-
-    def _suffixes(self, cut_ids: torch.Tensor, *, cap: int) -> GeneratedSuffix:
-        """Read the observed suffix after each cut point, closed by EOT and padded.
-
-        Args:
-            cut_ids: Which cut points to read, `[R]`.
-            cap: The most positions a suffix may take; a longer one is cut there without EOT.
-        Returns:
-            The suffixes, `[R, steps]`, with `steps` the widest of them plus its EOT, at most
-            `cap`.
-        """
-        case = self.cuts[cut_ids, 0]  # [R]
-        start = self.cuts[cut_ids, 1]  # [R]
-        lengths = self.case_lengths[case] - start  # [R]
-        steps = min(cap, int(lengths.max()) + 1)
-        positions = torch.arange(end=steps, device=cut_ids.device)  # [T]
-        source = (start.unsqueeze(dim=1) + positions.unsqueeze(dim=0)).clamp(
-            max=self.case_activities.size(dim=1) - 1
-        )  # [R, T]
-        rows = case.unsqueeze(dim=1)  # [R, 1]
-        real = positions.unsqueeze(dim=0) < lengths.unsqueeze(dim=1)  # [R, T]
-        activities = (
-            self.case_activities[rows, source]
-            .masked_fill(mask=~real, value=self.pad_activity_index)
-            .masked_fill(
-                mask=positions.unsqueeze(dim=0) == lengths.unsqueeze(dim=1),
-                value=self.eot_activity_index,
-            )
-        )
-        return GeneratedSuffix(
-            activities=activities,
-            lengths=lengths.clamp(max=steps),
-            inter_event_times=self.case_inter_event_times[rows, source].masked_fill(
-                mask=~real, value=0.0
-            ),
-            used_sentinel=lengths >= cap,
-        )

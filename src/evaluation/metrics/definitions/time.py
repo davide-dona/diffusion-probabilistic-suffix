@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.evaluation.metrics.helpers import coverage_gap, crps
+from src.evaluation.metrics.helpers import coverage_gap, crps, pit
 from src.evaluation.metrics.metadata import Direction, MetricGroup
 from src.evaluation.metrics.registry import METRICS
 from src.evaluation.prepared import PreparedPrefix
@@ -72,6 +72,93 @@ def inter_event_time_crps_days(context: PreparedPrefix) -> float:
         Sampled inter-event-time CRPS in days. No draws or predicted quantities score zero.
     """
     return crps(context.inter_event_times, context.true_inter_event_times) / MINUTES_PER_DAY
+
+
+@METRICS.register(
+    'teacher_forced_remaining_time_crps_days',
+    label='Teacher-forced remaining-time CRPS',
+    group=MetricGroup.REMAINING_TIME,
+    unit='days',
+    bounds=(0.0, None),
+    direction=Direction.LOWER,
+)
+def teacher_forced_remaining_time_crps_days(context: PreparedPrefix) -> float:
+    """Return the remaining-time CRPS in days of times drawn for the true suffix activities.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The CRPS of the summed teacher-forced times. No draws score zero.
+    """
+    return crps(context.forced_remaining_times, context.true_remaining_time) / MINUTES_PER_DAY
+
+
+@METRICS.register(
+    'teacher_forced_inter_event_time_crps_days',
+    label='Teacher-forced inter-event-time CRPS',
+    group=MetricGroup.INTER_EVENT_TIME,
+    unit='days',
+    bounds=(0.0, None),
+    direction=Direction.LOWER,
+)
+def teacher_forced_inter_event_time_crps_days(context: PreparedPrefix) -> float:
+    """Return the inter-event-time CRPS in days of times drawn for the true suffix activities.
+
+    Every draw times the same true events, so each event is scored against draws of its own
+    time, unaffected by activity or length errors.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The CRPS averaged over the true suffix events. No draws score zero.
+    """
+    return crps(context.forced_inter_event_times, context.true_inter_event_times) / MINUTES_PER_DAY
+
+
+@METRICS.register(
+    'remaining_time_pit',
+    label='Remaining-time PIT',
+    group=MetricGroup.REMAINING_TIME,
+    bounds=(0.0, 1.0),
+)
+def remaining_time_pit(context: PreparedPrefix) -> float:
+    """Return the randomized PIT of the observed remaining time among the sampled ones.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The transform in [0, 1], uniform over prefixes under calibration. No draws give 0.5.
+    """
+    return pit(
+        context.remaining_times,
+        context.true_remaining_time[0],
+        generator=context.generator('remaining_time_pit'),
+    )
+
+
+@METRICS.register(
+    'teacher_forced_remaining_time_pit',
+    label='Teacher-forced remaining-time PIT',
+    group=MetricGroup.REMAINING_TIME,
+    bounds=(0.0, 1.0),
+)
+def teacher_forced_remaining_time_pit(context: PreparedPrefix) -> float:
+    """Return the randomized PIT of the observed remaining time among the teacher-forced ones.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The transform in [0, 1], uniform over prefixes under calibration. No draws give 0.5.
+    """
+    return pit(
+        context.forced_remaining_times,
+        context.true_remaining_time[0],
+        generator=context.generator('teacher_forced_remaining_time_pit'),
+    )
 
 
 @METRICS.register(

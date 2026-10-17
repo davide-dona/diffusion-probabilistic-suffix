@@ -36,7 +36,10 @@ def generate_batch(
     num_samples: int,
     codec: DatasetCodec,
 ) -> list[Generation]:
-    """Generate `num_samples` suffixes per prefix of one batch.
+    """Generate `num_samples` suffixes per prefix of one batch, and times for its true suffix.
+
+    The suffixes read the prefix only. The teacher-forced times are a separate pass that also
+    reads the true suffix activities, never the true times.
 
     Args:
         model: The model to generate with, already in eval mode.
@@ -47,8 +50,9 @@ def generate_batch(
         num_samples generation per prefix of the batch, in the batch's own order, each naming t
         he case it was cut from.
     """
-    # Generate the suffixes
+    # Generate the suffixes, then times for the true suffix activities.
     generated = model.generate(item=batch, num_samples=num_samples)
+    forced_times = model.generate_times(item=batch, num_samples=num_samples).cpu().numpy()
     activity_codec = codec.activity_codes
 
     # Every suffix closes on an EOT, so true lengths are one less tha batch.suffix.length.
@@ -62,6 +66,7 @@ def generate_batch(
     true_activities = batch.suffix.activities.cpu().numpy()  # [batch_size, seq_len]
     true_inter_event_times = batch.inter_event_times.cpu().numpy()  # [batch_size, seq_len]
     prefix_activities = batch.prefix.activities.cpu().numpy()  # [batch_size, seq_len]
+    prefix_times = batch.prefix.inter_event_times.cpu().numpy()  # [batch_size, seq_len]
     prefix_lengths = batch.prefix.length.cpu().numpy()  # [batch_size]
 
     return [
@@ -69,6 +74,9 @@ def generate_batch(
             case_id=batch.case_id[position],
             prefix_activities=activity_codec.encode(
                 codec.activity.decode(prefix_activities[position], length=prefix_lengths[position])
+            ),
+            prefix_inter_event_time_minutes=codec.input_inter_event_time.denormalize(
+                prefix_times[position, : prefix_lengths[position]]
             ),
             samples=Draws.of(
                 [
@@ -90,6 +98,12 @@ def generate_batch(
                 activities=true_activities[position],
                 inter_event_times=true_inter_event_times[position],
                 length=true_lengths[position],
+            ),
+            forced_inter_event_time_minutes=np.maximum(
+                codec.inter_event_time.denormalize(
+                    forced_times[position, :, : true_lengths[position]]
+                ),
+                0.0,
             ),
         )
         for position in range(len(true_lengths))

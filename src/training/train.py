@@ -231,7 +231,7 @@ def train(
         )
         score = selection_score(gen_metrics.scores.flatten())
         if not math.isfinite(score):
-            raise ValueError(f'Nonfinite validation energy score: {score}')
+            raise ValueError(f'Nonfinite validation selection score: {score}')
         is_best = score < best_score
         if best_score == float('inf') or best_score - score > abs(best_score) * (
             settings.min_delta_perc
@@ -305,7 +305,7 @@ def fit(
     )
     score = selection_score(metrics.scores.flatten())
     if not math.isfinite(score):
-        raise ValueError(f'Nonfinite validation energy score: {score}')
+        raise ValueError(f'Nonfinite validation selection score: {score}')
     observer.on_best(model, 0, score)
     return TrainingResult(
         best_step=0, selection_score=score, step=0, reason='fitted on the train split'

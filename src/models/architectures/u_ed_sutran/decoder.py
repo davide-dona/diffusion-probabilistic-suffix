@@ -82,3 +82,11 @@ class UncertaintyAwareDecoder(CausalDecoder[UncertaintyAwareDecoderOutput]):
             log_variance=output.inter_event_time_log_variances,
         )
         return activities, times
+
+    def sample_time(self, features: torch.Tensor, activities: torch.Tensor) -> torch.Tensor:
+        """Draw a Gaussian standardized time, which does not depend on `activities`."""
+        output = self._distributions(features)
+        return sample_gaussian(
+            mean=output.inter_event_time_means,
+            log_variance=output.inter_event_time_log_variances,
+        )

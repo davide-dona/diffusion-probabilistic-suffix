@@ -1,5 +1,7 @@
 import math
 import textwrap
+from collections.abc import Sequence
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,10 +11,12 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 
-from src.evaluation import Axis
+from src.evaluation import Axis, read_prefix_scores, score_files
 from src.evaluation.metrics.metadata import Direction, Metric, Owner
+from src.uncertainty.resampling import resample_means
+from src.uncertainty.significance import SEED
 from src.visualization import labels
-from src.visualization.catalogue import Plot
+from src.visualization.catalogue import CalibrationPlot, Plot
 from src.visualization.style import (
     DATASET_HEIGHT,
     FIGURE_OVERHEAD,
@@ -31,6 +35,23 @@ AXIS_ARROWS = {
     Direction.ZERO: '\N{NO-BREAK SPACE}→0',
     Direction.NONE: '',
 }
+
+
+# Points of [0, 1] each PIT curve is read at, and case bootstrap draws behind its 95% band.
+PIT_POINTS = 51
+PIT_BAND_RESAMPLES = 1000
+
+
+def _legend(figure: Figure, grid: np.ndarray) -> None:
+    """Draw one legend above the figure, deduplicating entries across panels."""
+    keys: dict[str, Artist] = {}
+    for row in grid:
+        for axes in row:
+            handles, written = axes.get_legend_handles_labels()
+            for label, handle in zip(written, handles, strict=True):
+                keys.setdefault(label, handle)
+    if len(keys) > 1:
+        figure.legend(list(keys.values()), list(keys), loc='outside upper center', ncols=len(keys))
 
 
 def _draw_metric(axes: Axes, frame: pd.DataFrame, metric: Metric) -> int:
@@ -175,13 +196,101 @@ def compose_figure(frame: pd.DataFrame, plot: Plot) -> Figure:
         for axes, (breakdown, _) in zip(grid[-1], columns, strict=True):
             axes.set_xlabel(AXIS_LABELS[breakdown])
 
-    # Deduplicate legend entries across panels.
-    keys: dict[str, Artist] = {}
-    for row in grid:
+    _legend(figure, grid)
+    return figure
+
+
+def pit_curve(
+    case_ids: np.ndarray, values: np.ndarray, points: np.ndarray, *, generator: np.random.Generator
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return the PIT calibration curve and its 95% case bootstrap band.
+
+    The curve is the empirical CDF of the per-prefix PIT values minus the uniform CDF, so a
+    calibrated forecast gives zero. It falls then rises for a forecast too narrow, rises then
+    falls for one too wide, and stays on one side for a biased one: above zero when outcomes
+    fall low in the draws.
+
+    Args:
+        case_ids: Case of each prefix `[N]`, its prefixes adjacent.
+        values: PIT value of each prefix `[N]`.
+        points: Where the curve is read, `[G]` in [0, 1].
+        generator: Random source for case resampling.
+
+    Returns:
+        The curve, and the lower and upper band, each `[G]`.
+    """
+    below = (values[:, None] <= points[None, :]).astype(np.float64)  # [N, G]
+    starts = np.flatnonzero(np.r_[True, case_ids[1:] != case_ids[:-1]])
+    totals = np.add.reduceat(below, starts, axis=0)  # [cases, G]
+    counts = np.diff(np.r_[starts, len(case_ids)])  # [cases]
+    curve = totals.sum(axis=0) / counts.sum() - points
+    resampled = np.concatenate(
+        list(
+            resample_means(
+                totals=totals, counts=counts, resamples=PIT_BAND_RESAMPLES, generator=generator
+            )
+        )
+    )  # [R, G]
+    low, high = np.percentile(resampled, [2.5, 97.5], axis=0)
+    return curve, low - points, high - points
+
+
+def compose_calibration_figure(reports: Sequence[Path], plot: CalibrationPlot) -> Figure:
+    """Compose PIT calibration curves for every model, dataset, and PIT metric.
+
+    Args:
+        reports: Evaluation reports with per-prefix score files beside them.
+        plot: Figure definition.
+
+    Returns:
+        Composed Matplotlib figure, one row per dataset and one column per metric.
+    """
+    files = score_files(reports)
+    datasets = labels.ordered(files, labels.DATASETS, kind='dataset')
+    keys = [metric.key for metric in plot.metrics]
+    points = np.linspace(0.0, 1.0, PIT_POINTS)
+    figure, grid = plt.subplots(
+        nrows=len(datasets),
+        ncols=len(plot.metrics),
+        figsize=(PAGE_WIDTH, len(datasets) * DATASET_HEIGHT + FIGURE_OVERHEAD),
+        squeeze=False,
+        sharex=True,
+        sharey='col',
+        constrained_layout=True,
+    )
+    for dataset, row in zip(datasets, grid, strict=True):
+        for model in labels.ordered(files[dataset], labels.MODELS, kind='model'):
+            style = labels.MODELS[model]
+            scores = read_prefix_scores(files[dataset][model], columns=['case_id', *keys])
+            scores = scores.sort_values('case_id', kind='stable')
+            case_ids = scores['case_id'].to_numpy()
+            for axes, key in zip(row, keys, strict=True):
+                curve, low, high = pit_curve(
+                    case_ids,
+                    scores[key].to_numpy(dtype=np.float64),
+                    points,
+                    generator=np.random.default_rng(SEED),
+                )
+                axes.fill_between(points, low, high, color=style.color, alpha=0.15, linewidth=0)
+                axes.plot(
+                    points,
+                    curve,
+                    label=style.label,
+                    color=style.color,
+                    linestyle=style.linestyle,
+                )
         for axes in row:
-            handles, written = axes.get_legend_handles_labels()
-            for label, handle in zip(written, handles, strict=True):
-                keys.setdefault(label, handle)
-    if len(keys) > 1:
-        figure.legend(list(keys.values()), list(keys), loc='outside upper center', ncols=len(keys))
+            axes.axhline(0.0, color=labels.LOG_STYLE.color, linewidth=0.5)
+            axes.set_xlim(0.0, 1.0)
+            axes.set_xticks([0.0, 0.5, 1.0])
+        row[0].set_ylabel(
+            labels.DATASETS[dataset], rotation=0, ha='right', va='center', labelpad=12
+        )
+
+    figure.align_ylabels(grid[:, 0])
+    for axes, metric in zip(grid[0], plot.metrics, strict=True):
+        axes.set_title(textwrap.fill(metric.label, width=TITLE_WIDTH))
+    figure.supxlabel('PIT value')
+    figure.supylabel('Empirical PIT CDF minus uniform')
+    _legend(figure, grid)
     return figure

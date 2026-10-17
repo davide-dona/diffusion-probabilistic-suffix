@@ -64,6 +64,30 @@ class HeadSamplingTransformer(AutoregressiveSuffixModel[DecoderOutput]):
             generated=generated, batch_size=item.prefix.length.size(dim=0)
         )
 
+    @torch.no_grad()
+    def generate_times(self, item: TraceCut, *, num_samples: int) -> torch.Tensor:
+        """Draw `num_samples` time sequences for each prefix's true suffix activities.
+
+        Args:
+            item: A batch from `TraceDataset`, read for its prefix and true suffix activities.
+            num_samples: How many time sequences to draw per prefix.
+        Returns:
+            Standardized times `[batch_size, num_samples, steps]`, `steps` being the longest
+            true suffix of the batch.
+        """
+        batch_size = item.prefix.length.size(dim=0)
+        prefix_pad_mask = item.prefix.pad_mask()  # [B, P]
+        prefix = self.encoder(events=item.prefix, pad_mask=prefix_pad_mask)
+        steps = int((item.suffix.length - 1).max())
+        times = self.decoder.generate_times(
+            prefix_encoded=prefix.repeat_interleave(repeats=num_samples, dim=0),  # [B * S, P, D]
+            prefix_pad_mask=prefix_pad_mask.repeat_interleave(repeats=num_samples, dim=0),
+            activities=item.suffix.activities[:, :steps].repeat_interleave(
+                repeats=num_samples, dim=0
+            ),  # [B * S, steps]
+        )
+        return times.view(batch_size, num_samples, steps)
+
     def compute_loss(self, output: DecoderOutput, batch: TraceCut) -> tuple[torch.Tensor, Loss]:
         """Score a teacher-forced pass by equal-weight trace reconstruction loss."""
         activity_loss = F.cross_entropy(

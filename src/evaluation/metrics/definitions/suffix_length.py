@@ -1,4 +1,4 @@
-from src.evaluation.metrics.helpers import coverage_gap, crps, mae
+from src.evaluation.metrics.helpers import coverage_gap, crps, mae, pit
 from src.evaluation.metrics.metadata import Direction, MetricGroup
 from src.evaluation.metrics.registry import METRICS
 from src.evaluation.prepared import PreparedPrefix
@@ -87,6 +87,30 @@ def suffix_length_crps(context: PreparedPrefix) -> float:
         The sampled suffix-length CRPS. No draws or predicted quantities score zero.
     """
     return crps(context.suffix_lengths, context.true_suffix_length)
+
+
+@METRICS.register(
+    'suffix_length_pit',
+    label='Suffix length PIT',
+    group=MetricGroup.SUFFIX_LENGTH,
+    bounds=(0.0, 1.0),
+)
+def suffix_length_pit(context: PreparedPrefix) -> float:
+    """Return the randomized PIT of the observed suffix length among the sampled ones.
+
+    Lengths are integers, so ties are broken uniformly at random.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The transform in [0, 1], uniform over prefixes under calibration. No draws give 0.5.
+    """
+    return pit(
+        context.suffix_lengths,
+        context.true_suffix_length[0],
+        generator=context.generator('suffix_length_pit'),
+    )
 
 
 @METRICS.register(

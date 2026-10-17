@@ -26,6 +26,7 @@ class Owner(StrEnum):
 class MetricGroup(StrEnum):
     """The evaluation question a metric answers."""
 
+    JOINT = 'joint'
     ACTIVITY = 'activity'
     SUFFIX_LENGTH = 'suffix_length'
     REMAINING_TIME = 'remaining_time'

@@ -242,6 +242,60 @@ class CausalDecoder[OutputT](nn.Module, ABC):
     def sample(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Draw one activity and standardized duration per row."""
 
+    @abstractmethod
+    def sample_time(self, features: torch.Tensor, activities: torch.Tensor) -> torch.Tensor:
+        """Draw one standardized duration per row for the activity `[rows]` written there."""
+
+    def generate_times(
+        self,
+        prefix_encoded: torch.Tensor,
+        prefix_pad_mask: torch.Tensor,
+        activities: torch.Tensor,
+    ) -> torch.Tensor:
+        """Decode a duration for every given activity, reading the activities as the history.
+
+        Each step reads the given activity of the previous step and the duration drawn for it,
+        exactly as `generate` reads its own draws, so only the activities are teacher-forced.
+
+        Args:
+            prefix_encoded: The encoded prefix events, `[rows, prefix_seq_len, d_model]`.
+            prefix_pad_mask: True where a prefix position holds padding.
+            activities: The suffix activities to time, `[rows, steps]`.
+        Returns:
+            Standardized durations, `[rows, steps]`.
+        """
+        rows, steps = activities.shape
+        prefix_length = prefix_pad_mask.logical_not().sum(dim=1)  # [rows]
+        next_activity = torch.full(
+            size=(rows, 1),
+            fill_value=self.sos_activity_index,
+            dtype=torch.long,
+            device=activities.device,
+        )
+        next_time = torch.zeros(size=(rows, 1), device=activities.device)
+        times = torch.zeros(
+            size=(rows, steps), dtype=prefix_encoded.dtype, device=activities.device
+        )
+        caches = [
+            layer.init_cache(prefix_encoded=prefix_encoded, max_steps=steps)
+            for layer in self.layers
+        ]
+        for position in range(steps):
+            hidden, caches = self._run_layers(
+                activities=next_activity,
+                times=next_time,
+                prefix_encoded=prefix_encoded,
+                prefix_pad_mask=prefix_pad_mask,
+                start=prefix_length + position,
+                caches=caches,
+            )
+            features = self.shared_layer(hidden[:, 0])  # [rows, head_hidden_dim]
+            sampled = self.sample_time(features, activities[:, position])  # [rows]
+            times[:, position] = sampled
+            next_activity = activities[:, position : position + 1]  # [rows, 1]
+            next_time = self._input_time(sampled).unsqueeze(dim=1)  # [rows, 1]
+        return times
+
     def generate(
         self,
         prefix_encoded: torch.Tensor,

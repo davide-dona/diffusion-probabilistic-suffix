@@ -10,6 +10,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from src.artifacts import Provenance
 from src.evaluation.scoring import EvaluationSummary, LengthSummary
+from src.evaluation.traces import TraceSummary
 
 
 @dataclass(frozen=True)
@@ -17,11 +18,13 @@ class EvaluationReport:
     """Evaluation results and source artifact provenance.
 
     provenance identifies the dataset, model, training run, dataset fingerprint, and checkpoint
-    hash. summary contains overall scores and both observed-length breakdowns.
+    hash. summary contains overall scores and both observed-length breakdowns; traces holds the
+    set-level precision and recall of generated full traces.
     """
 
     provenance: Provenance
     summary: EvaluationSummary
+    traces: TraceSummary
 
     def __post_init__(self) -> None:
         self.provenance.require_generations_source()
@@ -42,11 +45,11 @@ class EvaluationReport:
         """
         path = Path(path)
         payload = json.loads(path.read_bytes())
-        if not isinstance(payload, dict) or set(payload) != {'provenance', 'summary'}:
+        if not isinstance(payload, dict) or set(payload) != {'provenance', 'summary', 'traces'}:
             raise ValueError(f'{path} is not an evaluation report')
         provenance = Provenance.from_dict(payload['provenance'])
         report = _REPORT_ADAPTER.validate_python(payload)
-        return cls(provenance=provenance, summary=report.summary)
+        return cls(provenance=provenance, summary=report.summary, traces=report.traces)
 
     def write(self, path: str | Path) -> Path:
         """Write the report as JSON.
@@ -106,10 +109,21 @@ def _summary_rows(
 
 
 def _report_rows(report: EvaluationReport) -> Iterator[dict[str, object]]:
-    """Yield overall scores followed by prefix-length and suffix-length breakdowns."""
+    """Yield overall scores and trace values, then prefix-length and suffix-length breakdowns.
+
+    Trace values are overall rows whose `prefixes` counts the cases compared.
+    """
     identity = {'dataset': report.provenance.run.dataset, 'model': report.provenance.run.model}
     summary = report.summary
     yield from _summary_rows(summary, identity=identity, axis=Axis.OVERALL, length=None)
+    for metric, value in report.traces.values().items():
+        yield identity | {
+            'axis': Axis.OVERALL,
+            'length': None,
+            'prefixes': report.traces.cases,
+            'metric': metric,
+            'value': value,
+        }
     for entry in summary.by_prefix_length:
         yield from _summary_rows(entry, identity=identity, axis=Axis.PREFIX, length=entry.length)
     for entry in summary.by_suffix_length:
@@ -124,7 +138,8 @@ def read_reports(files: Sequence[Path]) -> pd.DataFrame:
 
     Returns:
         Long-form scores with REPORT_COLUMNS, ordered by report, aggregation level, bucket,
-        and registered metric. Overall rows have a missing length; empty input retains the schema.
+        and registered metric, with trace values after the overall scores. Overall rows have a
+        missing length; empty input retains the schema.
 
     Raises:
         ValueError: If a report or its provenance is invalid, or a dataset repeats a model.

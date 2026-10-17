@@ -104,6 +104,34 @@ class UEDSuTraN(AutoregressiveSuffixModel[UncertaintyAwareDecoderOutput]):
             generated=generated, batch_size=item.prefix.length.size(dim=0)
         )
 
+    @torch.no_grad()
+    def generate_times(self, item: TraceCut, *, num_samples: int) -> torch.Tensor:
+        """Draw time sequences for the true suffix activities under independent dropout masks.
+
+        Args:
+            item: A batch from `TraceDataset`, read for its prefix and true suffix activities.
+            num_samples: How many time sequences to draw per prefix.
+        Returns:
+            Standardized times `[batch_size, num_samples, steps]`, `steps` being the longest
+            true suffix of the batch.
+        """
+        batch_size = item.prefix.length.size(dim=0)
+        prefix = self._repeat_prefix(
+            prefix=item.prefix, num_samples=num_samples
+        )  # [B, ...] -> [B * S, ...]
+        prefix_pad_mask = prefix.pad_mask()
+        steps = int((item.suffix.length - 1).max())
+        with self._monte_carlo_dropout():
+            encoded = self.encoder(events=prefix, pad_mask=prefix_pad_mask)
+            times = self.decoder.generate_times(
+                prefix_encoded=encoded,
+                prefix_pad_mask=prefix_pad_mask,
+                activities=item.suffix.activities[:, :steps].repeat_interleave(
+                    repeats=num_samples, dim=0
+                ),  # [B * S, steps]
+            )
+        return times.view(batch_size, num_samples, steps)
+
     @contextmanager
     def _monte_carlo_dropout(self) -> Iterator[None]:
         """Enable dropout during generation and restore every module's prior mode."""

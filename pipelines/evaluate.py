@@ -16,7 +16,9 @@ from src import artifacts
 from src.config_validation import validate_evaluation_config
 from src.datasets.codec import ActivityCodec
 from src.evaluation import EvaluationReport, EvaluationSummary, PrefixSummary, stream_prefix_scores
-from src.inference.generation_store import Generations
+from src.evaluation.metrics.alignment import TimedEvents
+from src.evaluation.traces import full_traces, trace_keys, trace_precision_recall
+from src.inference.generation_store import Generations, PrefixKey
 from src.logs.declare import code_checker, load_model
 
 
@@ -26,6 +28,7 @@ class _Worker:
 
     generations: Generations
     checker: Checker
+    trace_keys: frozenset[PrefixKey]
 
 
 # Set by `_init_worker` in each pool process, and read by `_score_block` there. Left
@@ -33,12 +36,17 @@ class _Worker:
 _worker: _Worker
 
 
-def _init_worker(generations_file: Path, model: DeclareModel) -> None:
+# One observed and one generated full trace for a prefix chosen by `trace_keys`.
+type TracePair = tuple[TimedEvents, TimedEvents]
+
+
+def _init_worker(generations_file: Path, model: DeclareModel, keys: frozenset[PrefixKey]) -> None:
     """Open the file and prepare the Declare model once for this process.
 
     Args:
         generations_file: The generations every task of this process reads from.
         model: The Declare model conformance is checked against.
+        keys: The prefixes whose full traces are returned for trace precision and recall.
     """
     global _worker
     generations = Generations(generations_file)
@@ -46,24 +54,34 @@ def _init_worker(generations_file: Path, model: DeclareModel) -> None:
     _worker = _Worker(
         generations=generations,
         checker=code_checker(model, ActivityCodec.from_vocabulary(vocabulary)),
+        trace_keys=keys,
     )
 
 
-def _score_block(block: int) -> list[PrefixSummary]:
+def _score_block(block: int) -> tuple[list[PrefixSummary], dict[PrefixKey, TracePair]]:
     """Score every prefix of one block of the generations file, in the order they were written.
 
     Args:
         block: Which block of the file `_init_worker` opened to score.
     Returns:
-        One entry per prefix of the block, in the order it was written.
+        One entry per prefix of the block, in the order it was written, and the full traces of
+        the block's prefixes among the worker's trace keys.
     """
-    return PrefixSummary.of_batch(_worker.generations.block(block), checker=_worker.checker)
+    generations = _worker.generations.block(block)
+    traces = {
+        key: full_traces(generation)
+        for generation in generations
+        if (key := (generation.case_id, generation.prefix_len)) in _worker.trace_keys
+    }
+    return PrefixSummary.of_batch(generations, checker=_worker.checker), traces
 
 
 def _score_in_parallel(
     generations_file: Path,
     *,
     model: DeclareModel,
+    keys: frozenset[PrefixKey],
+    traces: dict[PrefixKey, TracePair],
     blocks: int,
     prefixes: int,
     workers: int | None,
@@ -80,6 +98,8 @@ def _score_in_parallel(
             a path rather than as read prefixes, since each worker opens the file itself and only
             the scores it computes cross back.
         model: The Declare model to check conformance against.
+        keys: The prefixes whose full traces trace precision and recall compare.
+        traces: Filled with the full traces of `keys` as their blocks are scored.
         blocks: How many blocks the file holds, one unit of work each.
         prefixes: How many prefixes it holds in total, for the progress bar.
         workers: How many processes to score with, or `None` for one per available CPU.
@@ -91,14 +111,15 @@ def _score_in_parallel(
         ProcessPoolExecutor(
             max_workers=workers,
             initializer=_init_worker,
-            initargs=(generations_file, model),
+            initargs=(generations_file, model, keys),
         ) as executor,
         tqdm(total=prefixes, desc='Scoring', unit='prefix') as progress,
     ):
         # `map` yields the blocks in the order they were submitted however they finished, so the
         # scores arrive in the order the file holds, and the means over them stay reproducible.
-        for block in executor.map(_score_block, range(blocks)):
+        for block, block_traces in executor.map(_score_block, range(blocks)):
             progress.update(len(block))
+            traces.update(block_traces)
             yield from block
 
 
@@ -160,6 +181,8 @@ def run(generations_file: Path, workers: int | None) -> None:
     started = time.perf_counter()
 
     scores_path = output_path('prefix_scores.parquet')
+    chosen = trace_keys(keys)
+    traces: dict[PrefixKey, TracePair] = {}
 
     # Summarize the generation, folding each prefix's scores in as the pool hands them back and
     # writing them out on the way past. One stream, so the per-prefix file costs a write rather
@@ -173,6 +196,8 @@ def run(generations_file: Path, workers: int | None) -> None:
                 _score_in_parallel(
                     generations_file,
                     model=model,
+                    keys=chosen,
+                    traces=traces,
                     blocks=blocks,
                     prefixes=prefixes,
                     workers=workers,
@@ -183,10 +208,19 @@ def run(generations_file: Path, workers: int | None) -> None:
             )
         )
 
-    report = EvaluationReport(provenance=provenance, summary=summary)
+    with step(f'Comparing {len(traces):,} generated and observed full traces'):
+        ordered = [traces[key] for key in sorted(traces)]
+        trace_summary = trace_precision_recall(
+            observed=[observed for observed, _ in ordered],
+            generated=[generated for _, generated in ordered],
+        )
+
+    report = EvaluationReport(provenance=provenance, summary=summary, traces=trace_summary)
     path = report.write(output_path('evaluation.json'))
     print(
         f'Scored {summary.prefixes:,} prefixes in {duration(time.perf_counter() - started)}, '
+        f'trace precision {trace_summary.precision:.3f} and recall {trace_summary.recall:.3f} '
+        f'over {trace_summary.cases:,} cases. '
         f'Wrote evaluation report to {path} and its per-prefix scores to {scores_path}'
     )
 
