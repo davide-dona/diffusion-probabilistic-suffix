@@ -11,8 +11,9 @@ from src import artifacts
 
 # Each cell of the PDE grid is split into 2**DYADIC_ORDER steps along both paths.
 DYADIC_ORDER = 1
-# Upper bound on the refined grid cells of one solver call, which bounds its device memory.
-CHUNK_CELLS = 1 << 25
+# Upper bound on the refined grid cells of one solver call. A call holds about six float64 values
+# per cell at its peak, so this bounds its device memory at about 6.4 GB.
+CHUNK_CELLS = 1 << 27
 # Pairwise distances of the bandwidth median are visited in tiles of this many rows and columns.
 _TILE_ROWS = 4096
 _TILE_COLUMNS = 16384
@@ -232,24 +233,27 @@ class SignatureKernel:
         static = torch.exp_(squared.mul_(-0.5 / self.bandwidth**2))  # [B, N, M]
         increments = static[:, 1:, 1:] + static[:, :-1, :-1] - static[:, 1:, :-1]
         increments -= static[:, :-1, 1:]  # [B, N - 1, M - 1]
-        if DYADIC_ORDER:
-            steps = 2**DYADIC_ORDER
-            increments = increments.repeat_interleave(steps, dim=1)
-            increments = increments.repeat_interleave(steps, dim=2) / steps**2
+        del squared, static
         if increments.shape[1] > increments.shape[2]:
             increments = increments.transpose(1, 2)
-        batch, rows, columns = increments.shape
+        steps = 2**DYADIC_ORDER
+        batch, rows, columns = increments.shape[0], *(steps * size for size in increments.shape[1:])
         if rows == 0:
             return np.ones(batch)
         diagonals = rows + columns - 1
-        # Skew the grid so cell (i, j) sits at [d, i] with d = i + j, making every anti-diagonal
-        # one contiguous slice. Cells outside the grid get a zero increment.
+        # Skew the refined grid so cell (i, j) sits at [d, i] with d = i + j, making every
+        # anti-diagonal one contiguous slice. A refined cell reads the increment of the grid cell
+        # it splits, divided by its 4**DYADIC_ORDER parts; cells outside the grid get zero.
         row = torch.arange(rows, device=self.device)
         column = torch.arange(diagonals, device=self.device)[:, None] - row  # [diagonals, rows]
-        inside = (column >= 0) & (column < columns)
-        skewed = increments[:, row, column.clamp(0, columns - 1)].where(inside, 0.0)
-        first = torch.addcmul(skewed * 0.5 + 1.0, skewed, skewed, value=1.0 / 12.0)
-        second = torch.addcmul(torch.ones_like(skewed), skewed, skewed, value=-1.0 / 12.0)
+        outside = (column < 0) | (column >= columns)
+        skewed = increments[:, row // steps, column.clamp(0, columns - 1) // steps]
+        del increments
+        skewed.div_(steps**2).masked_fill_(outside, 0.0)  # [B, diagonals, rows]
+        # The scheme's coefficients are 1 + x/2 + x²/12 and 1 - x²/12, built in place.
+        second = skewed.square().mul_(-1.0 / 12.0).add_(1.0)
+        first = skewed.mul_(0.5).add_(2.0).sub_(second)
+        del skewed
         # Points are skewed the same way, point (i, j) at [i + j, i]. Every point starts at the
         # boundary value one; a point left of the grid stays one, since the cell producing it has
         # a zero increment and only ones as inputs, and a point right of the grid is never read

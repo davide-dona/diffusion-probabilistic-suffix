@@ -117,7 +117,8 @@ difference from it; it does not establish equivalence.
 ## Parallelism
 
 Evaluation assigns Parquet row groups to spawned worker processes, so each can open its own CUDA
-context on the shared `device`. Each worker opens its own file, Declare checker, and signature
+context on the shared `device`. One solver call holds at most `CHUNK_CELLS` refined cells, about
+6.4 GB at its peak, so the worker count bounds device memory. Each worker opens its own file, Declare checker, and signature
 kernel, scores each row group as one batch, returns compact `PrefixSummary` values, and
 preserves row-group order. Stream
 scores to Parquet while aggregating so full decoded generations never accumulate in the parent.
