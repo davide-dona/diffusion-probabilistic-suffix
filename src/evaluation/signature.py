@@ -11,13 +11,8 @@ from src import artifacts
 
 # Each cell of the PDE grid is split into 2**DYADIC_ORDER steps along both paths.
 DYADIC_ORDER = 1
-# Upper bound on the refined grid cells of one solver call. A call holds about six sweep values per
-# cell at its peak, so this bounds its device memory at about 7 GB.
+# Upper bound on the refined grid cells of one solver call, which bounds its device memory.
 CHUNK_CELLS = 1 << 28
-# Precision of the PDE sweep. Its increments are differences of RBF values close to one, so they
-# are formed in float64 and only the sweep runs in this precision; float32 moves normalized
-# kernels by about 1e-4, the size of the dyadic discretization error.
-SWEEP_DTYPE = torch.float32
 # Pairwise distances of the bandwidth median are visited in tiles of this many rows and columns.
 _TILE_ROWS = 4096
 _TILE_COLUMNS = 16384
@@ -33,7 +28,7 @@ class SignatureKernel:
     `time_scale * log1p(minutes)` over its inter-event times, and `counts` holds the cumulative
     occurrences of each activity. Each event first advances `tau`, then steps its activity
     count. Both constants are fitted on the train split. Kernels are solved on `device`, which is
-    a CUDA device or the CPU, with float64 increments and a `SWEEP_DTYPE` sweep.
+    a CUDA device or the CPU.
     """
 
     time_scale: float
@@ -246,15 +241,13 @@ class SignatureKernel:
             return np.ones(batch)
         diagonals = rows + columns - 1
         # Skew the refined grid so cell (i, j) sits at [d, i] with d = i + j, making every
-        # anti-diagonal one contiguous slice. A refined cell reads the increment of the grid cell
-        # it splits, divided by its 4**DYADIC_ORDER parts; cells outside the grid get zero.
+        # anti-diagonal one contiguous slice. Cells outside the grid get a zero increment.
         row = torch.arange(rows, device=self.device)
         column = torch.arange(diagonals, device=self.device)[:, None] - row  # [diagonals, rows]
         outside = (column < 0) | (column >= columns)
-        skewed = increments[:, row // steps, column.clamp(0, columns - 1) // steps].to(SWEEP_DTYPE)
+        skewed = increments[:, row // steps, column.clamp(0, columns - 1) // steps].float()
         del increments
         skewed.div_(steps**2).masked_fill_(outside, 0.0)  # [B, diagonals, rows]
-        # The scheme's coefficients are 1 + x/2 + x²/12 and 1 - x²/12, built in place.
         second = skewed.square().mul_(-1.0 / 12.0).add_(1.0)
         first = skewed.mul_(0.5).add_(2.0).sub_(second)
         del skewed
@@ -262,7 +255,9 @@ class SignatureKernel:
         # boundary value one; a point left of the grid stays one, since the cell producing it has
         # a zero increment and only ones as inputs, and a point right of the grid is never read
         # by a point inside it.
-        solution = torch.ones(batch, diagonals + 2, rows + 1, dtype=SWEEP_DTYPE, device=self.device)
+        solution = torch.ones(
+            batch, diagonals + 2, rows + 1, dtype=torch.float32, device=self.device
+        )
         for diagonal in range(diagonals):
             solution[:, diagonal + 2, 1:] = (
                 solution[:, diagonal + 1, 1:] + solution[:, diagonal + 1, :-1]

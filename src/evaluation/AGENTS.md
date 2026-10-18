@@ -68,15 +68,15 @@ observed suffix length, which depends on the realization and is not proper. The 
 kernel score covers them together with the activities.
 
 The signature kernel score is the fair kernel score `1/2 E k(X, X') - E k(X, y) + 1/2` under the
-cosine-normalized signature kernel `k`, with an RBF static kernel of bandwidth `sigma`. A suffix is
-embedded as a path through `[tau, activity counts]`, where each event first advances `tau = lambda *
-sum log1p(minutes)` and then steps its activity count. Preprocessing fits both constants on the
-train split, from the suffix after each training case's first event, the longest suffix a cut can
-produce: `lambda` is the inverse mean `log1p` of their inter-event minutes, and `sigma` the exact
-median distance over pairs of different points of all their paths, selected by radix passes over
-float64 bit patterns on `device`. The PDE forms its increments in float64 and sweeps in
-`SWEEP_DTYPE` with dyadic order `DYADIC_ORDER`, on CUDA or else the CPU; identical paths of a prefix
-are solved once. The signature kernel score selects checkpoints.
+cosine-normalized signature kernel `k`, with an RBF static kernel of bandwidth `sigma`. A suffix
+is embedded as a path through `[tau, activity counts]`, where each event first advances
+`tau = lambda * sum log1p(minutes)` and then steps its activity count. Preprocessing fits both
+constants on the train split, from the suffix after each training case's first event, the longest
+suffix a cut can produce: `lambda` is the inverse mean `log1p` of their inter-event minutes, and
+`sigma` the exact median distance over pairs of different points of all their paths, selected by
+radix passes over float64 bit patterns on `device`. The PDE is solved with dyadic
+order `DYADIC_ORDER`, on CUDA or else the CPU; identical paths of a prefix are solved once. The
+signature kernel score selects checkpoints.
 
 Declare checks evaluate the full trace formed by prefix plus suffix against constraints mined from
 the training split by the FCFDeclare library, which `src/logs/declare.py` wraps. A constraint
