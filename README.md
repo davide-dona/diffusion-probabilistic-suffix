@@ -168,8 +168,7 @@ The report and its per-prefix scores are written under
 `prefix_scores.parquet`. The JSON summary groups scores under `scores.joint`,
 `scores.activity`, `scores.suffix_length`, `scores.remaining_time`, and `scores.conformance`, both
 overall and within each length bucket. The joint signature kernel score, which also selects
-checkpoints, is solved on `device` (default `cuda:0`), shared by every worker. Each worker's
-solver peaks at about 6.4 GB of device memory, so choose `workers` to fit the GPU. Trace precision
+checkpoints, is solved on `device` (default `cuda:0`), shared by every worker. Trace precision
 and recall, over one random prefix per case, are stored under `traces`.
 
 Diagnostics expose biases the ranked metrics hide: signed suffix-length, remaining-time, and
