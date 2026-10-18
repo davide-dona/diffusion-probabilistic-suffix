@@ -138,13 +138,20 @@ class Draws:
 class Generation:
     """One prefix's generated suffixes and the truth they were generated for.
     - case_id is used to identify the case in the log the prefix was cut from;
-    - prefix_activities are added for convenience in the conformance report.
+    - prefix_activities and prefix_inter_event_time_minutes complete the full traces that
+      conformance and trace precision and recall read.
     """
 
     case_id: str  # which case of the log the prefix was cut from
     prefix_activities: str  # the events before the cut, in order, one character each
+    # [P] float64 minutes before each prefix event, zero before the case's first event.
+    prefix_inter_event_time_minutes: np.ndarray
     samples: Draws
     truth: DecodedEvents
+
+    def __post_init__(self) -> None:
+        if self.prefix_inter_event_time_minutes.shape != (len(self.prefix_activities),):
+            raise ValueError('Generation prefix times do not match its activities')
 
     @property
     def prefix_len(self) -> int:

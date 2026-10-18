@@ -1,4 +1,5 @@
 import math
+import re
 from collections.abc import Sequence
 
 
@@ -38,3 +39,13 @@ def validate_string_list(value: object, name: str) -> None:
         raise ValueError(f'{name} must be a list of nonempty strings')
     if any(not isinstance(item, str) or not item for item in value):
         raise ValueError(f'{name} must be a list of nonempty strings')
+
+
+def validate_device(value: object, name: str) -> None:
+    """Require a torch device name: cpu, mps, cuda, or cuda:<index>.
+
+    Raises:
+        ValueError: If the value is not one of those names.
+    """
+    if not isinstance(value, str) or re.fullmatch(r'(cpu|mps|cuda(:\d+)?)', value) is None:
+        raise ValueError(f'{name} must be cpu, mps, cuda, or cuda:<index>')

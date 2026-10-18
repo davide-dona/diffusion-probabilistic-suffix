@@ -13,6 +13,7 @@ The supported dataset identifiers are `sepsis`, `bpic12`, `bpic17`, and `bpic19`
 | `processed/test.csv` | Chronological test split written by preprocessing. |
 | `codec/dataset.json` | Vocabulary and numeric transforms fitted on the training split. |
 | `declare/model.json` | Declare constraints mined from the training split, each with its train support. |
+| `signature/kernel.json` | Signature kernel time scale and bandwidth fitted on the training split. |
 | `manifest.json` | Bundle hashes and fingerprint. |
 
 ## Rules
@@ -22,7 +23,8 @@ The supported dataset identifiers are `sepsis`, `bpic12`, `bpic17`, and `bpic19`
   separator and column names under `config/dataset/`.
 - Regenerate derived files with `python -m pipelines.preprocess`; do not repair one artifact in
   isolation.
-- Fit vocabularies, numeric statistics, and Declare constraints on training data only.
+- Fit vocabularies, numeric statistics, Declare constraints, and the signature kernel on training
+  data only.
 - Preserve chronological split boundaries and the special lower prefix bound for cases that cross
   a boundary.
 - Treat regenerated data as a coordinated set. A codec or Declare model from another preprocessing

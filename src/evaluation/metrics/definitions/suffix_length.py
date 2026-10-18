@@ -1,23 +1,22 @@
-from src.evaluation.metrics.helpers import coverage_gap, crps, mae
+from src.evaluation.metrics.helpers import crps, crps_spread, mae, randomized_pit
 from src.evaluation.metrics.metadata import Direction, MetricGroup
 from src.evaluation.metrics.registry import METRICS
 from src.evaluation.prepared import PreparedPrefix
 
 
 @METRICS.register(
-    'suffix_length_mae',
-    label='Suffix length MAE',
+    'suffix_length_crps_accuracy',
+    label='Suffix length CRPS accuracy',
     group=MetricGroup.SUFFIX_LENGTH,
     unit='events',
     bounds=(0.0, None),
     diagnostic=True,
-    direction=Direction.LOWER,
 )
-def suffix_length_mae(context: PreparedPrefix) -> float:
-    """Return the sampled suffix-length mean absolute error.
+def suffix_length_crps_accuracy(context: PreparedPrefix) -> float:
+    """Return the CRPS accuracy term of suffix length, the mean absolute error of the draws.
 
     Args:
-        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+        context: Prepared samples and observed continuation for one prefix.
 
     Returns:
         The sampled suffix-length mean absolute error. No sampled draws score zero.
@@ -45,7 +44,7 @@ def suffix_length_bias(context: PreparedPrefix) -> float:
     """
     if not context.suffix_lengths.size:
         return 0.0
-    return float(context.suffix_lengths.mean() - context.true_suffix_length[0])
+    return float(context.suffix_lengths.mean() - context.true_suffix_length)
 
 
 @METRICS.register(
@@ -90,60 +89,42 @@ def suffix_length_crps(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'suffix_length_coverage_gap_50',
-    label='Suffix length coverage gap 50%',
-    publication_label=r'50\%',
+    'suffix_length_crps_spread',
+    label='Suffix length CRPS spread',
     group=MetricGroup.SUFFIX_LENGTH,
-    direction=Direction.ZERO,
+    unit='events',
+    bounds=(0.0, None),
+    diagnostic=True,
 )
-def suffix_length_coverage_gap_50(context: PreparedPrefix) -> float:
-    """Return the 50% suffix-length central-interval coverage gap.
+def suffix_length_crps_spread(context: PreparedPrefix) -> float:
+    """Return the CRPS spread term of suffix length, half the mean distance between draws.
 
     Args:
-        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+        context: Prepared samples for one prefix.
 
     Returns:
-        The 50% suffix-length central-interval coverage gap. No draws give negative nominal
-        coverage; no quantities give zero.
+        Half the mean absolute length difference over pairs of different draws. Fewer than two
+        draws score zero.
     """
-    return coverage_gap(context.suffix_length_intervals, context.true_suffix_length, level=0.50)
+    return crps_spread(context.suffix_lengths)
 
 
 @METRICS.register(
-    'suffix_length_coverage_gap_75',
-    label='Suffix length coverage gap 75%',
-    publication_label=r'75\%',
+    'suffix_length_pit',
+    label='Suffix length PIT',
     group=MetricGroup.SUFFIX_LENGTH,
-    direction=Direction.ZERO,
+    bounds=(0.0, 1.0),
+    diagnostic=True,
 )
-def suffix_length_coverage_gap_75(context: PreparedPrefix) -> float:
-    """Return the 75% suffix-length central-interval coverage gap.
+def suffix_length_pit(context: PreparedPrefix) -> float:
+    """Return the randomized PIT of the observed suffix length among the draws.
 
     Args:
-        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
+        context: Prepared samples, observed continuation, and PIT noise for one prefix.
 
     Returns:
-        The 75% suffix-length central-interval coverage gap. No draws give negative nominal
-        coverage; no quantities give zero.
+        A value on [0, 1], uniform over prefixes for a calibrated forecast.
     """
-    return coverage_gap(context.suffix_length_intervals, context.true_suffix_length, level=0.75)
-
-
-@METRICS.register(
-    'suffix_length_coverage_gap_95',
-    label='Suffix length coverage gap 95%',
-    publication_label=r'95\%',
-    group=MetricGroup.SUFFIX_LENGTH,
-    direction=Direction.ZERO,
-)
-def suffix_length_coverage_gap_95(context: PreparedPrefix) -> float:
-    """Return the 95% suffix-length central-interval coverage gap.
-
-    Args:
-        context: Prepared samples, truth, and full-trace constraint checks for one prefix.
-
-    Returns:
-        The 95% suffix-length central-interval coverage gap. No draws give negative nominal
-        coverage; no quantities give zero.
-    """
-    return coverage_gap(context.suffix_length_intervals, context.true_suffix_length, level=0.95)
+    return randomized_pit(
+        context.suffix_lengths, context.true_suffix_length, noise=context.pit_noise
+    )

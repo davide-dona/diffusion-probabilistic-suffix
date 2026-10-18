@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from src.datasets.codec import DatasetCodec
 from src.evaluation import PrefixSummary, ScoreGroups
 from src.evaluation.metrics import METRICS
+from src.evaluation.signature import SignatureKernel
 from src.inference.generate import generate_batch
 from src.models.base import SuffixModel, TrainableSuffixModel
 from src.training.loss import Loss
@@ -103,6 +104,7 @@ def validate_generation(
     num_samples: int,
     codec: DatasetCodec,
     checker: Checker,
+    kernel: SignatureKernel,
     device: torch.device,
     seed: int | None = None,
 ) -> GenerationMetrics:
@@ -114,6 +116,7 @@ def validate_generation(
         num_samples: Draws per prefix.
         codec: Fitted dataset codec.
         checker: Declare conformance checker.
+        kernel: Signature kernel comparing draws with observed suffixes.
         device: Computation device.
         seed: Optional validation seed.
 
@@ -146,7 +149,7 @@ def validate_generation(
                     model_diagnostic_totals.get(key, 0.0) + values.sum().item()
                 )
             started = perf_counter()
-            for summary in PrefixSummary.of_batch(generations, checker=checker):
+            for summary in PrefixSummary.of_batch(generations, checker=checker, kernel=kernel):
                 for key, value in summary.scores.flatten().items():
                     totals[key] += value
                 for key, value in summary.diagnostics.items():

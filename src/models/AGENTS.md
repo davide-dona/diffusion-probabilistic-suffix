@@ -75,6 +75,7 @@ and standardized time means and log-variances `[B, T]`.
 | `head_sampling_transformer` | [`architectures/head_sampling_transformer/AGENTS.md`](architectures/head_sampling_transformer/AGENTS.md) | Implemented SuTraN-PH baseline |
 | `u_ed_sutran` | [`architectures/u_ed_sutran/AGENTS.md`](architectures/u_ed_sutran/AGENTS.md) | Implemented uncertainty-aware SuTraN |
 | `case_based` | `architectures/case_based/model.py` | Implemented non-neural case-based baseline |
+| `unconditional` | `architectures/unconditional/model.py` | Implemented reference forecast for skill scores; ignores the prefix |
 
 For local verification, use small inputs and reduced diffusion steps under the root guide's
 disposable-check policy. Do not start training.

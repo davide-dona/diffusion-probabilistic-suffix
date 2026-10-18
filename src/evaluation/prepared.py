@@ -1,3 +1,4 @@
+import zlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Self
@@ -5,10 +6,11 @@ from typing import Self
 import numpy as np
 from fcfdeclare import Checker
 
-from src.inference.generation import Draws, Generation
+from src.evaluation.signature import SignatureKernel
+from src.inference.generation import Generation
 
-# The nominal probabilities of the central intervals that coverage metrics read.
-COVERAGE_LEVELS = (0.50, 0.75, 0.95)
+# Seeds the uniform that breaks PIT ties, together with the prefix key.
+PIT_SEED = 42
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,43 +20,43 @@ class PreparedPrefix:
     Sample conformance arrays have shape [U], one entry per distinct suffix in suffix order;
     generation sample counts give their draw multiplicities. A conformance share is the fraction
     of constraints the full trace satisfies, and full conformance is 1.0 when it satisfies them
-    all. Numeric arrays retain every draw: suffix lengths and remaining times have shape [S, 1],
-    and inter-event times have shape [S, T], where T is the observed suffix length. Truth arrays
-    have shape [1] or [T]. Times are in minutes. Each intervals mapping gives, for every level of
-    `COVERAGE_LEVELS`, the [2, D] lower and upper bounds of the central interval of its draws,
-    and is empty when they have no draws or columns.
+    all. Suffix lengths and remaining times have shape [S], one entry per draw, and are compared
+    with the scalar truth. Times are in minutes. The signature Gram matrix has shape
+    [S + 1, S + 1]: the normalized signature kernel between every pair of draws, with the
+    observed suffix last. The PIT noise is one uniform on [0, 1] drawn
+    from the prefix key alone, so it does not depend on the worker or batch scoring the prefix.
     """
 
     generation: Generation
     suffix_lengths: np.ndarray
     remaining_times: np.ndarray
-    inter_event_times: np.ndarray
-    suffix_length_intervals: dict[float, np.ndarray]
-    remaining_time_intervals: dict[float, np.ndarray]
-    inter_event_time_intervals: dict[float, np.ndarray]
-    true_suffix_length: np.ndarray
-    true_remaining_time: np.ndarray
-    true_inter_event_times: np.ndarray
+    true_suffix_length: float
+    true_remaining_time: float
+    pit_noise: float
+    signature_gram: np.ndarray
     sample_conformance_share: np.ndarray
     sample_full_conformance: np.ndarray
     observed_conformance_share: float
     observed_full_conformance: float
 
     @classmethod
-    def of_batch(cls, generations: Sequence[Generation], *, checker: Checker) -> list[Self]:
+    def of_batch(
+        cls, generations: Sequence[Generation], *, checker: Checker, kernel: SignatureKernel
+    ) -> list[Self]:
         """Prepare the shared draw and observation arrays for a batch of prefixes.
 
         Every full trace of the batch is checked in one call, since the checker's fixed cost per
-        call outweighs its work per trace.
+        call outweighs its work per trace. Every signature kernel of the batch is solved in one
+        call for the same reason.
 
         Args:
             generations: Decoded prefixes, sampled suffixes, and observed continuations.
             checker: Declare checker applied to each prefix plus each of its suffixes.
+            kernel: Signature kernel comparing the draws and observed suffix of each prefix.
 
         Returns:
-            Shared metric inputs in input order, with inter-event times truncated or zero-padded
-            to the observed suffix length and numeric arrays stored in float64. Empty input gives
-            an empty list.
+            Shared metric inputs in input order, with numeric arrays stored in float64. Empty
+            input gives an empty list.
         """
         if not generations:
             return []
@@ -67,35 +69,35 @@ class PreparedPrefix:
             ]
         )
         share, full = conformance.share, conformance.full
+        grams = kernel.grams(_suffix_paths(generations, kernel=kernel))
         prepared = []
         start = 0
-        for generation in generations:
+        for generation, gram in zip(generations, grams, strict=True):
             stop = start + len(generation.samples.suffixes) + 1
-            prepared.append(cls._of(generation, share=share[start:stop], full=full[start:stop]))
+            prepared.append(
+                cls._of(generation, share=share[start:stop], full=full[start:stop], gram=gram)
+            )
             start = stop
         return prepared
 
     @classmethod
-    def _of(cls, generation: Generation, *, share: np.ndarray, full: np.ndarray) -> Self:
+    def _of(
+        cls, generation: Generation, *, share: np.ndarray, full: np.ndarray, gram: np.ndarray
+    ) -> Self:
         """Prepare one prefix from the conformance of its sampled traces, then its observed one."""
         samples = generation.samples
         truth = generation.truth
-
-        suffix_lengths = samples.lengths.astype(np.float64)[:, None]  # [S, 1]
-        remaining_times = samples.remaining_time_minutes[:, None]  # [S, 1]
-        inter_event_times = _aligned_inter_event_times(samples, width=len(truth))  # [S, T]
-
+        noise = np.random.default_rng(
+            (PIT_SEED, zlib.crc32(generation.case_id.encode()), generation.prefix_len)
+        ).random()
         return cls(
             generation=generation,
-            suffix_lengths=suffix_lengths,
-            remaining_times=remaining_times,
-            inter_event_times=inter_event_times,
-            suffix_length_intervals=_central_intervals(suffix_lengths),
-            remaining_time_intervals=_central_intervals(remaining_times),
-            inter_event_time_intervals=_central_intervals(inter_event_times),
-            true_suffix_length=np.array([float(len(truth))], dtype=np.float64),
-            true_remaining_time=np.array([truth.remaining_time_minutes], dtype=np.float64),
-            true_inter_event_times=truth.inter_event_time_minutes,
+            suffix_lengths=samples.lengths.astype(np.float64),
+            remaining_times=samples.remaining_time_minutes,
+            true_suffix_length=float(len(truth)),
+            true_remaining_time=truth.remaining_time_minutes,
+            pit_noise=float(noise),
+            signature_gram=gram,
             sample_conformance_share=share[:-1],
             sample_full_conformance=full[:-1],
             observed_conformance_share=float(share[-1]),
@@ -103,25 +105,40 @@ class PreparedPrefix:
         )
 
 
-def _central_intervals(draws: np.ndarray) -> dict[float, np.ndarray]:
-    """Return the [2, D] bounds of each central interval of [S, D] draws, from one quantile call."""
-    if draws.size == 0:
-        return {}
-    probabilities = [
-        probability
-        for level in COVERAGE_LEVELS
-        for probability in ((1.0 - level) / 2.0, (1.0 + level) / 2.0)
-    ]
-    bounds = np.quantile(draws, probabilities, axis=0)  # [2 * levels, D]
-    return {level: bounds[2 * index : 2 * index + 2] for index, level in enumerate(COVERAGE_LEVELS)}
-
-
-def _aligned_inter_event_times(samples: Draws, *, width: int) -> np.ndarray:
-    """Return [S, width] draw times, keeping each draw's leading times and padding with zero."""
-    lengths = samples.lengths
-    draw_of_event = np.repeat(np.arange(len(samples)), lengths)  # [E]
-    position = np.arange(len(draw_of_event)) - np.repeat(samples.offsets[:-1], lengths)  # [E]
-    kept = position < width
-    aligned = np.zeros((len(samples), width), dtype=np.float64)
-    aligned[draw_of_event[kept], position[kept]] = samples.inter_event_time_minutes[kept]
-    return aligned
+def _suffix_paths(
+    generations: Sequence[Generation], *, kernel: SignatureKernel
+) -> list[list[np.ndarray]]:
+    """Embed each prefix's draws, in draw order, followed by its observed suffix."""
+    codes = {
+        code
+        for generation in generations
+        for suffix in (*generation.samples.suffixes, generation.truth.activities)
+        for code in suffix
+    }
+    offset = min(map(ord, codes), default=0)
+    alphabet = max(map(ord, codes), default=offset - 1) - offset + 1
+    groups = []
+    for generation in generations:
+        samples, truth = generation.samples, generation.truth
+        times = samples.inter_event_time_minutes
+        offsets = samples.offsets
+        groups.append(
+            [
+                *(
+                    kernel.embed(
+                        samples.suffixes[taken],
+                        times[offsets[draw] : offsets[draw + 1]],
+                        offset=offset,
+                        alphabet=alphabet,
+                    )
+                    for draw, taken in enumerate(samples.taken)
+                ),
+                kernel.embed(
+                    truth.activities,
+                    truth.inter_event_time_minutes,
+                    offset=offset,
+                    alphabet=alphabet,
+                ),
+            ]
+        )
+    return groups

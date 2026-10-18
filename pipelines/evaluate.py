@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import time
 from collections.abc import Iterator
@@ -6,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import hydra
+import torch
 from fcfdeclare import Checker, DeclareModel
 from omegaconf import DictConfig
 from tqdm import tqdm
@@ -16,7 +18,9 @@ from src import artifacts
 from src.config_validation import validate_evaluation_config
 from src.datasets.codec import ActivityCodec
 from src.evaluation import EvaluationReport, EvaluationSummary, PrefixSummary, stream_prefix_scores
-from src.inference.generation_store import Generations
+from src.evaluation.signature import SignatureKernel
+from src.evaluation.traces import Trace, TracePrecisionRecall, chosen_prefixes, full_traces
+from src.inference.generation_store import Generations, PrefixKey
 from src.logs.declare import code_checker, load_model
 
 
@@ -26,6 +30,7 @@ class _Worker:
 
     generations: Generations
     checker: Checker
+    kernel: SignatureKernel
 
 
 # Set by `_init_worker` in each pool process, and read by `_score_block` there. Left
@@ -33,19 +38,88 @@ class _Worker:
 _worker: _Worker
 
 
-def _init_worker(generations_file: Path, model: DeclareModel) -> None:
+def _init_worker(generations_file: Path, model_path: Path, kernel: SignatureKernel) -> None:
     """Open the file and prepare the Declare model once for this process.
 
     Args:
         generations_file: The generations every task of this process reads from.
-        model: The Declare model conformance is checked against.
+        model_path: The Declare model conformance is checked against, read here since a
+            spawned process receives its arguments pickled.
+        kernel: The signature kernel draws are scored with, on its scoring device.
     """
     global _worker
     generations = Generations(generations_file)
     vocabulary = generations.vocabulary
     _worker = _Worker(
         generations=generations,
-        checker=code_checker(model, ActivityCodec.from_vocabulary(vocabulary)),
+        checker=code_checker(
+            DeclareModel.load(model_path), ActivityCodec.from_vocabulary(vocabulary)
+        ),
+        kernel=kernel,
+    )
+
+
+@dataclass(frozen=True)
+class _TraceWorker:
+    """What one trace-collecting pool process holds for the whole of its life."""
+
+    generations: Generations
+    chosen: set[PrefixKey]
+
+
+# Set by `_init_trace_worker` in each process of the trace pool, and read by `_trace_block`.
+_trace_worker: _TraceWorker
+
+
+def _init_trace_worker(generations_file: Path, chosen: set[PrefixKey]) -> None:
+    """Open the file once for this process and remember which prefixes to read traces from."""
+    global _trace_worker
+    _trace_worker = _TraceWorker(generations=Generations(generations_file), chosen=chosen)
+
+
+def _trace_block(block: int) -> list[tuple[str, Trace, Trace]]:
+    """Return the case, observed full trace, and generated full trace of each chosen prefix."""
+    return [
+        (generation.case_id, *full_traces(generation))
+        for generation in _trace_worker.generations.block(block)
+        if (generation.case_id, generation.prefix_len) in _trace_worker.chosen
+    ]
+
+
+def _trace_precision_recall(
+    generations_file: Path,
+    *,
+    keys: list[PrefixKey],
+    kernel: SignatureKernel,
+    blocks: int,
+    workers: int | None,
+) -> TracePrecisionRecall:
+    """Read one random prefix's full traces per case across a pool, then compare them.
+
+    Args:
+        generations_file: The generations to read.
+        keys: Every prefix key of the file, from which one prefix per case is drawn.
+        kernel: The signature kernel the trace distance is built on, solved in this process.
+        blocks: How many blocks the file holds.
+        workers: How many processes to read with, or `None` for one per available CPU.
+    Returns:
+        Trace precision and recall over the cases, in sorted case order.
+    """
+    chosen = chosen_prefixes(keys)
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        mp_context=multiprocessing.get_context('spawn'),
+        initializer=_init_trace_worker,
+        initargs=(generations_file, chosen),
+    ) as executor:
+        rows = sorted(
+            (row for block in executor.map(_trace_block, range(blocks)) for row in block),
+            key=lambda row: row[0],
+        )
+    return TracePrecisionRecall.of(
+        [observed for _, observed, _ in rows],
+        [generated for _, _, generated in rows],
+        kernel=kernel,
     )
 
 
@@ -57,13 +131,16 @@ def _score_block(block: int) -> list[PrefixSummary]:
     Returns:
         One entry per prefix of the block, in the order it was written.
     """
-    return PrefixSummary.of_batch(_worker.generations.block(block), checker=_worker.checker)
+    return PrefixSummary.of_batch(
+        _worker.generations.block(block), checker=_worker.checker, kernel=_worker.kernel
+    )
 
 
 def _score_in_parallel(
     generations_file: Path,
     *,
-    model: DeclareModel,
+    model_path: Path,
+    kernel: SignatureKernel,
     blocks: int,
     prefixes: int,
     workers: int | None,
@@ -79,7 +156,9 @@ def _score_in_parallel(
         generations_file: The generations to score, from `python -m pipelines.generate`. Passed as
             a path rather than as read prefixes, since each worker opens the file itself and only
             the scores it computes cross back.
-        model: The Declare model to check conformance against.
+        model_path: The Declare model to check conformance against.
+        kernel: The signature kernel to score draws with. Workers are spawned rather than forked,
+            so each can open its own CUDA context on the kernel's device.
         blocks: How many blocks the file holds, one unit of work each.
         prefixes: How many prefixes it holds in total, for the progress bar.
         workers: How many processes to score with, or `None` for one per available CPU.
@@ -90,8 +169,9 @@ def _score_in_parallel(
     with (
         ProcessPoolExecutor(
             max_workers=workers,
+            mp_context=multiprocessing.get_context('spawn'),
             initializer=_init_worker,
-            initargs=(generations_file, model),
+            initargs=(generations_file, model_path, kernel),
         ) as executor,
         tqdm(total=prefixes, desc='Scoring', unit='prefix') as progress,
     ):
@@ -102,7 +182,7 @@ def _score_in_parallel(
             yield from block
 
 
-def run(generations_file: Path, workers: int | None) -> None:
+def run(generations_file: Path, workers: int | None, device: torch.device) -> None:
     """Score a run's generated suffixes and write the result in the active Hydra output directory.
 
     Args:
@@ -110,6 +190,7 @@ def run(generations_file: Path, workers: int | None) -> None:
             which run and dataset wrote it, so the report is named after that run and the
             Declare model is looked up under that dataset.
         workers: How many processes to score with, or `None` for one per available CPU.
+        device: Where every worker solves the signature kernel.
     """
     with Generations(generations_file) as generations:
         generation_provenance = generations.provenance
@@ -141,6 +222,7 @@ def run(generations_file: Path, workers: int | None) -> None:
     model_path = artifacts.DECLARE_MODEL.path(dataset)
     mined = model.settings
     mined_under = f'min support {mined.min_support:.0%}, min confidence {mined.min_confidence:.0%}'
+    kernel = SignatureKernel.load(dataset, device=device)
 
     banner(
         'Scoring generated suffixes',
@@ -150,6 +232,8 @@ def run(generations_file: Path, workers: int | None) -> None:
             'dataset': dataset,
             'generations': f'{generations_file} ({prefixes:,} prefixes)',
             'Declare model': f'{model_path} (mined at {mined_under})',
+            'signature kernel': f'time scale {kernel.time_scale:.4g}, bandwidth '
+            f'{kernel.bandwidth:.4g}, solved on {kernel.device}',
             'workers': f'{processes} processes, one block of ~{prefixes // max(blocks, 1):,} '
             'prefixes each',
             'report': output_path('evaluation.json'),
@@ -172,7 +256,8 @@ def run(generations_file: Path, workers: int | None) -> None:
             stream_prefix_scores(
                 _score_in_parallel(
                     generations_file,
-                    model=model,
+                    model_path=model_path,
+                    kernel=kernel,
                     blocks=blocks,
                     prefixes=prefixes,
                     workers=workers,
@@ -183,7 +268,16 @@ def run(generations_file: Path, workers: int | None) -> None:
             )
         )
 
-    report = EvaluationReport(provenance=provenance, summary=summary)
+    with step(f'Comparing one generated full trace per case with the observed ones on {device}'):
+        traces = _trace_precision_recall(
+            generations_file, keys=keys, kernel=kernel, blocks=blocks, workers=workers
+        )
+    print(
+        f'Trace precision {traces.precision:.4f}, recall {traces.recall:.4f} over '
+        f'{traces.cases:,} cases'
+    )
+
+    report = EvaluationReport(provenance=provenance, summary=summary, traces=traces)
     path = report.write(output_path('evaluation.json'))
     print(
         f'Scored {summary.prefixes:,} prefixes in {duration(time.perf_counter() - started)}, '
@@ -194,8 +288,8 @@ def run(generations_file: Path, workers: int | None) -> None:
 @hydra.main(version_base='1.3', config_path='../config', config_name='evaluate')
 def main(cfg: DictConfig) -> None:
     start_stage(cfg)
-    validate_evaluation_config(workers=cfg.workers)
-    run(Path(cfg.generations), cfg.workers)
+    validate_evaluation_config(workers=cfg.workers, device=cfg.device)
+    run(Path(cfg.generations), cfg.workers, torch.device(cfg.device))
 
 
 if __name__ == '__main__':

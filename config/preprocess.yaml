@@ -2,6 +2,7 @@ defaults:
 - output/default
 - dataset: ???
 - _self_
+device: cuda:0
 run_id: ${now:%Y%m%d-%H%M%S-%f}
 hydra:
   run:

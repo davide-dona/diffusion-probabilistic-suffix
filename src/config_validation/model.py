@@ -22,9 +22,9 @@ def validate_model(model: DictConfig) -> None:
     if not issubclass(get_class(model._target_), SuffixModel):
         raise ValueError('model._target_ must implement SuffixModel')
 
-    if architecture == 'case_based':
+    if architecture in {'case_based', 'unconditional'}:
         if set(model) != {'_target_'}:
-            raise ValueError('case_based takes no model settings besides _target_')
+            raise ValueError(f'{architecture} takes no model settings besides _target_')
         return
 
     validate_number(model.d_model, 'model.d_model', integer=True)

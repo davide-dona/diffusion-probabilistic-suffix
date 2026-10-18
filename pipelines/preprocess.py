@@ -1,6 +1,7 @@
 import hydra
 import numpy as np
 import pandas as pd
+import torch
 from omegaconf import DictConfig
 from pandas.api.types import is_numeric_dtype
 
@@ -9,6 +10,7 @@ from pipelines.helpers.invocation import start_stage
 from src import artifacts
 from src.config_validation import validate_preprocess_config
 from src.datasets.codec import DatasetCodec
+from src.evaluation.signature import SignatureKernel
 from src.logs import (
     ACTIVITY_KEY,
     CASE_ELAPSED_KEY,
@@ -152,7 +154,28 @@ def preprocess(log: pd.DataFrame, *, feature_columns: list[str]) -> pd.DataFrame
     return log
 
 
-def run(data_config: DictConfig, declare_config: DictConfig) -> None:
+def fit_signature_kernel(train: pd.DataFrame, *, device: torch.device) -> SignatureKernel:
+    """Calibrate the signature kernel on the longest suffix of every training case.
+
+    A case's longest suffix follows its first event, since every prefix holds at least one event.
+    Its inter-event times are therefore all measured from a real preceding event.
+
+    Args:
+        train: The train split, one row per event, each case's rows in order.
+        device: Where the pairwise distances of the bandwidth median are computed.
+    Returns:
+        The fitted kernel.
+    """
+    axes = train[ACTIVITY_KEY].astype(str).astype('category').cat.codes.to_numpy(np.int64)
+    minutes = train[INTER_EVENT_TIME_KEY].to_numpy(np.float64)
+    starts = np.flatnonzero(train[CASE_KEY].ne(train[CASE_KEY].shift()).to_numpy())
+    stops = np.append(starts[1:], len(train))
+    suffixes = [(axes[a + 1 : b], minutes[a + 1 : b]) for a, b in zip(starts, stops, strict=True)]
+    alphabet = int(axes.max()) + 1 if len(axes) else 0
+    return SignatureKernel.fit(suffixes, alphabet=alphabet, device=device)
+
+
+def run(data_config: DictConfig, declare_config: DictConfig, device: torch.device) -> None:
     """
     Preprocess and split a dataset, writing outputs next to the input.
 
@@ -166,11 +189,13 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
     on the train split alone, and written beside it as `dataset.json`.
 
     The Declare model mined from the train split follows, and is what evaluation checks
-    conformance against.
+    conformance against. Last, the signature kernel that scores suffixes is calibrated on the
+    train split.
 
     Args:
         data_config: The `data` section of this dataset's experiment config.
         declare_config: The `declare` section, driving the mining of the Declare model.
+        device: Where the signature kernel's pairwise distances are computed.
     """
     dataset = data_config.name
 
@@ -184,6 +209,7 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
             'splits': artifacts.PROCESSED_SPLIT.directory(dataset),
             'codec': artifacts.CODEC.path(dataset),
             'Declare model': artifacts.DECLARE_MODEL.path(dataset),
+            'signature kernel': f'{artifacts.SIGNATURE_KERNEL.path(dataset)} (on {device})',
         },
     )
 
@@ -258,6 +284,13 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
         save_model(declare_model, dataset)
     declare_summary = f'{len(declare_model.constraints)} Declare constraints'
 
+    with step('Calibrating the signature kernel on the train split'):
+        kernel = fit_signature_kernel(train, device=device)
+        kernel.save(dataset)
+    kernel_summary = (
+        f'signature kernel time scale {kernel.time_scale:.4g}, bandwidth {kernel.bandwidth:.4g}'
+    )
+
     with step('Writing the dataset manifest'):
         manifest = artifacts.DatasetManifest.create(dataset)
         manifest.write()
@@ -268,7 +301,7 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
         f'{len(codec.resource.vocab)} resources, '
         f'{len(codec.categorical_features)} categorical and '
         f'{len(codec.numeric_features)} numeric feature channels, '
-        f'{declare_summary}',
+        f'{declare_summary}, {kernel_summary}',
         flush=True,
     )
 
@@ -277,7 +310,7 @@ def run(data_config: DictConfig, declare_config: DictConfig) -> None:
 def main(cfg: DictConfig) -> None:
     start_stage(cfg)
     validate_preprocess_config(cfg)
-    run(data_config=cfg.data, declare_config=cfg.declare)
+    run(data_config=cfg.data, declare_config=cfg.declare, device=torch.device(cfg.device))
 
 
 if __name__ == '__main__':
