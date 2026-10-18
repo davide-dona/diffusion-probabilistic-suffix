@@ -11,9 +11,13 @@ from src import artifacts
 
 # Each cell of the PDE grid is split into 2**DYADIC_ORDER steps along both paths.
 DYADIC_ORDER = 1
-# Upper bound on the refined grid cells of one solver call. A call holds about six float64 values
-# per cell at its peak, so this bounds its device memory at about 6.4 GB.
-CHUNK_CELLS = 1 << 27
+# Upper bound on the refined grid cells of one solver call. A call holds about six sweep values per
+# cell at its peak, so this bounds its device memory at about 7 GB.
+CHUNK_CELLS = 1 << 28
+# Precision of the PDE sweep. Its increments are differences of RBF values close to one, so they
+# are formed in float64 and only the sweep runs in this precision; float32 moves normalized
+# kernels by about 1e-4, the size of the dyadic discretization error.
+SWEEP_DTYPE = torch.float32
 # Pairwise distances of the bandwidth median are visited in tiles of this many rows and columns.
 _TILE_ROWS = 4096
 _TILE_COLUMNS = 16384
@@ -28,8 +32,8 @@ class SignatureKernel:
     A suffix is embedded as a path through `[tau, counts]`: `tau` accumulates
     `time_scale * log1p(minutes)` over its inter-event times, and `counts` holds the cumulative
     occurrences of each activity. Each event first advances `tau`, then steps its activity
-    count. Both constants are fitted on the train split. Kernels are solved in float64 on
-    `device`, which is a CUDA device or the CPU.
+    count. Both constants are fitted on the train split. Kernels are solved on `device`, which is
+    a CUDA device or the CPU, with float64 increments and a `SWEEP_DTYPE` sweep.
     """
 
     time_scale: float
@@ -247,7 +251,7 @@ class SignatureKernel:
         row = torch.arange(rows, device=self.device)
         column = torch.arange(diagonals, device=self.device)[:, None] - row  # [diagonals, rows]
         outside = (column < 0) | (column >= columns)
-        skewed = increments[:, row // steps, column.clamp(0, columns - 1) // steps]
+        skewed = increments[:, row // steps, column.clamp(0, columns - 1) // steps].to(SWEEP_DTYPE)
         del increments
         skewed.div_(steps**2).masked_fill_(outside, 0.0)  # [B, diagonals, rows]
         # The scheme's coefficients are 1 + x/2 + x²/12 and 1 - x²/12, built in place.
@@ -258,14 +262,12 @@ class SignatureKernel:
         # boundary value one; a point left of the grid stays one, since the cell producing it has
         # a zero increment and only ones as inputs, and a point right of the grid is never read
         # by a point inside it.
-        solution = torch.ones(
-            batch, diagonals + 2, rows + 1, dtype=torch.float64, device=self.device
-        )
+        solution = torch.ones(batch, diagonals + 2, rows + 1, dtype=SWEEP_DTYPE, device=self.device)
         for diagonal in range(diagonals):
             solution[:, diagonal + 2, 1:] = (
                 solution[:, diagonal + 1, 1:] + solution[:, diagonal + 1, :-1]
             ) * first[:, diagonal] - solution[:, diagonal, :-1] * second[:, diagonal]
-        return solution[:, -1, -1].cpu().numpy()
+        return solution[:, -1, -1].double().cpu().numpy()
 
 
 def embed(axes: np.ndarray, minutes: np.ndarray, *, time_scale: float, alphabet: int) -> np.ndarray:
