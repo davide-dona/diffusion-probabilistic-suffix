@@ -321,17 +321,16 @@ def _weighted_median_squared_distance(points: torch.Tensor, weights: torch.Tenso
     of the median one group of bits per pass without storing any distance.
 
     Args:
-        points: `[N, D]` distinct float64 points.
+        points: `[N, D]` distinct float64 path points: a time, then integer activity counts.
         weights: `[N]` float64 multiplicity of each point.
     """
-    norms = points.square().sum(dim=1)  # [N]
     total = (weights.sum() ** 2 - weights.square().sum()).item() / 2.0
     target = total / 2.0
     prefix, known = 0, 0
     for bits in _RADIX_BITS:
         shift = 64 - known - bits
         histogram = torch.zeros(1 << bits, dtype=torch.float64, device=points.device)
-        for keys, pair_weights in _distance_tiles(points, norms, weights):
+        for keys, pair_weights in _distance_tiles(points, weights):
             if known:
                 matches = (keys >> (64 - known)) == prefix
                 keys, pair_weights = keys[matches], pair_weights[matches]
@@ -351,17 +350,23 @@ def _weighted_median_squared_distance(points: torch.Tensor, weights: torch.Tenso
     return float(np.int64(prefix).view(np.float64))
 
 
-def _distance_tiles(points: torch.Tensor, norms: torch.Tensor, weights: torch.Tensor):
-    """Yield the float64 bit patterns and pair weights of squared distances, pairs `i < j`."""
+def _distance_tiles(points: torch.Tensor, weights: torch.Tensor):
+    """Yield the float64 bit patterns and pair weights of squared distances, pairs `i < j`.
+
+    The count part of each distance is an integer far below 2**24, so it is exact in float32.
+    """
+    times = points[:, 0]  # [N]
+    counts = points[:, 1:].float()  # [N, A]
+    norms = counts.square().sum(dim=1)  # [N]
     count = len(points)
     for row in range(0, count, _TILE_ROWS):
         rows = slice(row, min(row + _TILE_ROWS, count))
         for column in range(row, count, _TILE_COLUMNS):
             columns = slice(column, min(column + _TILE_COLUMNS, count))
-            squared = (
-                norms[rows, None] + norms[None, columns] - 2.0 * points[rows] @ points[columns].T
+            squared = (norms[rows, None] + norms[None, columns]).sub_(
+                2.0 * counts[rows] @ counts[columns].T
             )
-            squared.clamp_(min=0.0)
+            squared = squared.double().add_((times[rows, None] - times[None, columns]).square_())
             pair_weights = weights[rows, None] * weights[None, columns]
             if column < rows.stop:
                 upper = (
