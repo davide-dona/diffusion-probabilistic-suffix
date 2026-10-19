@@ -6,7 +6,7 @@ generate:
   num_samples: null
   num_workers: null
 evaluate:
-  workers: null
+  workers: 4
   device: ${device}
 hydra:
   run:
