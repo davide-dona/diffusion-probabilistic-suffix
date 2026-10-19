@@ -135,7 +135,7 @@ publication figures or tables, or significance comparisons, and never select a c
 
 | Group | Diagnostics |
 | --- | --- |
-| Activity | DLS sample mean; DLD spread, the mean DLD between draws; spread error gap, that spread minus the mean DLD to truth, negative when overconfident; unique suffix ratio, unique activity suffixes per draw; exact match at K, whether any of the K draws reproduces the true activities |
+| Activity | DLS sample mean; DLD spread, the mean DLD between draws; spread error gap, that spread minus the mean DLD to truth, negative when overconfident; unique suffix ratio, unique activity suffixes per draw; exact match at K, whether any of the K draws reproduces the true activities; best-of-5 and best-of-10 DLS, the expected highest DLS among 5 or 10 draws |
 | Suffix length | Signed error, sampled minus true length; truncated draw rate, the share of draws closed at the length cap without generating EOT; truth quantile; CRPS error and spread terms |
 | Remaining time | Log error, the signed difference of `log1p` days, sampled minus true; truth quantile; CRPS error and spread terms |
 | Conformance | Signed bias of the satisfied-constraint share, sampled minus observed |
@@ -143,6 +143,11 @@ publication figures or tables, or significance comparisons, and never select a c
 Pairwise quantities retain the multiplicity of repeated sampled suffixes. Every diagnostic is
 linear in its per-prefix values, so prefix means compose across buckets; the signed errors and
 biases can cancel overall and are read per length bucket.
+
+Best-of-k DLS sorts the K draw similarities ascending and weights the i-th by
+`C(i - 1, k - 1) / C(K, k)`, the probability that it is the best of a random k-subset. This is
+unbiased for any `k <= K`, so validation and evaluation agree despite different draw counts; fewer
+than k draws is a contract error. It rewards spreading draws, so it never ranks.
 
 The truth quantile of each CRPS-scored quantity is its randomized PIT
 `(#draws below truth + V * (#draws equal to truth + 1)) / (K + 1)` with `V ~ U[0, 1]` from a
