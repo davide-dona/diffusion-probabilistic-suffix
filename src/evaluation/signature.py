@@ -229,39 +229,50 @@ class SignatureKernel:
         """Solve the Goursat PDE of `[B, N, D]` against `[B, M, D]` paths, returning `[B]`."""
         squared = torch.cdist(x, y, compute_mode='donot_use_mm_for_euclid_dist').square_()
         static = torch.exp_(squared.mul_(-0.5 / self.bandwidth**2))  # [B, N, M]
-        increments = static[:, 1:, 1:] + static[:, :-1, :-1] - static[:, 1:, :-1]
+        increments = static[:, 1:, 1:] + static[:, :-1, :-1]
+        increments -= static[:, 1:, :-1]
         increments -= static[:, :-1, 1:]  # [B, N - 1, M - 1]
         del squared, static
         if increments.shape[1] > increments.shape[2]:
             increments = increments.transpose(1, 2)
         steps = 2**DYADIC_ORDER
-        batch, rows, columns = increments.shape[0], *(steps * size for size in increments.shape[1:])
+        batch, height, width = increments.shape
+        rows, columns = steps * height, steps * width
         if rows == 0:
             return np.ones(batch)
         diagonals = rows + columns - 1
+        # The refined cells of a coarse cell share its increment, so the update coefficients are
+        # computed once per coarse cell. The extra last cell holds the coefficients of a zero
+        # increment, both exactly one, for refined cells outside the grid.
+        scaled = increments.float().div_(steps**2).reshape(batch, height * width)
+        del increments
+        coefficients = torch.ones(
+            batch, 2, height * width + 1, dtype=torch.float32, device=self.device
+        )
+        coefficients[:, 1, :-1] = scaled.square().mul_(-1.0 / 12.0).add_(1.0)
+        coefficients[:, 0, :-1] = scaled.mul_(0.5).add_(2.0).sub_(coefficients[:, 1, :-1])
+        del scaled
         # Skew the refined grid so cell (i, j) sits at [d, i] with d = i + j, making every
-        # anti-diagonal one contiguous slice. Cells outside the grid get a zero increment.
+        # anti-diagonal one row of `cells`, which holds the coarse cell of each refined cell.
         row = torch.arange(rows, device=self.device)
         column = torch.arange(diagonals, device=self.device)[:, None] - row  # [diagonals, rows]
         outside = (column < 0) | (column >= columns)
-        skewed = increments[:, row // steps, column.clamp(0, columns - 1) // steps].float()
-        del increments
-        skewed.div_(steps**2).masked_fill_(outside, 0.0)  # [B, diagonals, rows]
-        second = skewed.square().mul_(-1.0 / 12.0).add_(1.0)
-        first = skewed.mul_(0.5).add_(2.0).sub_(second)
-        del skewed
-        # Points are skewed the same way, point (i, j) at [i + j, i]. Every point starts at the
-        # boundary value one; a point left of the grid stays one, since the cell producing it has
-        # a zero increment and only ones as inputs, and a point right of the grid is never read
-        # by a point inside it.
-        solution = torch.ones(
-            batch, diagonals + 2, rows + 1, dtype=torch.float32, device=self.device
-        )
+        cells = column.clamp_(min=0, max=columns - 1).floor_divide_(steps)
+        cells += row.floor_divide(steps).mul_(width)
+        cells.masked_fill_(outside, height * width)
+        del outside
+        # Points are skewed the same way, point (i, j) at [i + j, i], keeping only the three
+        # latest anti-diagonals, in slot d % 3. Every point starts at the boundary value one; a
+        # point left of the grid stays one, since the cell producing it has a zero increment and
+        # only ones as inputs, and a point right of the grid is never read by a point inside it.
+        solution = torch.ones(batch, 3, rows + 1, dtype=torch.float32, device=self.device)
         for diagonal in range(diagonals):
-            solution[:, diagonal + 2, 1:] = (
-                solution[:, diagonal + 1, 1:] + solution[:, diagonal + 1, :-1]
-            ) * first[:, diagonal] - solution[:, diagonal, :-1] * second[:, diagonal]
-        return solution[:, -1, -1].double().cpu().numpy()
+            first, second = coefficients.index_select(dim=2, index=cells[diagonal]).unbind(1)
+            previous, earlier = solution[:, (diagonal + 1) % 3], solution[:, diagonal % 3]
+            solution[:, (diagonal + 2) % 3, 1:] = (
+                previous[:, 1:] + previous[:, :-1]
+            ) * first - earlier[:, :-1] * second
+        return solution[:, (diagonals + 1) % 3, -1].double().cpu().numpy()
 
 
 def embed(axes: np.ndarray, minutes: np.ndarray, *, time_scale: float, alphabet: int) -> np.ndarray:
