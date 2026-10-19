@@ -57,7 +57,7 @@ def main(cfg: DictConfig) -> None:
         num_samples=cfg.generate.num_samples,
         num_workers=cfg.generate.num_workers,
     )
-    validate_evaluation_config(workers=cfg.evaluate.workers)
+    validate_evaluation_config(workers=cfg.evaluate.workers, device=cfg.evaluate.device)
 
     run = artifacts.RunIdentity(
         dataset=cfg.data.name, model=architecture_of(cfg.model._target_), run_id=cfg.run_id
@@ -95,6 +95,7 @@ def main(cfg: DictConfig) -> None:
             _override('generations', generations),
             _override('invocation_id', evaluate_id),
             _override('workers', cfg.evaluate.workers),
+            _override('device', cfg.evaluate.device),
         ],
     )
     report = artifacts.model_output_dir('evaluate', run, evaluate_id) / 'evaluation.json'
