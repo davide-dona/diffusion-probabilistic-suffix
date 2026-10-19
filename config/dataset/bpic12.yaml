@@ -26,5 +26,5 @@ data:
   log_scaled_target_inter_event_time: false
 declare:
   min_support: 0.05
-  min_confidence: 0.99
+  min_confidence: 1.0
   max_cardinality: 2
