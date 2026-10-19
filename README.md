@@ -61,6 +61,23 @@ Each multirun job receives its own output directory. Batch runs do not
 transfer artifacts between stages automatically, so supply each stage's input artifact
 explicitly.
 
+### Train, generate, and evaluate in one pass
+
+Once a dataset is preprocessed, `pipelines.full` runs training, generation, and evaluation in
+sequence. It accepts every training override, plus generation settings under `generate.` and
+evaluation settings under `evaluate.`:
+
+```bash
+uv run python -m pipelines.full dataset=sepsis model=diffusion_transformer \
+  generate.num_samples=100 evaluate.workers=4
+
+uv run python -m pipelines.full --multirun \
+  dataset=sepsis,bpic12,bpic17,bpic19 model=head_sampling_transformer,u_ed_sutran
+```
+
+Each stage writes to its usual output directory, exactly as if launched by hand. A failing stage
+stops the chain.
+
 ### 1. Preprocessing
 
 Run once per dataset:
