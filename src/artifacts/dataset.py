@@ -17,6 +17,7 @@ def _bundle_paths(dataset: str) -> dict[str, Path]:
         'test': paths.PROCESSED_SPLIT.path(dataset=dataset, split=Split.TEST),
         'codec': paths.CODEC.path(dataset),
         'declare': paths.DECLARE_MODEL.path(dataset),
+        'signature': paths.SIGNATURE_KERNEL.path(dataset),
     }
 
 
@@ -30,6 +31,7 @@ class DatasetArtifacts:
     test: str
     codec: str
     declare: str
+    signature: str
 
     def __post_init__(self) -> None:
         for field, value in asdict(self).items():
@@ -86,6 +88,7 @@ class DatasetManifest:
             'test',
             'codec',
             'declare',
+            'signature',
         }:
             raise ValueError(f'{path} is not a valid dataset manifest')
         return cls(

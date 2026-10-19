@@ -1,3 +1,9 @@
-from src.evaluation.metrics.definitions import activity, conformance, suffix_length, time
+from src.evaluation.metrics.definitions import (
+    activity,
+    conformance,
+    joint,
+    remaining_time,
+    suffix_length,
+)
 
-__all__ = ['activity', 'conformance', 'suffix_length', 'time']
+__all__ = ['activity', 'conformance', 'joint', 'remaining_time', 'suffix_length']

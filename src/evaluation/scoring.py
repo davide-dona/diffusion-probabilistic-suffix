@@ -6,6 +6,7 @@ from fcfdeclare import Checker
 from src.evaluation.metrics import METRICS
 from src.evaluation.metrics.metadata import MetricGroup
 from src.evaluation.prepared import PreparedPrefix
+from src.evaluation.signature import SignatureKernel
 from src.inference.generation import Generation
 
 
@@ -13,10 +14,10 @@ from src.inference.generation import Generation
 class ScoreGroups:
     """Report metric values for a prefix or an aggregate, grouped by evaluation question."""
 
+    joint: dict[str, float]
     activity: dict[str, float]
     suffix_length: dict[str, float]
     remaining_time: dict[str, float]
-    inter_event_time: dict[str, float]
     conformance: dict[str, float]
 
     @classmethod
@@ -53,10 +54,10 @@ class ScoreGroups:
             A new mapping from each report metric key to its score.
         """
         groups = {
+            MetricGroup.JOINT: self.joint,
             MetricGroup.ACTIVITY: self.activity,
             MetricGroup.SUFFIX_LENGTH: self.suffix_length,
             MetricGroup.REMAINING_TIME: self.remaining_time,
-            MetricGroup.INTER_EVENT_TIME: self.inter_event_time,
             MetricGroup.CONFORMANCE: self.conformance,
         }
         return {key: groups[metric.group][key] for key, metric in METRICS.report.items()}
@@ -77,13 +78,14 @@ class PrefixSummary:
 
     @classmethod
     def of_batch(
-        cls, generations: Sequence[Generation], *, checker: Checker
+        cls, generations: Sequence[Generation], *, checker: Checker, kernel: SignatureKernel
     ) -> list['PrefixSummary']:
         """Score a batch of generated suffixes against truth and constraints.
 
         Args:
             generations: Observed prefixes with their sampled and true suffixes.
             checker: Declare checker for full traces formed from each prefix and its suffixes.
+            kernel: Signature kernel comparing each prefix's draws and observed suffix.
 
         Returns:
             Report scores, diagnostics, and sequence lengths for each prefix in input order.
@@ -100,7 +102,7 @@ class PrefixSummary:
                 ),
                 diagnostics={key: metric.compute(context) for key, metric in diagnostic.items()},
             )
-            for context in PreparedPrefix.of_batch(generations, checker=checker)
+            for context in PreparedPrefix.of_batch(generations, checker=checker, kernel=kernel)
         ]
 
 

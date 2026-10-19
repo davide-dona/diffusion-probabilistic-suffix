@@ -16,6 +16,7 @@ from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceDataset, fixed_subset
 from src.evaluation.metrics import METRICS
 from src.evaluation.metrics.metadata import Owner
+from src.evaluation.signature import SignatureKernel
 from src.inference.generate import generation_batch_size
 from src.logs import Split
 from src.logs.declare import code_checker, load_model
@@ -89,6 +90,7 @@ class _TrainingReporter:
             f'{losses}'
             f'gen_dls {generation.diagnostics["dls_sample_mean"]:.4f} mean / '
             f'energy {generation.scores.activity["energy_score_dls"]:.4f}  '
+            f'kernel {generation.scores.joint["signature_kernel_score"]:.4f}  '
             f'generation {generation.generation_seconds:.1f}s  '
             f'scoring {generation.scoring_seconds:.1f}s',
             flush=True,
@@ -244,6 +246,7 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
         generation=generation_loader,
     )
     checker = code_checker(load_model(run.dataset), codec.activity_codes)
+    kernel = SignatureKernel.load(run.dataset, device=torch.device(config.device))
     settings = TrainingSettings(
         optimizer=OptimizerSettings(
             lr=config.optimizer.lr,
@@ -297,6 +300,7 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
                 generation=loaders.generation,
                 codec=codec,
                 checker=checker,
+                kernel=kernel,
                 settings=settings,
                 observer=reporter,
             )
@@ -306,6 +310,7 @@ def run(config: DictConfig, run: artifacts.RunIdentity) -> None:
                 loaders=loaders,
                 codec=codec,
                 checker=checker,
+                kernel=kernel,
                 settings=settings,
                 observer=reporter,
             )

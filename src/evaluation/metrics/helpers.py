@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 
@@ -48,75 +48,93 @@ def energy_score[T](
     return accuracy
 
 
-def crps(draws: np.ndarray, truth: np.ndarray) -> float:
-    """Return mean fair CRPS over columns, integrated over gaps between sorted samples.
+def crps(draws: np.ndarray, truth: float) -> float:
+    """Return the fair CRPS of scalar draws, integrated over gaps between sorted samples.
 
     The fair score equals a sum of gap lengths with nonnegative weights, so it never
     subtracts two large accuracy and diversity totals. That keeps it exact and nonnegative
     when a few draws are orders of magnitude larger than the rest.
 
     Args:
-        draws: Numeric samples shaped [S, D], with repeated draws retained.
-        truth: Observed quantities shaped [D], in the same units as the samples.
+        draws: Numeric samples shaped [S], with repeated draws retained.
+        truth: Observed quantity, in the same units as the samples.
 
     Returns:
-        Fair absolute-distance energy score averaged over D quantities, in the input
-        units. Returns zero with no draws or columns. A singleton gives absolute error.
+        Fair absolute-distance energy score in the input units. Returns zero with no draws. A
+        singleton gives absolute error.
     """
-    draw_count, columns = draws.shape
-    if draw_count == 0 or columns == 0:
+    draw_count = len(draws)
+    if draw_count == 0:
         return 0.0
     if draw_count == 1:
-        return float(np.abs(draws[0] - truth).mean())
-    ordered = np.sort(draws, axis=0)  # [S, D]
-    lower, upper = ordered[:-1], ordered[1:]  # [S - 1, D]
-    below_truth = np.clip(np.minimum(upper, truth) - lower, 0.0, None)  # [S - 1, D]
-    above_truth = np.clip(upper - np.maximum(lower, truth), 0.0, None)  # [S - 1, D]
+        return float(abs(draws[0] - truth))
+    ordered = np.sort(draws)  # [S]
+    lower, upper = ordered[:-1], ordered[1:]  # [S - 1]
+    below_truth = np.clip(np.minimum(upper, truth) - lower, 0.0, None)  # [S - 1]
+    above_truth = np.clip(upper - np.maximum(lower, truth), 0.0, None)  # [S - 1]
     # Number of draws at or below each gap between consecutive sorted draws.
-    at_or_below = np.arange(1, draw_count, dtype=np.float64)[:, None]  # [S - 1, 1]
+    at_or_below = np.arange(1, draw_count, dtype=np.float64)  # [S - 1]
     at_or_above = draw_count - at_or_below
     between = (
         at_or_below * (at_or_below - 1.0) * below_truth
         + at_or_above * (at_or_above - 1.0) * above_truth
-    ).sum(axis=0) / (draw_count * (draw_count - 1.0))  # [D]
-    outside = np.clip(ordered[0] - truth, 0.0, None) + np.clip(truth - ordered[-1], 0.0, None)
-    return float((between + outside).mean())
+    ).sum() / (draw_count * (draw_count - 1.0))
+    outside = max(ordered[0] - truth, 0.0) + max(truth - ordered[-1], 0.0)
+    return float(between + outside)
 
 
-def mae(draws: np.ndarray, truth: np.ndarray) -> float:
-    """Return mean absolute error over draws and predicted quantities.
+def mae(draws: np.ndarray, truth: float) -> float:
+    """Return the mean absolute error of scalar draws, the accuracy term of the CRPS.
 
     Args:
-        draws: Numeric samples shaped [S, D], with repeated draws retained.
-        truth: Observed quantities shaped [D], in the same units as the samples.
+        draws: Numeric samples shaped [S], with repeated draws retained.
+        truth: Observed quantity, in the same units as the samples.
 
     Returns:
-        Absolute error averaged over draws and quantities, or zero if either axis is empty.
+        Absolute error averaged over draws, or zero with no draws.
     """
-    draw_count, columns = draws.shape
-    if draw_count == 0 or columns == 0:
+    if not len(draws):
         return 0.0
     return float(np.abs(draws - truth).mean())
 
 
-def coverage_gap(
-    intervals: Mapping[float, np.ndarray], truth: np.ndarray, *, level: float
-) -> float:
-    """Return empirical minus nominal central-interval coverage.
+def crps_spread(draws: np.ndarray) -> float:
+    """Return half the mean absolute difference over pairs of different draws.
+
+    It is the spread term of the fair CRPS, which equals the mean absolute error minus it. The
+    sum over pairs is taken over gaps between sorted samples with nonnegative weights.
 
     Args:
-        intervals: Each prepared nominal level mapped to the [2, D] lower and upper quantile
-            bounds of the draws, or empty when there are no draws.
-        truth: Observed quantities shaped [D].
-        level: Nominal central-interval probability, one of the prepared levels.
+        draws: Numeric samples shaped [S], with repeated draws retained.
 
     Returns:
-        Share of observed quantities within the inclusive quantile bounds minus level.
-        Returns zero with no columns, or negative level with columns but no draws.
+        The spread term in the input units. Fewer than two draws give zero.
     """
-    if truth.size == 0:
+    draw_count = len(draws)
+    if draw_count < 2:
         return 0.0
-    if not intervals:
-        return -level
-    low, high = intervals[level]
-    return float(((low <= truth) & (truth <= high)).mean()) - level
+    gaps = np.diff(np.sort(draws))  # [S - 1]
+    # Each gap separates the draws at or below it from those above it.
+    at_or_below = np.arange(1, draw_count, dtype=np.float64)  # [S - 1]
+    pair_sum = float((at_or_below * (draw_count - at_or_below) * gaps).sum())
+    return pair_sum / (draw_count * (draw_count - 1.0))
+
+
+def randomized_pit(draws: np.ndarray, truth: float, *, noise: float) -> float:
+    """Return the randomized probability integral transform of the truth among the draws.
+
+    Ties between draws and the truth are spread uniformly by the noise, so the value is uniform
+    on [0, 1] for a calibrated forecast even when draws and truth are discrete.
+
+    Args:
+        draws: Numeric samples shaped [S], with repeated draws retained.
+        truth: Observed quantity, in the same units as the samples.
+        noise: Uniform value on [0, 1] that places the truth among its ties.
+
+    Returns:
+        (draws below truth + noise * (draws equal to truth + 1)) / (S + 1). No draws give the
+        noise itself.
+    """
+    below = float((draws < truth).sum())
+    ties = float((draws == truth).sum())
+    return (below + noise * (ties + 1.0)) / (len(draws) + 1.0)

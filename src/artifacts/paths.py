@@ -120,6 +120,11 @@ DECLARE_MODEL = DatasetArtifact(
     remedy='Run `uv run python -m pipelines.preprocess dataset={dataset}` first.',
     relative='declare/model.json',
 )
+SIGNATURE_KERNEL = DatasetArtifact(
+    kind='signature kernel calibration',
+    remedy='Run `uv run python -m pipelines.preprocess dataset={dataset}` first.',
+    relative='signature/kernel.json',
+)
 DATASET_MANIFEST = DatasetArtifact(
     kind='dataset manifest',
     remedy='Run `uv run python -m pipelines.preprocess dataset={dataset}` first.',

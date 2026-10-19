@@ -63,12 +63,19 @@ def generate_batch(
     true_inter_event_times = batch.inter_event_times.cpu().numpy()  # [batch_size, seq_len]
     prefix_activities = batch.prefix.activities.cpu().numpy()  # [batch_size, seq_len]
     prefix_lengths = batch.prefix.length.cpu().numpy()  # [batch_size]
+    prefix_times = batch.prefix.inter_event_times.cpu().numpy()  # [batch_size, seq_len]
 
     return [
         Generation(
             case_id=batch.case_id[position],
             prefix_activities=activity_codec.encode(
                 codec.activity.decode(prefix_activities[position], length=prefix_lengths[position])
+            ),
+            prefix_inter_event_time_minutes=np.maximum(
+                codec.input_inter_event_time.denormalize(
+                    prefix_times[position, : prefix_lengths[position]]
+                ),
+                0.0,
             ),
             samples=Draws.of(
                 [

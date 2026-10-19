@@ -1,3 +1,4 @@
+import math
 from collections import Counter
 from collections.abc import Hashable, Sequence
 
@@ -64,13 +65,13 @@ def dls_sample_mean(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'pairwise_activity_distance',
-    label='Mean pairwise activity distance',
+    'activity_dld_spread',
+    label='Activity DLD spread',
     group=MetricGroup.ACTIVITY,
     bounds=(0.0, 1.0),
     diagnostic=True,
 )
-def pairwise_activity_distance(context: PreparedPrefix) -> float:
+def activity_dld_spread(context: PreparedPrefix) -> float:
     """Return the draw-weighted DLD between different sampled suffixes.
 
     Args:
@@ -86,14 +87,14 @@ def pairwise_activity_distance(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'activity_spread_skill_gap',
-    label='Activity spread skill gap',
+    'activity_spread_error_gap',
+    label='Activity spread error gap',
     group=MetricGroup.ACTIVITY,
     bounds=(-1.0, 1.0),
     diagnostic=True,
     direction=Direction.ZERO,
 )
-def activity_spread_skill_gap(context: PreparedPrefix) -> float:
+def activity_spread_error_gap(context: PreparedPrefix) -> float:
     """Return the mean DLD between draws minus their mean DLD to the observed suffix.
 
     For a calibrated forecast the observed suffix is one more draw, so both means agree. A
@@ -115,35 +116,35 @@ def activity_spread_skill_gap(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'distinct_suffix_share',
-    label='Distinct suffix share',
+    'unique_suffix_ratio',
+    label='Unique suffix ratio',
     group=MetricGroup.ACTIVITY,
     bounds=(0.0, 1.0),
     diagnostic=True,
 )
-def distinct_suffix_share(context: PreparedPrefix) -> float:
-    """Return how many distinct activity suffixes the draws hold, per draw.
+def unique_suffix_ratio(context: PreparedPrefix) -> float:
+    """Return how many unique activity suffixes the draws hold, per draw.
 
     Args:
         context: Prepared samples for one prefix.
 
     Returns:
-        Distinct suffixes divided by draws, 1.0 when every draw differs. No draws score zero.
+        Unique suffixes divided by draws, 1.0 when every draw differs. No draws score zero.
     """
     samples = context.generation.samples
     return len(samples.suffixes) / len(samples) if len(samples) else 0.0
 
 
 @METRICS.register(
-    'truth_hit_rate',
-    label='Truth hit rate',
+    'exact_match_at_k',
+    label='Exact match at K',
     group=MetricGroup.ACTIVITY,
     bounds=(0.0, 1.0),
     diagnostic=True,
     direction=Direction.HIGHER,
 )
-def truth_hit_rate(context: PreparedPrefix) -> float:
-    """Return whether any draw reproduces the observed activity suffix exactly.
+def exact_match_at_k(context: PreparedPrefix) -> float:
+    """Return whether any of the K draws reproduces the observed activity suffix exactly.
 
     Args:
         context: Prepared samples and observed continuation for one prefix.
@@ -153,6 +154,75 @@ def truth_hit_rate(context: PreparedPrefix) -> float:
     """
     samples, truth = context.generation.samples, context.generation.truth
     return float(truth.activities in samples.suffixes)
+
+
+def _best_of_k_dls(context: PreparedPrefix, k: int) -> float:
+    """Return the expected best DLS to the observed suffix over k draws taken without replacement.
+
+    With the K draw similarities sorted ascending, the i-th smallest (1-indexed) is the best of
+    a uniformly random k-subset with probability C(i - 1, k - 1) / C(K, k). The estimate is
+    unbiased for every k <= K, so it does not depend on how many draws were generated.
+
+    Raises:
+        ValueError: If fewer than k draws were generated.
+    """
+    samples, truth = context.generation.samples, context.generation.truth
+    draw_count = len(samples)
+    if draw_count < k:
+        raise ValueError(f'best-of-{k} DLS needs at least {k} draws, got {draw_count}.')
+    distinct = np.array(
+        [sequence_similarity(suffix, truth.activities) for suffix in samples.suffixes]
+    )  # [U]
+    similarities = np.sort(distinct[samples.taken])  # [K]
+    subsets = math.comb(draw_count, k)
+    weights = [math.comb(rank, k - 1) / subsets for rank in range(draw_count)]  # [K]
+    return float(similarities @ weights)
+
+
+@METRICS.register(
+    'best_of_5_dls',
+    label='Best-of-5 DLS',
+    group=MetricGroup.ACTIVITY,
+    bounds=(0.0, 1.0),
+    diagnostic=True,
+    direction=Direction.HIGHER,
+)
+def best_of_5_dls(context: PreparedPrefix) -> float:
+    """Return the expected highest DLS to the observed suffix among 5 random draws.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The best-of-5 DLS similarity, estimated without bias from all K draws.
+
+    Raises:
+        ValueError: If fewer than 5 draws were generated.
+    """
+    return _best_of_k_dls(context, 5)
+
+
+@METRICS.register(
+    'best_of_10_dls',
+    label='Best-of-10 DLS',
+    group=MetricGroup.ACTIVITY,
+    bounds=(0.0, 1.0),
+    diagnostic=True,
+    direction=Direction.HIGHER,
+)
+def best_of_10_dls(context: PreparedPrefix) -> float:
+    """Return the expected highest DLS to the observed suffix among 10 random draws.
+
+    Args:
+        context: Prepared samples and observed continuation for one prefix.
+
+    Returns:
+        The best-of-10 DLS similarity, estimated without bias from all K draws.
+
+    Raises:
+        ValueError: If fewer than 10 draws were generated.
+    """
+    return _best_of_k_dls(context, 10)
 
 
 @METRICS.register(

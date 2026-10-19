@@ -50,6 +50,7 @@ def _row(
     *,
     label: str,
     best: Container[str],
+    reference: pd.DataFrame | None,
 ) -> str:
     """Render one model row of a LaTex table.
 
@@ -58,13 +59,17 @@ def _row(
         frame: Report rows for the model.
         label: Model display label.
         best: Metrics to render in bold.
+        reference: Report rows of the skill reference model, or None to render raw means.
 
     Returns:
         One LaTex table row.
     """
     cells = []
     for metric in columns:
-        written = f'{_value(frame, metric.key):.3f}'
+        value = _value(frame, metric.key)
+        if reference is not None:
+            value = 1.0 - value / _value(reference, metric.key)
+        written = f'{value:.3f}'
         cells.append(f'\\textbf{{{written}}}' if metric.key in best else written)
     return '   & ' + ' & '.join([_escape_latex(label), *cells]) + ' \\\\'
 
@@ -86,9 +91,16 @@ def _block(
     Returns:
         LaTex rows for the dataset.
     """
+    reference = None
+    if table.reference is not None:
+        reference = frame[frame['model'] == table.reference]
+        if reference.empty:
+            raise ValueError(
+                f'The {table.name} table needs a report of {table.reference} for every dataset'
+            )
     rows = []
     for model in models:
-        if not (frame['model'] == model).any():
+        if model == table.reference or not (frame['model'] == model).any():
             continue
         marked = significance[(significance['model'] == model) & significance['best']]
         rows.append(
@@ -97,6 +109,7 @@ def _block(
                 frame[frame['model'] == model],
                 label=labels.MODELS[model].label,
                 best=set(marked['metric']),
+                reference=reference,
             )
         )
     return rows
@@ -112,7 +125,8 @@ def _headers(table: Table) -> list[str]:
         LaTex header lines.
     """
     headers = [
-        f'{metric.publication_label or metric.label}{TABLE_ARROWS[metric.direction]}'
+        f'{metric.publication_label or metric.label}'
+        f'{TABLE_ARROWS[Direction.HIGHER if table.reference else metric.direction]}'
         for metric in table.columns
     ]
     if not table.column_groups:

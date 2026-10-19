@@ -10,6 +10,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from src.artifacts import Provenance
 from src.evaluation.scoring import EvaluationSummary, LengthSummary
+from src.evaluation.traces import TracePrecisionRecall
 
 
 @dataclass(frozen=True)
@@ -17,11 +18,14 @@ class EvaluationReport:
     """Evaluation results and source artifact provenance.
 
     provenance identifies the dataset, model, training run, dataset fingerprint, and checkpoint
-    hash. summary contains overall scores and both observed-length breakdowns.
+    hash. summary contains overall scores and both observed-length breakdowns. traces holds the
+    trace precision and recall diagnostics, which compare whole sets of traces rather than
+    prefixes.
     """
 
     provenance: Provenance
     summary: EvaluationSummary
+    traces: TracePrecisionRecall
 
     def __post_init__(self) -> None:
         self.provenance.require_generations_source()
@@ -42,11 +46,11 @@ class EvaluationReport:
         """
         path = Path(path)
         payload = json.loads(path.read_bytes())
-        if not isinstance(payload, dict) or set(payload) != {'provenance', 'summary'}:
+        if not isinstance(payload, dict) or set(payload) != {'provenance', 'summary', 'traces'}:
             raise ValueError(f'{path} is not an evaluation report')
         provenance = Provenance.from_dict(payload['provenance'])
         report = _REPORT_ADAPTER.validate_python(payload)
-        return cls(provenance=provenance, summary=report.summary)
+        return cls(provenance=provenance, summary=report.summary, traces=report.traces)
 
     def write(self, path: str | Path) -> Path:
         """Write the report as JSON.

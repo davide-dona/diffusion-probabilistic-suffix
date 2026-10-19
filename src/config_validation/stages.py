@@ -1,16 +1,19 @@
-import re
-
 from omegaconf import DictConfig
 
 from src.config_validation.data import validate_data, validate_declare
 from src.config_validation.model import validate_model
-from src.config_validation.primitives import validate_number, validate_string_list
+from src.config_validation.primitives import (
+    validate_device,
+    validate_number,
+    validate_string_list,
+)
 
 
 def validate_preprocess_config(config: DictConfig) -> None:
     """Validate all static parameters accepted by the preprocessing stage."""
     validate_data(config.data)
     validate_declare(config.declare)
+    validate_device(config.device, 'device')
 
 
 def validate_experiment_config(config: DictConfig) -> None:
@@ -35,12 +38,6 @@ def validate_experiment_config(config: DictConfig) -> None:
         validate_number(training[key], f'training.{key}', integer=True)
     if training.grad_clip_norm is not None:
         validate_number(training.grad_clip_norm, 'training.grad_clip_norm')
-    device_is_valid = (
-        isinstance(config.device, str)
-        and re.fullmatch(r'(cpu|mps|cuda(:\d+)?)', config.device) is not None
-    )
-    if not device_is_valid:
-        raise ValueError('device must be cpu, mps, cuda, or cuda:<index>')
 
     validate_number(dataloader.batch_size, 'dataloader.batch_size', integer=True)
     validate_number(dataloader.num_workers, 'dataloader.num_workers', inclusive=True, integer=True)
@@ -86,10 +83,11 @@ def validate_experiment_config(config: DictConfig) -> None:
         raise ValueError('experiment must be null or a nonempty string')
 
 
-def validate_evaluation_config(*, workers: object) -> None:
-    """Validate optional process-pool sizing for evaluation."""
+def validate_evaluation_config(*, workers: object, device: object) -> None:
+    """Validate optional process-pool sizing and the kernel device for evaluation."""
     if workers is not None:
         validate_number(workers, 'workers', integer=True)
+    validate_device(device, 'device')
 
 
 def validate_visualization_config(*, evaluations: object, evaluations_dir: object) -> None:

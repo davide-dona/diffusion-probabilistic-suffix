@@ -4,6 +4,7 @@ defaults:
 generations: ???
 invocation_id: ${now:%Y%m%d-%H%M%S-%f}
 workers: null
+device: cuda:0
 hydra:
   run:
     dir: ${source_output:evaluate,generations,${generations},${invocation_id}}

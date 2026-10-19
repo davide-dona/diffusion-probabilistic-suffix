@@ -87,7 +87,9 @@ uv run python -m pipelines.preprocess dataset=sepsis
 ```
 
 The original log is read from `data/sepsis/original.csv`. The out-of-time splits, fitted codec,
-Declare model, and dataset manifest are written under `data/sepsis/`. The manifest records the
+Declare model, signature kernel calibration, and dataset manifest are written under
+`data/sepsis/`. The kernel bandwidth is an exact median over pairs of training path points,
+computed on `device` (default `cuda:0`); pass `device=cpu` for small logs. The manifest records the
 hash of each bundle file and one fingerprint for the complete bundle. Invocation records, including
 the resolved preprocessing configuration, are written under `outputs/preprocess/sepsis/<timestamp>/`.
 
@@ -110,11 +112,13 @@ uv run python -m pipelines.train dataset=sepsis model=head_sampling_transformer
 ```
 
 Available model configs are `head_sampling_transformer` (SuTraN-PH), `u_ed_sutran`
-(U-ED-SuTraN), `diffusion_transformer`, and `case_based`.
+(U-ED-SuTraN), `diffusion_transformer`, `case_based`, and `unconditional`.
 The case-based model is a non-neural baseline. Training fits it once on the train split, without an
 optimizer: for each prefix it finds the train cut points sharing the longest run of latest
 activities, down to none, and samples their observed suffixes uniformly. It takes no settings, so
-its checkpoint goes straight to generation.
+its checkpoint goes straight to generation. The unconditional model is fitted the same way but
+ignores the prefix, sampling the suffixes of all train cut points uniformly. It is the reference
+forecast that skill scores are measured against.
 SuTraN-PH samples each activity from its categorical head, then the inter-event time from a
 Gaussian whose mean and log-variance depend on that activity. Its log-variance bounds default to
 `[-10, 10]` under `model.time`.
@@ -178,13 +182,17 @@ uv run python -m pipelines.evaluate generations=/path/to/generations.parquet wor
 
 The report and its per-prefix scores are written under
 `outputs/evaluate/<dataset>/<model>/<training-run-id>/<invocation-id>/` as `evaluation.json` and
-`prefix_scores.parquet`. The JSON summary groups scores under `scores.activity`,
-`scores.suffix_length`, `scores.remaining_time`, `scores.inter_event_time`, and
-`scores.conformance`, both overall and within each length bucket.
+`prefix_scores.parquet`. The JSON summary groups scores under `scores.joint`,
+`scores.activity`, `scores.suffix_length`, `scores.remaining_time`, and `scores.conformance`, both
+overall and within each length bucket. The joint signature kernel score, which also selects
+checkpoints, is solved on `device` (default `cuda:0`), shared by every worker. Trace precision
+and recall, over one random prefix per case, are stored under `traces`.
 
-Diagnostics expose biases the ranked metrics hide: signed suffix-length, remaining-time, and
-conformance biases, the activity spread skill gap, distinct suffix share, truth hit rate, and EOT
-sentinel rate, next to DLS sample mean, pairwise activity distance, and suffix-length MAE. They
+Diagnostics expose biases the ranked metrics hide: the signed suffix-length and remaining-time log
+errors, the conformance share bias, the activity spread error gap, unique suffix ratio, exact match
+at K, and truncated draw rate, next to DLS sample mean and activity DLD spread. Suffix length and
+remaining time also report the truth quantile, a randomized PIT, and the error and spread terms
+of their CRPS; its histogram is read from `prefix_scores.parquet`. They
 are logged to W&B under `diagnostic_<group>/<metric>` during validation and stored under
 `diagnostics` in `evaluation.json` and in `prefix_scores.parquet`, but never enter publication
 comparisons. A model may add its own values under `diagnostic_model/<key>`; the case-based model
@@ -204,7 +212,8 @@ uv run python -m pipelines.visualize \
 
 Keep every `evaluation.json` beside its `prefix_scores.parquet`. Figures are written as PDF under
 `outputs/visualize/<date>/<time>/figures/`, and comparison tables as LaTeX under
-`outputs/visualize/<date>/<time>/tables/`.
+`outputs/visualize/<date>/<time>/tables/`. The skill table reports each score relative to the
+`unconditional` model, so include its report for every dataset.
 
 To visualize every report below one or more directories instead:
 

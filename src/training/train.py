@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 from src.datasets.codec import DatasetCodec
 from src.datasets.dataset import TraceCut, TraceDataset
+from src.evaluation.signature import SignatureKernel
 from src.models.base import FittedSuffixModel, SuffixModel, TrainableSuffixModel
 from src.selection import selection_score
 from src.training.loss import Loss
@@ -150,6 +151,7 @@ def train(
     loaders: TrainingLoaders,
     codec: DatasetCodec,
     checker: Checker,
+    kernel: SignatureKernel,
     settings: TrainingSettings,
     observer: TrainingObserver,
 ) -> TrainingResult:
@@ -160,6 +162,7 @@ def train(
         loaders: Training and validation batches.
         codec: Fitted dataset codec.
         checker: Declare conformance checker used for generation validation.
+        kernel: Signature kernel used for generation validation.
         settings: Optimization, validation, and stopping settings.
         observer: Synchronous callbacks for batch, validation, and best-model updates.
 
@@ -218,6 +221,7 @@ def train(
             num_samples=settings.generation_samples,
             codec=codec,
             checker=checker,
+            kernel=kernel,
             device=settings.device,
             seed=settings.seed,
         )
@@ -270,6 +274,7 @@ def fit(
     generation: DataLoader,
     codec: DatasetCodec,
     checker: Checker,
+    kernel: SignatureKernel,
     settings: TrainingSettings,
     observer: TrainingObserver,
 ) -> TrainingResult:
@@ -284,6 +289,7 @@ def fit(
         generation: The validation prefixes generation is scored on.
         codec: Fitted dataset codec.
         checker: Declare conformance checker used for generation validation.
+        kernel: Signature kernel used for generation validation.
         settings: Device, seed, and validation draws; the optimizer and stopping fields are unused.
         observer: Synchronous callbacks for the validation and the selected model.
 
@@ -297,6 +303,7 @@ def fit(
         num_samples=settings.generation_samples,
         codec=codec,
         checker=checker,
+        kernel=kernel,
         device=settings.device,
         seed=settings.seed,
     )
