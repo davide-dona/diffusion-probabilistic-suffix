@@ -20,6 +20,34 @@ from src.models.base import SuffixModel
 from src.models.persistence.io import load_checkpoint
 
 
+def effective_config(
+    config: DictConfig,
+    *,
+    device: str | None,
+    num_samples: int | None,
+    num_workers: int | None,
+) -> DictConfig:
+    """Apply the generation runtime overrides to a training configuration and validate it.
+
+    Args:
+        config: The training configuration, left unchanged.
+        device: Overrides `device`, or `None` to keep it.
+        num_samples: Overrides `inference.evaluation_samples`, or `None` to keep it.
+        num_workers: Overrides `dataloader.num_workers`, or `None` to keep it.
+    Returns:
+        A validated copy of the configuration with the overrides applied.
+    """
+    config = config.copy()
+    if device is not None:
+        config.device = device
+    if num_samples is not None:
+        config.inference.evaluation_samples = num_samples
+    if num_workers is not None:
+        config.dataloader.num_workers = num_workers
+    validate_experiment_config(config)
+    return config
+
+
 def run(
     checkpoint_path: Path,
     *,
@@ -52,15 +80,12 @@ def run(
         checkpoint_sha256=checkpoint_hash,
         source_sha256=checkpoint_hash,
     )
-    # Start with the config stored in the checkpoint and apply runtime overrides.
-    config = OmegaConf.create(checkpoint['config'])
-    if device is not None:
-        config.device = device
-    if num_samples is not None:
-        config.inference.evaluation_samples = num_samples
-    if num_workers is not None:
-        config.dataloader.num_workers = num_workers
-    validate_experiment_config(config)
+    config = effective_config(
+        OmegaConf.create(checkpoint['config']),
+        device=device,
+        num_samples=num_samples,
+        num_workers=num_workers,
+    )
     # Record the exact settings used for this generation run.
     save_config(
         OmegaConf.create(

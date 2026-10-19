@@ -1,0 +1,15 @@
+defaults:
+- train
+- _self_
+generate:
+  device: null
+  num_samples: null
+  num_workers: null
+evaluate:
+  workers: null
+hydra:
+  run:
+    dir: ${model_output:full,${data.name},${model._target_},${run_id}}
+  sweep:
+    dir: outputs/full
+    subdir: ${model_subdir:full,${data.name},${model._target_},${run_id}}

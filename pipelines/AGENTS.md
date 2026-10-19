@@ -1,11 +1,11 @@
 # Pipeline Guide
 
-The five Hydra entry points form an explicit artifact pipeline. No stage discovers an upstream
+The five stage entry points form an explicit artifact pipeline. No stage discovers an upstream
 artifact implicitly. Pass the exact checkpoint, generations file, or evaluation
 report selected by the caller.
 
 Shared console formatting and Hydra invocation setup live in `pipelines/helpers/`. Stage modules
-remain the five entry points.
+remain the five stage entry points; `pipelines/full.py` only chains three of them.
 
 ## Stages
 
@@ -19,6 +19,14 @@ the safe inspection commands below while developing.
 | Generate | `uv run python -m pipelines.generate checkpoint=/path/to/best.pt device=cpu num_samples=100` | training checkpoint, test split, codec | `outputs/generate/<dataset>/<model>/<run-id>/<invocation-id>/generations.parquet`, effective config | Draws suffixes for every test prefix with nested samples and provenance. |
 | Evaluate | `uv run python -m pipelines.evaluate generations=/path/to/generations.parquet workers=4` | generations file, Declare model, signature kernel calibration | `evaluation.json`, `prefix_scores.parquet` under the evaluation output | Scores Parquet row groups in worker processes that share `device` for the signature kernel, aggregates scores overall and by prefix and suffix length, and computes trace precision and recall. |
 | Visualize | `uv run python -m pipelines.visualize 'evaluations=[/a/evaluation.json,/b/evaluation.json]'` | reports and adjacent prefix score files | PDF figures and LaTeX tables under `outputs/visualize/` | Compares runs, performs paired case bootstrap analysis, and renders the registered catalogue. |
+
+`pipelines.full` composes `config/full.yaml`, which is the training configuration plus
+`generate.*` and `evaluate.*` runtime overrides. It validates all three stages up front, then runs
+train, generate, and evaluate as separate processes, each a normal invocation with its own output
+directory and records. It forwards its own overrides, minus `generate.*`, `evaluate.*`, and
+`run_id`, to training, fixes the training `run_id` and each invocation id, and passes the exact
+checkpoint and generations paths downstream. Its own record lives under
+`outputs/full/<dataset>/<model>/<run-id>/`.
 
 Visualization can discover reports recursively:
 
