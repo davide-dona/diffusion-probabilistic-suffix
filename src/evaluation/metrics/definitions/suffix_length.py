@@ -5,15 +5,15 @@ from src.evaluation.prepared import PreparedPrefix
 
 
 @METRICS.register(
-    'suffix_length_crps_accuracy',
-    label='Suffix length CRPS accuracy',
+    'suffix_length_crps_error',
+    label='Suffix length CRPS error',
     group=MetricGroup.SUFFIX_LENGTH,
     unit='events',
     bounds=(0.0, None),
     diagnostic=True,
 )
-def suffix_length_crps_accuracy(context: PreparedPrefix) -> float:
-    """Return the CRPS accuracy term of suffix length, the mean absolute error of the draws.
+def suffix_length_crps_error(context: PreparedPrefix) -> float:
+    """Return the CRPS error term of suffix length, the mean absolute error of the draws.
 
     Args:
         context: Prepared samples and observed continuation for one prefix.
@@ -25,14 +25,14 @@ def suffix_length_crps_accuracy(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'suffix_length_bias',
-    label='Suffix length bias',
+    'suffix_length_signed_error',
+    label='Suffix length signed error',
     group=MetricGroup.SUFFIX_LENGTH,
     unit='events',
     diagnostic=True,
     direction=Direction.ZERO,
 )
-def suffix_length_bias(context: PreparedPrefix) -> float:
+def suffix_length_signed_error(context: PreparedPrefix) -> float:
     """Return the mean sampled suffix length minus the observed one.
 
     Args:
@@ -48,14 +48,14 @@ def suffix_length_bias(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'sentinel_rate',
-    label='EOT sentinel rate',
+    'truncated_draw_rate',
+    label='Truncated draw rate',
     group=MetricGroup.SUFFIX_LENGTH,
     bounds=(0.0, 1.0),
     diagnostic=True,
     direction=Direction.LOWER,
 )
-def sentinel_rate(context: PreparedPrefix) -> float:
+def truncated_draw_rate(context: PreparedPrefix) -> float:
     """Return the share of draws that the EOT sentinel had to close.
 
     Args:
@@ -110,14 +110,14 @@ def suffix_length_crps_spread(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'suffix_length_pit',
-    label='Suffix length PIT',
+    'suffix_length_truth_quantile',
+    label='Suffix length truth quantile',
     group=MetricGroup.SUFFIX_LENGTH,
     bounds=(0.0, 1.0),
     diagnostic=True,
 )
-def suffix_length_pit(context: PreparedPrefix) -> float:
-    """Return the randomized PIT of the observed suffix length among the draws.
+def suffix_length_truth_quantile(context: PreparedPrefix) -> float:
+    """Return the quantile of the observed suffix length among the draws, as a randomized PIT.
 
     Args:
         context: Prepared samples, observed continuation, and PIT noise for one prefix.

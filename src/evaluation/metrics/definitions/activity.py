@@ -64,13 +64,13 @@ def dls_sample_mean(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'pairwise_activity_distance',
-    label='Mean pairwise activity distance',
+    'activity_dld_spread',
+    label='Activity DLD spread',
     group=MetricGroup.ACTIVITY,
     bounds=(0.0, 1.0),
     diagnostic=True,
 )
-def pairwise_activity_distance(context: PreparedPrefix) -> float:
+def activity_dld_spread(context: PreparedPrefix) -> float:
     """Return the draw-weighted DLD between different sampled suffixes.
 
     Args:
@@ -86,14 +86,14 @@ def pairwise_activity_distance(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'activity_spread_skill_gap',
-    label='Activity spread skill gap',
+    'activity_spread_error_gap',
+    label='Activity spread error gap',
     group=MetricGroup.ACTIVITY,
     bounds=(-1.0, 1.0),
     diagnostic=True,
     direction=Direction.ZERO,
 )
-def activity_spread_skill_gap(context: PreparedPrefix) -> float:
+def activity_spread_error_gap(context: PreparedPrefix) -> float:
     """Return the mean DLD between draws minus their mean DLD to the observed suffix.
 
     For a calibrated forecast the observed suffix is one more draw, so both means agree. A
@@ -115,35 +115,35 @@ def activity_spread_skill_gap(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'distinct_suffix_share',
-    label='Distinct suffix share',
+    'unique_suffix_ratio',
+    label='Unique suffix ratio',
     group=MetricGroup.ACTIVITY,
     bounds=(0.0, 1.0),
     diagnostic=True,
 )
-def distinct_suffix_share(context: PreparedPrefix) -> float:
-    """Return how many distinct activity suffixes the draws hold, per draw.
+def unique_suffix_ratio(context: PreparedPrefix) -> float:
+    """Return how many unique activity suffixes the draws hold, per draw.
 
     Args:
         context: Prepared samples for one prefix.
 
     Returns:
-        Distinct suffixes divided by draws, 1.0 when every draw differs. No draws score zero.
+        Unique suffixes divided by draws, 1.0 when every draw differs. No draws score zero.
     """
     samples = context.generation.samples
     return len(samples.suffixes) / len(samples) if len(samples) else 0.0
 
 
 @METRICS.register(
-    'truth_hit_rate',
-    label='Truth hit rate',
+    'exact_match_at_k',
+    label='Exact match at K',
     group=MetricGroup.ACTIVITY,
     bounds=(0.0, 1.0),
     diagnostic=True,
     direction=Direction.HIGHER,
 )
-def truth_hit_rate(context: PreparedPrefix) -> float:
-    """Return whether any draw reproduces the observed activity suffix exactly.
+def exact_match_at_k(context: PreparedPrefix) -> float:
+    """Return whether any of the K draws reproduces the observed activity suffix exactly.
 
     Args:
         context: Prepared samples and observed continuation for one prefix.

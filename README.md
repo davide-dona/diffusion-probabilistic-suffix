@@ -171,11 +171,11 @@ overall and within each length bucket. The joint signature kernel score, which a
 checkpoints, is solved on `device` (default `cuda:0`), shared by every worker. Trace precision
 and recall, over one random prefix per case, are stored under `traces`.
 
-Diagnostics expose biases the ranked metrics hide: signed suffix-length, remaining-time, and
-conformance biases, the activity spread skill gap, distinct suffix share, truth hit rate, and EOT
-sentinel rate, next to DLS sample mean and pairwise activity distance. Suffix length and remaining
-time also report their randomized PIT and the accuracy and spread terms of their CRPS; the PIT
-histogram is read from `prefix_scores.parquet`. They
+Diagnostics expose biases the ranked metrics hide: the signed suffix-length and remaining-time log
+errors, the conformance share bias, the activity spread error gap, unique suffix ratio, exact match
+at K, and truncated draw rate, next to DLS sample mean and activity DLD spread. Suffix length and
+remaining time also report the truth quantile, a randomized PIT, and the error and spread terms
+of their CRPS; its histogram is read from `prefix_scores.parquet`. They
 are logged to W&B under `diagnostic_<group>/<metric>` during validation and stored under
 `diagnostics` in `evaluation.json` and in `prefix_scores.parquet`, but never enter publication
 comparisons. A model may add its own values under `diagnostic_model/<key>`; the case-based model

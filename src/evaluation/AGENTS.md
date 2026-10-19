@@ -135,20 +135,20 @@ publication figures or tables, or significance comparisons, and never select a c
 
 | Group | Diagnostics |
 | --- | --- |
-| Activity | DLS sample mean; mean pairwise DLD between draws; spread skill gap, that pairwise DLD minus the mean DLD to truth, negative when overconfident; distinct suffix share; truth hit rate, whether any draw reproduces the true activities |
-| Suffix length | MAE; signed bias, sampled minus true length; EOT sentinel rate; randomized PIT; CRPS accuracy and spread terms |
-| Remaining time | Signed bias of `log1p` days, sampled minus true; randomized PIT; CRPS accuracy and spread terms |
+| Activity | DLS sample mean; DLD spread, the mean DLD between draws; spread error gap, that spread minus the mean DLD to truth, negative when overconfident; unique suffix ratio, unique activity suffixes per draw; exact match at K, whether any of the K draws reproduces the true activities |
+| Suffix length | Signed error, sampled minus true length; truncated draw rate, the share of draws closed at the length cap without generating EOT; truth quantile; CRPS error and spread terms |
+| Remaining time | Log error, the signed difference of `log1p` days, sampled minus true; truth quantile; CRPS error and spread terms |
 | Conformance | Signed bias of the satisfied-constraint share, sampled minus observed |
 
 Pairwise quantities retain the multiplicity of repeated sampled suffixes. Every diagnostic is
-linear in its per-prefix values, so prefix means compose across buckets; the signed biases can
-cancel overall and are read per length bucket.
+linear in its per-prefix values, so prefix means compose across buckets; the signed errors and
+biases can cancel overall and are read per length bucket.
 
-The randomized PIT of each CRPS-scored quantity is
+The truth quantile of each CRPS-scored quantity is its randomized PIT
 `(#draws below truth + V * (#draws equal to truth + 1)) / (K + 1)` with `V ~ U[0, 1]` from a
 fixed seed, so integer lengths and zero remaining times do not skew it. Its histogram, pooled
 over prefixes, is read from the per-prefix values in `prefix_scores.parquet`; calibration never
-ranks. The CRPS accuracy term is the draw mean of `|x - y|` and the spread term is half the mean
+ranks. The CRPS error term is the draw mean of `|x - y|` and the spread term is half the mean
 `|x - x'|` over pairs of different draws; their difference is the CRPS, but report each term on
 its own and keep computing the CRPS itself with the sorted-sample estimator.
 

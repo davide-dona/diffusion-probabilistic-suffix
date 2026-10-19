@@ -29,14 +29,14 @@ def remaining_time_crps_days(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'remaining_time_log_bias',
-    label='Remaining-time log bias',
+    'remaining_time_log_error',
+    label='Remaining-time log error',
     group=MetricGroup.REMAINING_TIME,
     unit='log days',
     diagnostic=True,
     direction=Direction.ZERO,
 )
-def remaining_time_log_bias(context: PreparedPrefix) -> float:
+def remaining_time_log_error(context: PreparedPrefix) -> float:
     """Return the mean sampled log remaining time minus the observed one.
 
     Both times are read as `log1p` of days, so long cases do not dominate the mean.
@@ -55,15 +55,15 @@ def remaining_time_log_bias(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'remaining_time_crps_accuracy_days',
-    label='Remaining-time CRPS accuracy',
+    'remaining_time_crps_error_days',
+    label='Remaining-time CRPS error',
     group=MetricGroup.REMAINING_TIME,
     unit='days',
     bounds=(0.0, None),
     diagnostic=True,
 )
-def remaining_time_crps_accuracy_days(context: PreparedPrefix) -> float:
-    """Return the CRPS accuracy term of remaining time, the mean absolute error of the draws.
+def remaining_time_crps_error_days(context: PreparedPrefix) -> float:
+    """Return the CRPS error term of remaining time, the mean absolute error of the draws.
 
     Args:
         context: Prepared samples and observed continuation for one prefix.
@@ -96,14 +96,14 @@ def remaining_time_crps_spread_days(context: PreparedPrefix) -> float:
 
 
 @METRICS.register(
-    'remaining_time_pit',
-    label='Remaining-time PIT',
+    'remaining_time_truth_quantile',
+    label='Remaining-time truth quantile',
     group=MetricGroup.REMAINING_TIME,
     bounds=(0.0, 1.0),
     diagnostic=True,
 )
-def remaining_time_pit(context: PreparedPrefix) -> float:
-    """Return the randomized PIT of the observed remaining time among the draws.
+def remaining_time_truth_quantile(context: PreparedPrefix) -> float:
+    """Return the quantile of the observed remaining time among the draws, as a randomized PIT.
 
     Args:
         context: Prepared samples, observed continuation, and PIT noise for one prefix.
