@@ -12,6 +12,8 @@ suffixes. Metrics operate per prefix first, then reports average prefixes with e
   and PIT noise.
 - `signature.py` owns the path embedding, the batched Goursat PDE solver of the signature kernel,
   and the train-split calibration of its time scale and bandwidth.
+- `goursat.py` owns the Triton kernel that solves the Goursat PDE on CUDA, one lane per pair
+  sweeping its grid row by row. It is imported only on CUDA, since Triton is unavailable elsewhere.
 - `traces.py` owns trace precision and recall, which compare sets of full traces, not prefixes.
 - `Draws.mean` owns the draw-weighted sample mean. `metrics/helpers.py` owns the
   distance-parametrized energy score, CRPS, its accuracy (MAE) and spread terms, and the
@@ -75,7 +77,9 @@ constants on the train split, from the suffix after each training case's first e
 suffix a cut can produce: `lambda` is the inverse mean `log1p` of their inter-event minutes, and
 `sigma` the exact median distance over pairs of different points of all their paths, selected by
 radix passes over float64 bit patterns on `device`. The PDE is solved with dyadic
-order `DYADIC_ORDER`, on CUDA or else the CPU; identical paths of a prefix are solved once. The
+order `DYADIC_ORDER`, on CUDA by the Triton kernel or else on the CPU one anti-diagonal at a time;
+both run the same float32 scheme and agree up to rounding. Identical paths of a prefix are solved
+once. The
 signature kernel score selects checkpoints.
 
 Declare checks evaluate the full trace formed by prefix plus suffix against constraints mined from

@@ -3,7 +3,7 @@ defaults:
 - _self_
 generations: ???
 invocation_id: ${now:%Y%m%d-%H%M%S-%f}
-workers: null
+workers: 4
 device: cuda:0
 hydra:
   run:

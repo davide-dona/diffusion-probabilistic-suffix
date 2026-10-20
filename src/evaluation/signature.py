@@ -11,8 +11,8 @@ from src import artifacts
 
 # Each cell of the PDE grid is split into 2**DYADIC_ORDER steps along both paths.
 DYADIC_ORDER = 1
-# Upper bound on the refined grid cells of one solver call, which bounds its device memory.
-CHUNK_CELLS = 1 << 28
+# Upper bound on the coarse grid cells of one solver call, which bounds its device memory.
+CHUNK_CELLS = 1 << 26
 # Pairwise distances of the bandwidth median are visited in square tiles of at most this side.
 _TILE = 8192
 # Bit widths of the radix passes selecting the median among float64 bit patterns, high to low.
@@ -211,7 +211,7 @@ class SignatureKernel:
         # A chunk [start, stop) fits when (stop - start) * rows**2 cells of its longest path fit
         # the budget. `latest[i]` is the earliest start a chunk ending at pair i may have, and it
         # strictly increases since rows only grow along the sorted pairs.
-        capacity = CHUNK_CELLS // (sizes[long] ** 2 * 4**DYADIC_ORDER)
+        capacity = CHUNK_CELLS // sizes[long] ** 2
         latest = np.arange(1, len(order) + 1) - np.maximum(capacity, 1)
         values = np.empty(len(order))
         start = 0
@@ -235,44 +235,15 @@ class SignatureKernel:
         del squared, static
         if increments.shape[1] > increments.shape[2]:
             increments = increments.transpose(1, 2)
-        steps = 2**DYADIC_ORDER
-        batch, height, width = increments.shape
-        rows, columns = steps * height, steps * width
-        if rows == 0:
-            return np.ones(batch)
-        diagonals = rows + columns - 1
-        # The refined cells of a coarse cell share its increment, so the update coefficients are
-        # computed once per coarse cell. The extra last cell holds the coefficients of a zero
-        # increment, both exactly one, for refined cells outside the grid.
-        scaled = increments.float().div_(steps**2).reshape(batch, height * width)
-        del increments
-        coefficients = torch.ones(
-            batch, 2, height * width + 1, dtype=torch.float32, device=self.device
-        )
-        coefficients[:, 1, :-1] = scaled.square().mul_(-1.0 / 12.0).add_(1.0)
-        coefficients[:, 0, :-1] = scaled.mul_(0.5).add_(2.0).sub_(coefficients[:, 1, :-1])
-        del scaled
-        # Skew the refined grid so cell (i, j) sits at [d, i] with d = i + j, making every
-        # anti-diagonal one row of `cells`, which holds the coarse cell of each refined cell.
-        row = torch.arange(rows, device=self.device)
-        column = torch.arange(diagonals, device=self.device)[:, None] - row  # [diagonals, rows]
-        outside = (column < 0) | (column >= columns)
-        cells = column.clamp_(min=0, max=columns - 1).floor_divide_(steps)
-        cells += row.floor_divide(steps).mul_(width)
-        cells.masked_fill_(outside, height * width)
-        del outside
-        # Points are skewed the same way, point (i, j) at [i + j, i], keeping only the three
-        # latest anti-diagonals, in slot d % 3. Every point starts at the boundary value one; a
-        # point left of the grid stays one, since the cell producing it has a zero increment and
-        # only ones as inputs, and a point right of the grid is never read by a point inside it.
-        solution = torch.ones(batch, 3, rows + 1, dtype=torch.float32, device=self.device)
-        for diagonal in range(diagonals):
-            first, second = coefficients.index_select(dim=2, index=cells[diagonal]).unbind(1)
-            previous, earlier = solution[:, (diagonal + 1) % 3], solution[:, diagonal % 3]
-            solution[:, (diagonal + 2) % 3, 1:] = (
-                previous[:, 1:] + previous[:, :-1]
-            ) * first - earlier[:, :-1] * second
-        return solution[:, (diagonals + 1) % 3, -1].double().cpu().numpy()
+        if increments.shape[1] == 0:
+            return np.ones(len(increments))
+        if increments.is_cuda:
+            from src.evaluation.goursat import sweep
+
+            values = sweep(increments, DYADIC_ORDER)
+        else:
+            values = _solve_diagonals(increments)
+        return values.double().cpu().numpy()
 
 
 def embed(axes: np.ndarray, minutes: np.ndarray, *, time_scale: float, alphabet: int) -> np.ndarray:
@@ -318,8 +289,54 @@ class PathSet:
         return self.points[index.to(self.points.device)]
 
 
+def _solve_diagonals(increments: torch.Tensor) -> torch.Tensor:
+    """Solve the Goursat PDE one anti-diagonal of all pairs at a time.
+
+    Args:
+        increments: `[B, H, W]` static kernel second differences of each pair's coarse cells,
+            with `1 <= H <= W`.
+
+    Returns:
+        `[B]` float32 kernel values.
+    """
+    device = increments.device
+    steps = 2**DYADIC_ORDER
+    batch, height, width = increments.shape
+    rows, columns = steps * height, steps * width
+    diagonals = rows + columns - 1
+    # The refined cells of a coarse cell share its increment, so the update coefficients are
+    # computed once per coarse cell. The extra last cell holds the coefficients of a zero
+    # increment, both exactly one, for refined cells outside the grid.
+    scaled = increments.float().div_(steps**2).reshape(batch, height * width)
+    coefficients = torch.ones(batch, 2, height * width + 1, dtype=torch.float32, device=device)
+    coefficients[:, 1, :-1] = scaled.square().mul_(-1.0 / 12.0).add_(1.0)
+    coefficients[:, 0, :-1] = scaled.mul_(0.5).add_(2.0).sub_(coefficients[:, 1, :-1])
+    del scaled
+    # Skew the refined grid so cell (i, j) sits at [d, i] with d = i + j, making every
+    # anti-diagonal one row of `cells`, which holds the coarse cell of each refined cell.
+    row = torch.arange(rows, device=device)
+    column = torch.arange(diagonals, device=device)[:, None] - row  # [diagonals, rows]
+    outside = (column < 0) | (column >= columns)
+    cells = column.clamp_(min=0, max=columns - 1).floor_divide_(steps)
+    cells += row.floor_divide(steps).mul_(width)
+    cells.masked_fill_(outside, height * width)
+    del outside
+    # Points are skewed the same way, point (i, j) at [i + j, i], keeping only the three
+    # latest anti-diagonals, in slot d % 3. Every point starts at the boundary value one; a
+    # point left of the grid stays one, since the cell producing it has a zero increment and
+    # only ones as inputs, and a point right of the grid is never read by a point inside it.
+    solution = torch.ones(batch, 3, rows + 1, dtype=torch.float32, device=device)
+    for diagonal in range(diagonals):
+        first, second = coefficients.index_select(dim=2, index=cells[diagonal]).unbind(1)
+        previous, earlier = solution[:, (diagonal + 1) % 3], solution[:, diagonal % 3]
+        solution[:, (diagonal + 2) % 3, 1:] = (
+            previous[:, 1:] + previous[:, :-1]
+        ) * first - earlier[:, :-1] * second
+    return solution[:, (diagonals + 1) % 3, -1]
+
+
 def _solver_device(device: torch.device) -> torch.device:
-    """Return `device` when it is CUDA, else the CPU, since the solver needs float64."""
+    """Return `device` when it is CUDA, else the CPU, since the static kernel needs float64."""
     return device if device.type == 'cuda' else torch.device('cpu')
 
 
