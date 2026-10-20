@@ -135,27 +135,6 @@ def unique_suffix_ratio(context: PreparedPrefix) -> float:
     return len(samples.suffixes) / len(samples) if len(samples) else 0.0
 
 
-@METRICS.register(
-    'exact_match_at_k',
-    label='Exact match at K',
-    group=MetricGroup.ACTIVITY,
-    bounds=(0.0, 1.0),
-    diagnostic=True,
-    direction=Direction.HIGHER,
-)
-def exact_match_at_k(context: PreparedPrefix) -> float:
-    """Return whether any of the K draws reproduces the observed activity suffix exactly.
-
-    Args:
-        context: Prepared samples and observed continuation for one prefix.
-
-    Returns:
-        1.0 when the observed activity suffix is among the draws, otherwise 0.0.
-    """
-    samples, truth = context.generation.samples, context.generation.truth
-    return float(truth.activities in samples.suffixes)
-
-
 def _best_of_k_dls(context: PreparedPrefix, k: int) -> float:
     """Return the expected best DLS to the observed suffix over k draws taken without replacement.
 

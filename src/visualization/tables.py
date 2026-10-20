@@ -2,9 +2,9 @@ from collections.abc import Container, Sequence
 
 import pandas as pd
 
-from src.evaluation.metrics.metadata import Direction, Metric
+from src.evaluation.metrics.metadata import Direction
 from src.visualization import labels
-from src.visualization.catalogue import Table
+from src.visualization.catalogue import Column, Table
 
 TABLE_ARROWS = {
     Direction.HIGHER: r' ($\uparrow$)',
@@ -45,7 +45,7 @@ def _value(frame: pd.DataFrame, key: str) -> float:
 
 
 def _row(
-    columns: Sequence[Metric],
+    columns: Sequence[Column],
     frame: pd.DataFrame,
     *,
     label: str,
@@ -55,7 +55,7 @@ def _row(
     """Render one model row of a LaTex table.
 
     Args:
-        columns: Metrics to render.
+        columns: Columns to render.
         frame: Report rows for the model.
         label: Model display label.
         best: Metrics to render in bold.
@@ -65,13 +65,31 @@ def _row(
         One LaTex table row.
     """
     cells = []
-    for metric in columns:
-        value = _value(frame, metric.key)
+    for column in columns:
+        value = _value(frame, column.key)
         if reference is not None:
-            value = 1.0 - value / _value(reference, metric.key)
+            value = 1.0 - value / _value(reference, column.key)
         written = f'{value:.3f}'
-        cells.append(f'\\textbf{{{written}}}' if metric.key in best else written)
+        cells.append(f'\\textbf{{{written}}}' if column.key in best else written)
     return '   & ' + ' & '.join([_escape_latex(label), *cells]) + ' \\\\'
+
+
+def _log_row(columns: Sequence[Column], frame: pd.DataFrame) -> str:
+    """Render the Log row, holding the observed value of each column that has one.
+
+    Args:
+        columns: Columns to render.
+        frame: Report rows for one dataset, where every model holds the same log-owned values.
+
+    Returns:
+        One LaTex table row, with a dash under columns without an observed value.
+    """
+    first = frame[frame['model'] == frame['model'].iloc[0]]
+    cells = [
+        '--' if column.observed is None else f'{_value(first, column.observed):.3f}'
+        for column in columns
+    ]
+    return '   & ' + ' & '.join([_escape_latex(labels.LOG_STYLE.label), *cells]) + ' \\\\'
 
 
 def _block(
@@ -85,7 +103,7 @@ def _block(
     Args:
         table: Table definition.
         frame: Report rows for the dataset.
-        significance: Metrics to emphasize by model.
+        significance: Metrics to emphasize by model, ignored unless the table emphasizes.
         models: Models in display order.
 
     Returns:
@@ -100,7 +118,8 @@ def _block(
             )
     rows = []
     for model in models:
-        if model == table.reference or not (frame['model'] == model).any():
+        skipped = model == table.reference or model in table.omitted
+        if skipped or not (frame['model'] == model).any():
             continue
         marked = significance[(significance['model'] == model) & significance['best']]
         rows.append(
@@ -108,10 +127,12 @@ def _block(
                 table.columns,
                 frame[frame['model'] == model],
                 label=labels.MODELS[model].label,
-                best=set(marked['metric']),
+                best=set(marked['metric']) if table.emphasis else set(),
                 reference=reference,
             )
         )
+    if any(column.observed is not None for column in table.columns):
+        rows.append(_log_row(table.columns, frame))
     return rows
 
 
@@ -125,14 +146,13 @@ def _headers(table: Table) -> list[str]:
         LaTex header lines.
     """
     headers = [
-        f'{metric.publication_label or metric.label}'
-        f'{TABLE_ARROWS[Direction.HIGHER if table.reference else metric.direction]}'
-        for metric in table.columns
+        f'{column.label}{TABLE_ARROWS[Direction.HIGHER if table.reference else column.direction]}'
+        for column in table.columns
     ]
     if not table.column_groups:
         return ['  Dataset & Model & ' + ' & '.join(headers) + ' \\\\']
 
-    headers = [metric.publication_label or metric.label for metric in table.columns]
+    headers = [column.label for column in table.columns]
     groups = ' & '.join(
         f'\\multicolumn{{{group.span}}}{{c}}{{{group.label}}}' for group in table.column_groups
     )

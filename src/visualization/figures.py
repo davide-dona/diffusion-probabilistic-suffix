@@ -14,11 +14,15 @@ from src.evaluation.metrics.metadata import Direction, Metric, Owner
 from src.visualization import labels
 from src.visualization.catalogue import Plot
 from src.visualization.style import (
+    COLUMN_WIDTH,
     DATASET_HEIGHT,
     FIGURE_OVERHEAD,
     MAX_MARKERS,
+    MIN_BUCKET_PREFIXES,
+    NARROW_LEGEND_COLUMNS,
     PAGE_WIDTH,
     PANEL_X_BINS,
+    REFERENCE_LINE,
     TITLE_WIDTH,
     Y_HEADROOM,
 )
@@ -73,7 +77,7 @@ def _draw_metric(axes: Axes, frame: pd.DataFrame, metric: Metric) -> int:
 
 
 def _draw_panel(
-    axes: Axes, frame: pd.DataFrame, panel: tuple[Metric, ...], *, x_bins: int | str
+    axes: Axes, frame: pd.DataFrame, panel: tuple[Metric, ...], *, x_bins: int | str, skill: bool
 ) -> int:
     """Draw a panel and return its longest reported length.
 
@@ -82,12 +86,17 @@ def _draw_panel(
         frame: Report rows for one dataset and breakdown.
         panel: Metrics displayed together.
         x_bins: Maximum x-axis tick bins.
+        skill: Whether the rows hold skill scores, which have no fixed bounds.
 
     Returns:
         Longest reported length across the panel.
     """
     longest = max(_draw_metric(axes, frame, metric) for metric in panel)
     axes.xaxis.set_major_locator(MaxNLocator(nbins=x_bins, integer=True))
+    if skill or panel[0].direction is Direction.ZERO:
+        axes.axhline(0.0, **REFERENCE_LINE)
+    if skill:
+        return longest
     # Unbounded sides use Matplotlib's automatic limits.
     bottom, top = panel[0].bounds
     if top is not None:
@@ -116,8 +125,36 @@ def _link_x_axes(grid: np.ndarray, breakdowns: list[Axis], longest: list[list[in
                 grid[row][column].set_xlim(left=1, right=max(2, right))
 
 
+def _skill(frame: pd.DataFrame, reference: str) -> pd.DataFrame:
+    """Turn each bucket's mean into its skill against the reference model's mean.
+
+    Args:
+        frame: Report rows of one breakdown or more, including the reference model's.
+        reference: Model whose means the skill is measured against.
+
+    Returns:
+        The other models' rows, holding `1 - mean / reference mean`.
+
+    Raises:
+        ValueError: If a dataset has no report of the reference model.
+    """
+    absent = set(frame['dataset']) - set(frame.loc[frame['model'] == reference, 'dataset'])
+    if absent:
+        raise ValueError(f'Skill figures need a report of {reference} for {", ".join(absent)}')
+    keys = ['dataset', 'axis', 'length', 'metric']
+    means = frame.loc[frame['model'] == reference, [*keys, 'value']]
+    skilled = frame[frame['model'] != reference].merge(
+        means.rename(columns={'value': 'reference'}), on=keys, validate='many_to_one'
+    )
+    skilled['value'] = 1.0 - skilled['value'] / skilled['reference']
+    return skilled.drop(columns='reference')
+
+
 def compose_figure(frame: pd.DataFrame, plot: Plot) -> Figure:
     """Compose a catalogue figure across all datasets.
+
+    Length buckets with fewer than `MIN_BUCKET_PREFIXES` prefixes are left out, since their
+    means are too noisy to read.
 
     Args:
         frame: Report rows.
@@ -125,14 +162,25 @@ def compose_figure(frame: pd.DataFrame, plot: Plot) -> Figure:
 
     Returns:
         Composed Matplotlib figure.
+
+    Raises:
+        ValueError: If a skill figure lacks the reference model's report for a dataset.
     """
     datasets = labels.ordered(frame['dataset'], labels.DATASETS, kind='dataset')
+    frame = frame[frame['prefixes'] >= MIN_BUCKET_PREFIXES]
+    if plot.reference is not None:
+        frame = _skill(frame, plot.reference)
+    frame = frame[~frame['model'].isin(plot.omitted)]
     # Each breakdown occupies a block of metric columns.
     columns = [(breakdown, panel) for breakdown in plot.breakdowns for panel in plot.panels]
+    narrow = len(columns) <= 2
     figure, grid = plt.subplots(
         nrows=len(datasets),
         ncols=len(columns),
-        figsize=(PAGE_WIDTH, len(datasets) * DATASET_HEIGHT + FIGURE_OVERHEAD),
+        figsize=(
+            COLUMN_WIDTH if narrow else PAGE_WIDTH,
+            len(datasets) * DATASET_HEIGHT + FIGURE_OVERHEAD,
+        ),
         squeeze=False,
         constrained_layout=True,
     )
@@ -142,7 +190,13 @@ def compose_figure(frame: pd.DataFrame, plot: Plot) -> Figure:
         drawn = frame[frame['dataset'] == dataset]
         longest.append(
             [
-                _draw_panel(axes, drawn[drawn['axis'] == breakdown], panel, x_bins=PANEL_X_BINS)
+                _draw_panel(
+                    axes,
+                    drawn[drawn['axis'] == breakdown],
+                    panel,
+                    x_bins=PANEL_X_BINS,
+                    skill=plot.reference is not None,
+                )
                 for axes, (breakdown, panel) in zip(row, columns, strict=True)
             ]
         )
@@ -155,8 +209,12 @@ def compose_figure(frame: pd.DataFrame, plot: Plot) -> Figure:
 
     for column, (_, panel) in enumerate(columns):
         metric = panel[0]
-        unit = f' [{metric.unit}]' if metric.unit else ''
-        heading = f'{metric.label}{unit}{AXIS_ARROWS[metric.direction]}'.replace(' (', '\n(')
+        if plot.reference is None:
+            unit = f' [{metric.unit}]' if metric.unit else ''
+            heading = f'{metric.label}{unit}{AXIS_ARROWS[metric.direction]}'
+        else:
+            heading = f'{metric.label} skill{AXIS_ARROWS[Direction.HIGHER]}'
+        heading = heading.replace(' (', '\n(')
         grid[0, column].set_title(
             '\n'.join(textwrap.fill(line, width=TITLE_WIDTH) for line in heading.splitlines())
         )
@@ -166,7 +224,12 @@ def compose_figure(frame: pd.DataFrame, plot: Plot) -> Figure:
         top = max(limit[1] for limit in limits)
         for axes in grid[:, column]:
             axes.set_ylim(bottom, top)
-            if column > 0 and metric.bounds == (0.0, 1.0) and columns[0][1][0].bounds == (0.0, 1.0):
+            if (
+                column > 0
+                and plot.reference is None
+                and metric.bounds == (0.0, 1.0)
+                and columns[0][1][0].bounds == (0.0, 1.0)
+            ):
                 axes.tick_params(labelleft=False)
 
     if len(plot.breakdowns) == 1:
@@ -183,5 +246,10 @@ def compose_figure(frame: pd.DataFrame, plot: Plot) -> Figure:
             for label, handle in zip(written, handles, strict=True):
                 keys.setdefault(label, handle)
     if len(keys) > 1:
-        figure.legend(list(keys.values()), list(keys), loc='outside upper center', ncols=len(keys))
+        figure.legend(
+            list(keys.values()),
+            list(keys),
+            loc='outside upper center',
+            ncols=min(len(keys), NARROW_LEGEND_COLUMNS) if narrow else len(keys),
+        )
     return figure

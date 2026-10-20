@@ -1,5 +1,11 @@
 from src.evaluation.prepared import PreparedPrefix
-from src.evaluation.reports import REPORT_COLUMNS, Axis, EvaluationReport, read_reports
+from src.evaluation.reports import (
+    REPORT_COLUMNS,
+    TRACE_METRICS,
+    Axis,
+    EvaluationReport,
+    read_reports,
+)
 from src.evaluation.score_store import (
     BLOCK,
     PREFIX_SCORE_KEYS,
@@ -19,6 +25,7 @@ __all__ = [
     'BLOCK',
     'PREFIX_SCORE_KEYS',
     'REPORT_COLUMNS',
+    'TRACE_METRICS',
     'Axis',
     'EvaluationReport',
     'EvaluationSummary',

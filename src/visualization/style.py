@@ -15,6 +15,12 @@ PANEL_X_BINS = 5
 MAX_MARKERS = 8
 # Upper-bound headroom as a share of its range.
 Y_HEADROOM = 0.05
+# Legend entries per row in a column-wide figure.
+NARROW_LEGEND_COLUMNS = 3
+# Fewest prefixes a length bucket needs to be drawn.
+MIN_BUCKET_PREFIXES = 30
+# Style of the line marking a perfect, null, or reference value.
+REFERENCE_LINE = {'color': '#A3A3A3', 'linestyle': '--', 'linewidth': 0.6, 'zorder': 0}
 
 # Shared Matplotlib settings.
 _PAPER_RC = {
