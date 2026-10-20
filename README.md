@@ -189,8 +189,9 @@ checkpoints, is solved on `device` (default `cuda:0`), shared by every worker. T
 and recall, over one random prefix per case, are stored under `traces`.
 
 Diagnostics expose biases the ranked metrics hide: the signed suffix-length and remaining-time log
-errors, the conformance share bias, the activity spread error gap, unique suffix ratio, exact match
-at K, and truncated draw rate, next to DLS sample mean and activity DLD spread. Suffix length and
+errors, the conformance share bias, the activity spread error gap, unique suffix ratio, best-of-k
+DLS, and truncated draw rate, next to DLS sample mean, activity DLD spread, and the mean
+satisfied-constraint share of the draws and of the observed trace. Suffix length and
 remaining time also report the truth quantile, a randomized PIT, and the error and spread terms
 of their CRPS; its histogram is read from `prefix_scores.parquet`. They
 are logged to W&B under `diagnostic_<group>/<metric>` during validation and stored under
@@ -212,8 +213,8 @@ uv run python -m pipelines.visualize \
 
 Keep every `evaluation.json` beside its `prefix_scores.parquet`. Figures are written as PDF under
 `outputs/visualize/<date>/<time>/figures/`, and comparison tables as LaTeX under
-`outputs/visualize/<date>/<time>/tables/`. The skill table reports each score relative to the
-`unconditional` model, so include its report for every dataset.
+`outputs/visualize/<date>/<time>/tables/`. The skill table and the skill-by-length figure report
+each score relative to the `unconditional` model, so include its report for every dataset.
 
 To visualize every report below one or more directories instead:
 

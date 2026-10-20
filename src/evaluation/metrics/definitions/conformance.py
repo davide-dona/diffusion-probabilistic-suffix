@@ -8,6 +8,7 @@ from src.evaluation.prepared import PreparedPrefix
     label='Conformance (sample mean)',
     group=MetricGroup.CONFORMANCE,
     bounds=(0.0, 1.0),
+    diagnostic=True,
     direction=Direction.HIGHER,
 )
 def conformance_sample_mean(context: PreparedPrefix) -> float:
@@ -49,6 +50,7 @@ def conformance_share_bias(context: PreparedPrefix) -> float:
     group=MetricGroup.CONFORMANCE,
     bounds=(0.0, 1.0),
     owner=Owner.LOG,
+    diagnostic=True,
 )
 def conformance_observed(context: PreparedPrefix) -> float:
     """Return the satisfied-constraint share of the observed continuation.

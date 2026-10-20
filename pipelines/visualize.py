@@ -14,10 +14,13 @@ from src.evaluation import read_reports
 from src.uncertainty import test_significance
 from src.visualization import (
     FIGURES,
+    PIT_METRICS,
     TABLES,
     apply_style,
     compose_figure,
+    compose_pit_grid,
     latex_table,
+    read_pit,
 )
 
 
@@ -33,22 +36,26 @@ def _save_figure(figure: Figure, path: Path) -> None:
     plt.close(figure)
 
 
-def _draw_figures(frame: pd.DataFrame) -> int:
-    """Draw every figure of the catalogue, each covering every log the reports cover at once.
+def _draw_figures(frame: pd.DataFrame, pit: pd.DataFrame) -> int:
+    """Draw the length figures of the catalogue and the PIT histograms, over every log at once.
 
     Args:
         frame: Every report read, from `read_reports`.
+        pit: Every prefix's PIT values, from `read_pit`.
     Returns:
         How many figures were written, under the invocation's `figures/`.
     """
-    written = 0
     for plot in FIGURES:
         _save_figure(
             figure=compose_figure(frame[frame['axis'].isin(plot.breakdowns)], plot),
             path=output_path(f'figures/{plot.name}.pdf'),
         )
-        written += 1
-    return written
+    for metric in PIT_METRICS:
+        quantity = metric.key.removesuffix('_truth_quantile').replace('_', '-')
+        _save_figure(
+            figure=compose_pit_grid(pit, metric), path=output_path(f'figures/pit-{quantity}.pdf')
+        )
+    return len(FIGURES) + len(PIT_METRICS)
 
 
 def _write_tables(frame: pd.DataFrame, significance: pd.DataFrame) -> int:
@@ -71,11 +78,11 @@ def run(evaluation_files: Sequence[Path]) -> None:
     Args:
         evaluation_files: The reports to compare, from `python -m pipelines.evaluate`. These draw
             the metric figures and comparison tables, and the per-prefix scores beside each report
-            are what the tables' emphasis is tested on.
+            hold the PIT values and are what the tables' emphasis is tested on.
     Raises:
         ValueError: If a file is not a report, if a report has no per-prefix scores beside it, if a
-            model has no look declared in `src.visualization.labels`, or if one log is given two
-            runs of the same model.
+            model has no look declared in `src.visualization.labels`, if one log is given two
+            runs of the same model, or if a log lacks the skill reference.
     """
     apply_style()
     banner(
@@ -92,7 +99,7 @@ def run(evaluation_files: Sequence[Path]) -> None:
 
     logs = sorted(set(reports['dataset']))
     with step(f'Drawing {", ".join(logs)}'):
-        drawn = _draw_figures(reports)
+        drawn = _draw_figures(reports, read_pit(evaluation_files))
 
     with step('Comparing means with a paired case bootstrap'):
         significance = test_significance(evaluation_files)

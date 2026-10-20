@@ -59,7 +59,7 @@ Preserve draw multiplicity when working with folded suffixes.
 | Activity | DLS, exact-match, and bigram energy scores | Higher similarity; lower energy |
 | Suffix length | CRPS | Lower CRPS |
 | Remaining time | Remaining-time CRPS in days | Lower CRPS |
-| Conformance | Mean satisfied-constraint share, full-conformance sample rate, and observed-log references | Higher model conformance |
+| Conformance | Full-conformance sample rate and its observed-log reference | Higher model conformance |
 
 Energy scores combine distance to truth with a diversity correction between independent draws.
 CRPS uses the same fair finite-sample energy estimator with absolute distances, integrated over
@@ -109,8 +109,9 @@ this summary and provenance.
 `prefix_scores.parquet` stores the prefix key, lengths, all report metric values for paired
 analysis, and every diagnostic value. Its default reader returns the report columns only.
 
-Keep the two files adjacent. Visualization rejects duplicate model reports within one dataset and
-requires score files for significance analysis. A table with a reference model reports the skill
+Keep the two files adjacent. `read_reports` holds the report scores, the diagnostics, and the
+overall `TRACE_METRICS` rows. Visualization rejects duplicate model reports within one dataset and
+requires score files for significance analysis and PIT histograms. A table with a reference model reports the skill
 score `1 - mean / reference mean` of each negatively oriented metric and leaves the reference row
 out; the skill table uses the `unconditional` model and needs its report for every dataset.
 Ranking by skill equals ranking by the mean score, so significance tests run on the means. Comparisons align identical prefix populations,
@@ -134,15 +135,16 @@ full evaluation locally.
 
 Register debugging metrics with `diagnostic=True`. They are logged as `diagnostic_<group>/<metric>`
 in W&B during training validation, and final evaluation stores them in the `diagnostics` records
-of `evaluation.json` and in `prefix_scores.parquet`. They do not enter default Parquet views,
-publication figures or tables, or significance comparisons, and never select a checkpoint.
+of `evaluation.json` and in `prefix_scores.parquet`. They do not enter default Parquet views or
+significance comparisons, never select a checkpoint, and appear in publication figures and tables
+only without emphasis.
 
 | Group | Diagnostics |
 | --- | --- |
-| Activity | DLS sample mean; DLD spread, the mean DLD between draws; spread error gap, that spread minus the mean DLD to truth, negative when overconfident; unique suffix ratio, unique activity suffixes per draw; exact match at K, whether any of the K draws reproduces the true activities; best-of-5 and best-of-10 DLS, the expected highest DLS among 5 or 10 draws |
+| Activity | DLS sample mean; DLD spread, the mean DLD between draws; spread error gap, that spread minus the mean DLD to truth, negative when overconfident; unique suffix ratio, unique activity suffixes per draw; best-of-5 and best-of-10 DLS, the expected highest DLS among 5 or 10 draws |
 | Suffix length | Signed error, sampled minus true length; truncated draw rate, the share of draws closed at the length cap without generating EOT; truth quantile; CRPS error and spread terms |
 | Remaining time | Log error, the signed difference of `log1p` days, sampled minus true; truth quantile; CRPS error and spread terms |
-| Conformance | Signed bias of the satisfied-constraint share, sampled minus observed |
+| Conformance | Mean satisfied-constraint share of the draws and of the observed trace; their signed bias, sampled minus observed |
 
 Pairwise quantities retain the multiplicity of repeated sampled suffixes. Every diagnostic is
 linear in its per-prefix values, so prefix means compose across buckets; the signed errors and
