@@ -139,7 +139,7 @@ class Generation:
     """One prefix's generated suffixes and the truth they were generated for.
     - case_id is used to identify the case in the log the prefix was cut from;
     - prefix_activities and prefix_inter_event_time_minutes complete the full traces that
-      conformance and trace precision and recall read.
+      conformance reads.
     """
 
     case_id: str  # which case of the log the prefix was cut from

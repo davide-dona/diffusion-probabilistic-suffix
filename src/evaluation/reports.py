@@ -10,7 +10,6 @@ from pydantic import TypeAdapter, ValidationError
 
 from src.artifacts import Provenance
 from src.evaluation.scoring import EvaluationSummary, LengthSummary
-from src.evaluation.traces import TracePrecisionRecall
 
 
 @dataclass(frozen=True)
@@ -18,14 +17,11 @@ class EvaluationReport:
     """Evaluation results and source artifact provenance.
 
     provenance identifies the dataset, model, training run, dataset fingerprint, and checkpoint
-    hash. summary contains overall scores and both observed-length breakdowns. traces holds the
-    trace precision and recall diagnostics, which compare whole sets of traces rather than
-    prefixes.
+    hash. summary contains overall scores and both observed-length breakdowns.
     """
 
     provenance: Provenance
     summary: EvaluationSummary
-    traces: TracePrecisionRecall
 
     def __post_init__(self) -> None:
         self.provenance.require_generations_source()
@@ -46,11 +42,11 @@ class EvaluationReport:
         """
         path = Path(path)
         payload = json.loads(path.read_bytes())
-        if not isinstance(payload, dict) or set(payload) != {'provenance', 'summary', 'traces'}:
+        if not isinstance(payload, dict) or set(payload) != {'provenance', 'summary'}:
             raise ValueError(f'{path} is not an evaluation report')
         provenance = Provenance.from_dict(payload['provenance'])
         report = _REPORT_ADAPTER.validate_python(payload)
-        return cls(provenance=provenance, summary=report.summary, traces=report.traces)
+        return cls(provenance=provenance, summary=report.summary)
 
     def write(self, path: str | Path) -> Path:
         """Write the report as JSON.
@@ -78,8 +74,6 @@ class Axis(StrEnum):
 
 
 REPORT_COLUMNS = ('dataset', 'model', 'axis', 'length', 'prefixes', 'metric', 'value')
-# Overall frame rows holding the trace precision and recall, which no registered metric owns.
-TRACE_METRICS = ('trace_precision', 'trace_recall')
 
 
 def _group_by_model(reports: Iterable[tuple[Provenance, Path]]) -> dict[str, dict[str, Path]]:
@@ -112,19 +106,10 @@ def _summary_rows(
 
 
 def _report_rows(report: EvaluationReport) -> Iterator[dict[str, object]]:
-    """Yield overall scores and traces, then prefix-length and suffix-length breakdowns."""
+    """Yield overall scores, then prefix-length and suffix-length breakdowns."""
     identity = {'dataset': report.provenance.run.dataset, 'model': report.provenance.run.model}
     summary = report.summary
     yield from _summary_rows(summary, identity=identity, axis=Axis.OVERALL, length=None)
-    traces = report.traces
-    for metric, value in zip(TRACE_METRICS, (traces.precision, traces.recall), strict=True):
-        yield identity | {
-            'axis': Axis.OVERALL,
-            'length': None,
-            'prefixes': traces.cases,
-            'metric': metric,
-            'value': value,
-        }
     for entry in summary.by_prefix_length:
         yield from _summary_rows(entry, identity=identity, axis=Axis.PREFIX, length=entry.length)
     for entry in summary.by_suffix_length:
@@ -139,8 +124,7 @@ def read_reports(files: Sequence[Path]) -> pd.DataFrame:
 
     Returns:
         Long-form report scores and diagnostics with REPORT_COLUMNS, ordered by report,
-        aggregation level, bucket, and registered metric, with the `TRACE_METRICS` rows after
-        the overall metrics; their `prefixes` count cases. Overall rows have a missing length;
+        aggregation level, bucket, and registered metric. Overall rows have a missing length;
         empty input retains the schema.
 
     Raises:

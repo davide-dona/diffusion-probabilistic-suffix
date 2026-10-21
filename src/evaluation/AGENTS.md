@@ -14,7 +14,6 @@ suffixes. Metrics operate per prefix first, then reports average prefixes with e
   and the train-split calibration of its time scale and bandwidth.
 - `goursat.py` owns the Triton kernel that solves the Goursat PDE on CUDA, one lane per pair
   sweeping its grid row by row. It is imported only on CUDA, since Triton is unavailable elsewhere.
-- `traces.py` owns trace precision and recall, which compare sets of full traces, not prefixes.
 - `Draws.mean` owns the draw-weighted sample mean. `metrics/helpers.py` owns the
   distance-parametrized energy score, CRPS, its accuracy (MAE) and spread terms, and the
   randomized PIT.
@@ -97,7 +96,7 @@ direction, compute function, and visualization handling.
 
 ## Reports and Aggregation
 
-`EvaluationReport` holds provenance, the summary, and the trace precision and recall record.
+`EvaluationReport` holds provenance and the summary.
 `PrefixSummary` stores prefix length, true suffix length, grouped report scores, and diagnostics.
 `EvaluationSummary` reports the unweighted mean over all prefixes and separate means bucketed by
 prefix length and true suffix length. Each summary holds one grouped `scores` record and one flat
@@ -109,9 +108,9 @@ this summary and provenance.
 `prefix_scores.parquet` stores the prefix key, lengths, all report metric values for paired
 analysis, and every diagnostic value. Its default reader returns the report columns only.
 
-Keep the two files adjacent. `read_reports` holds the report scores, the diagnostics, and the
-overall `TRACE_METRICS` rows. Visualization rejects duplicate model reports within one dataset and
-requires score files for significance analysis and PIT histograms. A table with a reference model reports the skill
+Keep the two files adjacent. `read_reports` holds the report scores and the diagnostics.
+Visualization rejects duplicate model reports within one dataset and requires score files for
+significance analysis and PIT histograms. A table with a reference model reports the skill
 score `1 - mean / reference mean` of each negatively oriented metric and leaves the reference row
 out; the skill table uses the `unconditional` model and needs its report for every dataset.
 Ranking by skill equals ranking by the mean score, so significance tests run on the means. Comparisons align identical prefix populations,
@@ -162,12 +161,6 @@ over prefixes, is read from the per-prefix values in `prefix_scores.parquet`; ca
 ranks. The CRPS error term is the draw mean of `|x - y|` and the spread term is half the mean
 `|x - x'|` over pairs of different draws; their difference is the CRPS, but report each term on
 its own and keep computing the CRPS itself with the sorted-sample estimator.
-
-Trace precision and recall draw one prefix per test case with seed 42, so every model is compared
-on the same prefixes, and put its observed full trace and the full trace of its first draw into
-the reference and generated sets. Traces are compared under `sqrt(2 - 2k)`, a trace's radius is
-the distance to its third nearest neighbour within its own set, and two traces of the same case
-are never compared. Both values are stored under `traces` in `evaluation.json`; neither ranks.
 
 `SuffixModel.generation_diagnostics` returns a model's own per-prefix values, empty by default.
 Training validation averages them over the generation prefixes and logs them as
