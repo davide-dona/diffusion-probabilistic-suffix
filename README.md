@@ -185,8 +185,7 @@ The report and its per-prefix scores are written under
 `prefix_scores.parquet`. The JSON summary groups scores under `scores.joint`,
 `scores.activity`, `scores.suffix_length`, `scores.remaining_time`, and `scores.conformance`, both
 overall and within each length bucket. The joint signature kernel score, which also selects
-checkpoints, is solved on `device` (default `cuda:0`), shared by every worker. Trace precision
-and recall, over one random prefix per case, are stored under `traces`.
+checkpoints, is solved on `device` (default `cuda:0`), shared by every worker.
 
 Diagnostics expose biases the ranked metrics hide: the signed suffix-length and remaining-time log
 errors, the conformance share bias, the activity spread error gap, unique suffix ratio, best-of-k

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from src.evaluation import TRACE_METRICS, Axis
+from src.evaluation import Axis
 from src.evaluation.metrics import METRICS
 from src.evaluation.metrics.metadata import Direction, Owner
 
@@ -121,13 +121,10 @@ TABLES = (
             ),
             metric_column('best_of_5_dls', label='$k=5$'),
             metric_column('best_of_10_dls', label='$k=10$'),
-            Column(key=TRACE_METRICS[0], label='Precision', direction=Direction.HIGHER),
-            Column(key=TRACE_METRICS[1], label='Recall', direction=Direction.HIGHER),
         ),
         column_groups=(
             ColumnGroup(label='Conformance', span=1),
             ColumnGroup(label='Best-of-$k$ DLS', span=2),
-            ColumnGroup(label='Traces', span=2),
         ),
         emphasis=False,
         omitted=(SKILL_REFERENCE,),
