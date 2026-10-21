@@ -38,7 +38,9 @@ class _Worker:
 _worker: _Worker
 
 
-def _init_worker(generations_file: Path, model_path: Path, kernel: SignatureKernel) -> None:
+def _init_worker(
+    generations_file: Path, model_path: Path, kernel: SignatureKernel, processes: int
+) -> None:
     """Open the file and prepare the Declare model once for this process.
 
     Args:
@@ -46,8 +48,13 @@ def _init_worker(generations_file: Path, model_path: Path, kernel: SignatureKern
         model_path: The Declare model conformance is checked against, read here since a
             spawned process receives its arguments pickled.
         kernel: The signature kernel draws are scored with, on its scoring device.
+        processes: How many pool processes share the kernel's device.
     """
     global _worker
+    # Each process caches device memory its peers cannot see or reclaim, so without an equal
+    # share every cache grows until a `cudaMalloc` fails and the allocator has to flush and retry.
+    if kernel.device.type == 'cuda':
+        torch.cuda.set_per_process_memory_fraction(1 / processes, kernel.device)
     generations = Generations(generations_file)
     vocabulary = generations.vocabulary
     _worker = _Worker(
@@ -143,7 +150,7 @@ def _score_in_parallel(
     kernel: SignatureKernel,
     blocks: int,
     prefixes: int,
-    workers: int | None,
+    processes: int,
 ) -> Iterator[PrefixSummary]:
     """Score a generations file across a pool of processes, a block at a time.
 
@@ -161,17 +168,18 @@ def _score_in_parallel(
             so each can open its own CUDA context on the kernel's device.
         blocks: How many blocks the file holds, one unit of work each.
         prefixes: How many prefixes it holds in total, for the progress bar.
-        workers: How many processes to score with, or `None` for one per available CPU.
+        processes: How many processes to score with, each given an equal share of the kernel's
+            device memory.
     Yields:
         Each prefix's scores, in the order the file holds them. The pool is shut down once they
         have all been drawn.
     """
     with (
         ProcessPoolExecutor(
-            max_workers=workers,
+            max_workers=processes,
             mp_context=multiprocessing.get_context('spawn'),
             initializer=_init_worker,
-            initargs=(generations_file, model_path, kernel),
+            initargs=(generations_file, model_path, kernel, processes),
         ) as executor,
         tqdm(total=prefixes, desc='Scoring', unit='prefix') as progress,
     ):
@@ -214,7 +222,7 @@ def run(generations_file: Path, workers: int | None, device: torch.device) -> No
     provenance.require_dataset(artifacts.require_dataset_bundle(dataset))
 
     # What the pool will actually start, which is what the wait before the first block is spent on.
-    processes = workers if workers is not None else os.cpu_count()
+    processes = workers if workers is not None else os.cpu_count() or 1
 
     # What the model being checked against was mined under, so a report is never read without
     # knowing which constraints it holds.
@@ -260,7 +268,7 @@ def run(generations_file: Path, workers: int | None, device: torch.device) -> No
                     kernel=kernel,
                     blocks=blocks,
                     prefixes=prefixes,
-                    workers=workers,
+                    processes=processes,
                 ),
                 keys,
                 path=scores_path,
